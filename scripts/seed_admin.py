@@ -1,0 +1,77 @@
+#!/usr/bin/env python3
+"""Bootstrap do primeiro administrador do Hub — roda uma vez por ambiente
+(dev, depois prod), antes ou logo após o primeiro deploy do backend com
+o gate de ACL ativo (domains/admin, core/auth.py::require_admin /
+require_project_access). Sem isso, a coleção hub_users fica vazia e
+ninguém consegue abrir /admin pra criar o primeiro registro — nem
+require_admin nem require_project_access liberam nada sem doc existente
+(fail closed por design, ver docs/specs/admin.md, "Casos de borda").
+
+Usa as credenciais do OPERADOR (`gcloud auth application-default login`),
+não a service account de runtime do Cloud Run — este script roda
+localmente, fora do Hub, e não duplica lógica do backend de propósito
+(fica independente da estrutura de pacote de apps/backend).
+
+Uso (a partir de apps/backend, pra usar o venv/uv.lock já resolvido):
+    cd apps/backend
+    uv run python ../../scripts/seed_admin.py \\
+        --project observability-hub --environment dev \\
+        --email primeiro-admin@dp6.com.br
+
+Roda primeiro em dev, valida o fluxo ponta a ponta (login -> /admin
+abre -> consegue gerenciar outros usuários), só depois em prod (mesmo
+--project, --environment prod).
+"""
+
+import argparse
+from datetime import UTC, datetime
+
+from google.cloud import firestore
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--project",
+        required=True,
+        help="Projeto GCP onde o Hub roda — o mesmo projeto serve dev e prod (topologia single-project, ver ADR-010).",
+    )
+    parser.add_argument(
+        "--environment",
+        required=True,
+        choices=["dev", "prod"],
+        help="Ambiente a seedar — dev e prod são bancos Firestore nomeados distintos no mesmo projeto (ver core/firestore.py), então este parâmetro é obrigatório, não cosmético.",
+    )
+    parser.add_argument("--email", required=True, help="E-mail do primeiro administrador")
+    args = parser.parse_args()
+
+    email = args.email.strip().lower()
+    # "hub-" + ambiente, não o ambiente puro — database_id do Firestore
+    # exige 4+ caracteres ("dev" sozinho é rejeitado), mesmo prefixo usado
+    # em core/firestore.py e no Terraform (google_firestore_database).
+    database = f"hub-{args.environment}"
+    client = firestore.Client(project=args.project, database=database)
+    now = datetime.now(UTC)
+
+    doc_ref = client.collection("hub_users").document(email)
+    existing = doc_ref.get()
+    data = {
+        "email": email,
+        "is_admin": True,
+        "allowed_projects": ["*"],
+        "created_at": existing.to_dict()["created_at"] if existing.exists else now,
+        "updated_at": now,
+        "updated_by": "scripts/seed_admin.py",
+    }
+    doc_ref.set(data)
+
+    print(
+        f"OK — {email} agora é administrador do Hub em {args.project} "
+        f"(database={database}, hub_users/{email})."
+    )
+
+
+if __name__ == "__main__":
+    main()
