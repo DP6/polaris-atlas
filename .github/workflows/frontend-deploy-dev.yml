@@ -14,7 +14,7 @@ permissions:
   actions: read
 
 env:
-  PROJECT_ID: gcp-hub-dp6
+  PROJECT_ID: dp6-ci-polaris
   REGION: us-central1
   REPOSITORY: apps
   SERVICE: frontend-dev

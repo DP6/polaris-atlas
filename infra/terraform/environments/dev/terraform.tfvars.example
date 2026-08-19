@@ -1,2 +1,2 @@
-project_id = "gcp-hub-dp6"
+project_id = "dp6-ci-polaris"
 region     = "us-central1"

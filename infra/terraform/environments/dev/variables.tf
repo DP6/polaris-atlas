@@ -1,7 +1,7 @@
 variable "project_id" {
   description = "ID do único projeto GCP, compartilhado com o ambiente prod (topologia single-project deste repositório)."
   type        = string
-  default     = "gcp-hub-dp6"
+  default     = "dp6-ci-polaris"
 }
 
 variable "region" {
