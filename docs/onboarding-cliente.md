@@ -253,6 +253,7 @@ real de que o processo funciona.
 | 2026-08-21 | `dp6-ci-polaris` | `gh-deploy-dev@...` e `gh-deploy-prod@...` | `roles/iap.admin` — fix da linha acima: adicionado a `deployer_roles` em `infra/terraform/bootstrap/modules/wif-bootstrap/main.tf`, aplicado via `terraform apply` no bootstrap (fora do CI, mesmo padrão dos demais papéis das SAs de deploy) | `terraform apply` confirmou criação dos 2 bindings (`...deployer_roles["dev-roles/iap.admin"]`/`["prod-roles/iap.admin"]`) |
 | 2026-08-21 | `dp6-ci-polaris` | — | Google Group `gcp-ci-polaris@dp6.com.br` criado pela TI — recebe `roles/iap.httpsResourceAccessor` nos 4 serviços Cloud Run (backend/frontend × dev/prod) via `google_iap_web_cloud_run_service_iam_member`, substitui o antigo `allUsers` como controle de acesso | Não confirmado via `gcloud` — mesma ressalva da linha acima (o binding em si depende da role acima existir na SA de deploy) |
 | 2026-08-21 | `dp6-ci-polaris` | — | `roles/run.invoker` concedido manualmente (via `gcloud`, sessão pessoal `matheus.fuzati@dp6.com.br`, **não** pela SA de deploy) ao service agent do IAP (`service-209825626529@gcp-sa-iap.iam.gserviceaccount.com`) — necessário pro IAP nativo do Cloud Run repassar a requisição autenticada ao serviço. **Não gerenciado pelo Terraform** (exige `resourcemanager.projects.setIamPolicy`, que a SA de deploy do CI não tem e não deve ganhar só pra isso — ver comentário em `modules/cloud-run/main.tf`); tratado como passo manual único, mesmo padrão de `infra/terraform/bootstrap`. Replicar em prod não é necessário — grant de projeto único, já cobre os dois ambientes nesta topologia single-project. | `terraform apply` local confirmou criação (`...iap_service_agent_invoker[0]: Creation complete...`) — não reconfirmado depois via `gcloud get-iam-policy` (sessão expirou nesta sessão) |
+| 2026-08-21 | `dp6-ci-polaris` | `backend-dev-run@...` e `backend-prod-run@...` (self) | `roles/bigquery.jobUser` — gap do playbook (passo 10 nunca incluiu essa role): sem ela no próprio projeto do Hub, `core/bigquery.py::get_client()` não consegue criar job de query em nenhum projeto alvo, mesmo com as roles do checklist corretas lá. Descoberto testando `observability-hub-dev` como primeiro projeto alvo real (erro `ProjectAccessDeniedError` mesmo com as 7 roles do checklist confirmadas no alvo) | `gcloud projects get-iam-policy dp6-ci-polaris --flatten='bindings[].members' --filter='bindings.members:backend-dev-run@...'` confirmou a role presente após o `add-iam-policy-binding` |
 
 **Nota:** os dois itens "antes de 2026-08-14" foram descobertos ao vivo
 nesta sessão via `gcloud projects get-iam-policy` — o SESSIONLOG.md
@@ -275,9 +276,20 @@ do próprio processo que este documento existe pra evitar.
 
 Roles concedidas às SAs do Hub que **não fazem parte deste checklist**
 (específicas da infraestrutura própria do Hub, nunca pedidas a um projeto
-cliente): `roles/datastore.user`, `roles/secretmanager.secretAccessor`
-(cada uma só no próprio projeto, `dev` na SA de dev e `prod` na SA de
-prod).
+cliente): `roles/datastore.user`, `roles/secretmanager.secretAccessor`,
+`roles/bigquery.jobUser` (cada uma só no próprio projeto, `dev` na SA de
+dev e `prod` na SA de prod).
+
+> **Gap descoberto em 2026-08-21:** `roles/bigquery.jobUser` faltava no
+> próprio projeto do Hub (`dp6-ci-polaris`) — só tinha sido concedida no
+> projeto **alvo** (parte do checklist acima), mas `core/bigquery.py::
+> get_client()` cria `bigquery.Client()` sem projeto explícito, então o
+> job de query é criado/cobrado no projeto de casa da SA (`dp6-ci-polaris`),
+> não no projeto alvo. Sem essa role lá, toda consulta a qualquer projeto
+> alvo falhava com `ProjectAccessDeniedError`, mesmo com as roles do
+> checklist corretas no projeto alvo. Corrigido manualmente via `gcloud`;
+> `docs/playbooks/hospedar-hub-em-novo-projeto.md` (passo 10) atualizado
+> pra incluir essa role desde o primeiro hosting.
 
 ---
 

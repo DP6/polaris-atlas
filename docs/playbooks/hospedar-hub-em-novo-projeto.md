@@ -280,7 +280,13 @@ O módulo `cloud-run` cria as service accounts (`backend-dev-run@{projeto}...`,
 `backend-prod-run@{projeto}...`) mas **não concede nenhuma role própria**
 ainda (comentário no próprio `main.tf` do módulo: "hoje sem papéis
 próprios"). Sem isso, o backend sobe mas todo endpoint que toca
-Firestore ou Secret Manager falha em runtime. Rode para **cada** uma das
+Firestore ou Secret Manager falha em runtime — e sem `bigquery.jobUser`
+especificamente, **nenhuma consulta a nenhum projeto alvo funciona**,
+mesmo com as roles do checklist de `docs/onboarding-cliente.md`
+corretas lá (`core/bigquery.py::get_client()` cria `bigquery.Client()`
+sem projeto explícito, então o job de query é criado/cobrado no projeto
+de casa da SA, não no projeto alvo — gap descoberto em 2026-08-21,
+ver nota em `docs/onboarding-cliente.md`). Rode para **cada** uma das
 duas service accounts de backend (dev e prod, mesmo projeto):
 
 ```bash
@@ -292,6 +298,9 @@ for ENV in dev prod; do
 
   gcloud projects add-iam-policy-binding {PROJETO} \
     --member="serviceAccount:${SA_EMAIL}" --role="roles/secretmanager.secretAccessor" --condition=None
+
+  gcloud projects add-iam-policy-binding {PROJETO} \
+    --member="serviceAccount:${SA_EMAIL}" --role="roles/bigquery.jobUser" --condition=None
 done
 ```
 
@@ -308,8 +317,13 @@ o outro), não de uma barreira de IAM — ver ADR-010, seção
 "Consequências", sobre esse blast radius compartilhado ser uma
 característica da topologia, não um descuido.
 
-Essas duas roles são **só no próprio projeto** — nunca pedidas a um
+Essas três roles são **só no próprio projeto** — nunca pedidas a um
 projeto alvo (ver `docs/onboarding-cliente.md`, "O que NÃO é necessário").
+`bigquery.jobUser` é a exceção conceitual: ela também aparece no
+checklist do projeto **alvo** — a do projeto alvo cobre rodar jobs
+faturados por ele (se algum dia o client passar a ser criado com
+`project=project_id`); a de cá cobre o comportamento atual do código
+(client sempre no projeto de casa). As duas coexistem por enquanto.
 
 ---
 
@@ -504,7 +518,7 @@ dele mesmo), siga [`liberar-projeto-para-o-hub.md`](liberar-projeto-para-o-hub.m
     não têm gate nenhum
 [ ] Primeiro apply de environments/dev confirmado com sucesso (cria
     backend-dev, frontend-dev, repo apps, Firestore database "hub-dev")
-[ ] roles/datastore.user + roles/secretmanager.secretAccessor
+[ ] roles/datastore.user + roles/secretmanager.secretAccessor + roles/bigquery.jobUser
     concedidas às DUAS service accounts de backend (backend-dev-run,
     backend-prod-run)
 [ ] OAuth consent screen + OAuth Client (dev e prod, client IDs
