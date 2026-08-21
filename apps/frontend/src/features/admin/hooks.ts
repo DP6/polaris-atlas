@@ -127,6 +127,19 @@ export function useDeleteHubGroup() {
   })
 }
 
+// Grupos existentes no domínio do Workspace, pra popular o seletor de
+// "criar grupo" — cache curto do lado do backend já evita chamada
+// repetida à Directory API, staleTime aqui só evita refetch redundante
+// entre re-renders da mesma sessão de uso do dialog.
+export function useWorkspaceGroups(enabled = true) {
+  return useQuery({
+    queryKey: ['admin-workspace-groups'],
+    queryFn: adminApi.listWorkspaceGroups,
+    staleTime: 60_000,
+    enabled,
+  })
+}
+
 export function usePendingAccessRequests() {
   const userQuery = useCurrentUser()
   return useQuery({

@@ -41,25 +41,30 @@ _TOKEN_URI = "https://oauth2.googleapis.com/token"
 _DIRECTORY_MEMBERS_URL_TEMPLATE = (
     "https://admin.googleapis.com/admin/directory/v1/groups/{group_email}/members"
 )
+_DIRECTORY_GROUPS_URL = "https://admin.googleapis.com/admin/directory/v1/groups"
 _DIRECTORY_SCOPES = [
     "https://www.googleapis.com/auth/admin.directory.group.readonly",
     "https://www.googleapis.com/auth/admin.directory.group.member.readonly",
 ]
 
-_MEMBERS_CACHE_TTL_SECONDS = 300
+_CACHE_TTL_SECONDS = 300
 # Mesmo padrão de domains/pii/service.py::_scan_cache — dict em memória
 # por processo, protegido por lock, TTL curto. Aqui o motivo é diferente
 # (não é custo de query, é latência + cota de uma API externa que roda
 # no caminho de has_project_access, chamada em quase todo endpoint).
 _members_cache: dict[str, tuple[float, list[str]]] = {}
 _members_cache_lock = threading.Lock()
+# Cache separado pra list_domain_groups — chave única (o domínio), não
+# por group_id como o de membros.
+_domain_groups_cache: dict[str, tuple[float, list[dict]]] = {}
+_domain_groups_cache_lock = threading.Lock()
 
 
 def _cache_get(group_email: str) -> list[str] | None:
     now = time.monotonic()
     with _members_cache_lock:
         cached = _members_cache.get(group_email)
-    if cached is not None and now - cached[0] < _MEMBERS_CACHE_TTL_SECONDS:
+    if cached is not None and now - cached[0] < _CACHE_TTL_SECONDS:
         return cached[1]
     return None
 
@@ -129,3 +134,52 @@ def get_group_members(group_email: str) -> list[str]:
 
     _cache_set(group_email, members)
     return members
+
+
+def list_domain_groups() -> list[dict]:
+    """Grupos do domínio do Workspace (o mesmo domínio de
+    settings.workspace_impersonate_email), pra popular o seletor de
+    "criar grupo" na UI em vez do admin ter que saber o e-mail exato de
+    cor. Cada item: {"email": str, "name": str | None}. Lista vazia nas
+    mesmas condições de get_group_members (integração não configurada,
+    Workspace fora do ar, escopo faltando) — nunca propaga exceção."""
+    now = time.monotonic()
+    with _domain_groups_cache_lock:
+        cached = _domain_groups_cache.get("groups")
+    if cached is not None and now - cached[0] < _CACHE_TTL_SECONDS:
+        return cached[1]
+
+    if not settings.workspace_impersonate_email or "@" not in settings.workspace_impersonate_email:
+        return []
+    domain = settings.workspace_impersonate_email.rsplit("@", 1)[-1]
+
+    groups: list[dict] = []
+    try:
+        credentials = _build_delegated_credentials()
+        if credentials is None:
+            return []
+
+        session = AuthorizedSession(credentials)
+        page_token: str | None = None
+        while True:
+            params = {"domain": domain, "maxResults": 200}
+            if page_token:
+                params["pageToken"] = page_token
+            response = session.get(_DIRECTORY_GROUPS_URL, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            groups.extend(
+                {"email": g["email"].strip().lower(), "name": g.get("name")}
+                for g in data.get("groups", [])
+                if g.get("email")
+            )
+            page_token = data.get("nextPageToken")
+            if not page_token:
+                break
+    except Exception:
+        logger.exception("Falha ao listar grupos do domínio %s no Workspace Directory API", domain)
+        return []
+
+    with _domain_groups_cache_lock:
+        _domain_groups_cache["groups"] = (time.monotonic(), groups)
+    return groups

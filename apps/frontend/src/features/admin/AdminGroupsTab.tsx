@@ -14,10 +14,24 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { useDeleteHubGroup, useHubGroups, useUpsertHubGroup } from '@/features/admin/hooks'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  useDeleteHubGroup,
+  useHubGroups,
+  useUpsertHubGroup,
+  useWorkspaceGroups,
+} from '@/features/admin/hooks'
 import { ProjectChipEditor } from '@/features/admin/ProjectChipEditor'
 import { ApiError } from '@/lib/http-client'
 import type { HubGroup } from '@/types/admin'
+
+const CUSTOM_GROUP_OPTION = '__custom__'
 
 // Terceiro eixo de acesso (v1.4), ao lado de "Por usuário" e "Por
 // projeto": um grupo tem membros e projetos liberados — cada membro
@@ -89,7 +103,11 @@ export function AdminGroupsTab() {
         </div>
       )}
 
-      <CreateGroupDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <CreateGroupDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        existingGroupIds={new Set((groupsQuery.data?.groups ?? []).map((g) => g.group_id))}
+      />
 
       <Dialog
         open={deletingGroupId !== null}
@@ -128,22 +146,36 @@ export function AdminGroupsTab() {
 function CreateGroupDialog({
   open,
   onOpenChange,
+  existingGroupIds,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  existingGroupIds: Set<string>
 }) {
-  const [groupId, setGroupId] = useState('')
+  const [selected, setSelected] = useState('')
+  const [customGroupId, setCustomGroupId] = useState('')
   const upsertMutation = useUpsertHubGroup()
+  const workspaceGroupsQuery = useWorkspaceGroups(open)
+
+  const availableWorkspaceGroups = (workspaceGroupsQuery.data?.groups ?? []).filter(
+    (g) => !existingGroupIds.has(g.email),
+  )
+
+  const groupId = selected === CUSTOM_GROUP_OPTION ? customGroupId.trim() : selected
+
+  function reset() {
+    setSelected('')
+    setCustomGroupId('')
+    upsertMutation.reset()
+  }
 
   function handleSubmit() {
-    const value = groupId.trim()
-    if (!value) return
+    if (!groupId) return
     upsertMutation.mutate(
-      { groupId: value, request: { manual_members: [], allowed_projects: [] } },
+      { groupId, request: { manual_members: [], allowed_projects: [] } },
       {
         onSuccess: () => {
-          setGroupId('')
-          upsertMutation.reset()
+          reset()
           onOpenChange(false)
         },
       },
@@ -157,10 +189,7 @@ function CreateGroupDialog({
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!next) {
-          setGroupId('')
-          upsertMutation.reset()
-        }
+        if (!next) reset()
         onOpenChange(next)
       }}
     >
@@ -168,31 +197,60 @@ function CreateGroupDialog({
         <DialogHeader>
           <DialogTitle>Criar grupo</DialogTitle>
           <DialogDescription>
-            Membros e projetos liberados são adicionados depois, expandindo o grupo na lista. Use o
-            e-mail de um grupo real do Workspace pra puxar os membros automaticamente.
+            Escolha um grupo existente no Workspace pra puxar os membros automaticamente, ou crie um
+            grupo com nome livre (só com membros manuais). Projetos liberados são adicionados
+            depois, expandindo o grupo na lista.
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="new-group-id">Nome do grupo</Label>
-          <Input
-            id="new-group-id"
-            value={groupId}
-            onChange={(e) => setGroupId(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                handleSubmit()
-              }
-            }}
-            placeholder="cliente-a-consultores@dp6.com.br ou um nome livre"
-          />
+          <Label htmlFor="new-group-select">Grupo</Label>
+          <Select value={selected} onValueChange={(value) => setSelected(value ?? '')}>
+            <SelectTrigger id="new-group-select">
+              <SelectValue placeholder="Selecione um grupo do Workspace…" />
+            </SelectTrigger>
+            <SelectContent>
+              {workspaceGroupsQuery.isLoading && (
+                <div className="px-2 py-1.5 text-sm text-muted-foreground">Carregando…</div>
+              )}
+              {workspaceGroupsQuery.isError && (
+                <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                  Não foi possível listar os grupos do Workspace.
+                </div>
+              )}
+              {availableWorkspaceGroups.map((g) => (
+                <SelectItem key={g.email} value={g.email}>
+                  {g.name ? `${g.name} (${g.email})` : g.email}
+                </SelectItem>
+              ))}
+              <SelectItem value={CUSTOM_GROUP_OPTION}>
+                Nome livre (não é um grupo do Workspace)
+              </SelectItem>
+            </SelectContent>
+          </Select>
         </div>
+        {selected === CUSTOM_GROUP_OPTION && (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="new-group-id">Nome do grupo</Label>
+            <Input
+              id="new-group-id"
+              value={customGroupId}
+              onChange={(e) => setCustomGroupId(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  handleSubmit()
+                }
+              }}
+              placeholder="ex: consultores-cliente-a"
+            />
+          </div>
+        )}
         {errorMessage && <p className="text-sm text-status-error">{errorMessage}</p>}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
-          <Button disabled={upsertMutation.isPending || !groupId.trim()} onClick={handleSubmit}>
+          <Button disabled={upsertMutation.isPending || !groupId} onClick={handleSubmit}>
             {upsertMutation.isPending ? 'Criando…' : 'Criar'}
           </Button>
         </DialogFooter>

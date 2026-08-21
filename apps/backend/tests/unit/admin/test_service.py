@@ -9,6 +9,7 @@ from observability_hub.domains.admin.schemas import (
     UpsertHubGroupRequest,
     UpsertHubProjectRequest,
     UpsertHubUserRequest,
+    WorkspaceGroupInfo,
 )
 
 
@@ -643,6 +644,27 @@ def test_revoke_project_from_user_returns_none_when_user_missing(monkeypatch):
     )
 
     assert result is None
+
+
+# --- list_workspace_groups ------------------------------------------------------------
+
+
+def test_list_workspace_groups_builds_response(monkeypatch):
+    monkeypatch.setattr(
+        service.workspace_directory,
+        "list_domain_groups",
+        lambda: [{"email": "cliente-a@dp6.com.br", "name": "Cliente A"}],
+    )
+
+    result = service.list_workspace_groups()
+
+    assert result.groups == [WorkspaceGroupInfo(email="cliente-a@dp6.com.br", name="Cliente A")]
+
+
+def test_list_workspace_groups_empty_when_integration_not_configured(monkeypatch):
+    monkeypatch.setattr(service.workspace_directory, "list_domain_groups", list)
+
+    assert service.list_workspace_groups().groups == []
 
 
 # --- access_requests -----------------------------------------------------------------

@@ -19,6 +19,7 @@ import type {
   UpsertHubGroupRequest,
   UpsertHubProjectRequest,
   UpsertHubUserRequest,
+  WorkspaceGroupsListResponse,
 } from '@/types/admin'
 
 export const adminApi = {
@@ -57,6 +58,9 @@ export const adminApi = {
 
   removeGroup: (groupId: string) =>
     httpClient.delete<undefined>(`/api/v1/admin/groups/${encodeURIComponent(groupId)}`),
+
+  listWorkspaceGroups: () =>
+    httpClient.get<WorkspaceGroupsListResponse>('/api/v1/admin/workspace-groups'),
 
   listAccessRequests: (status?: AccessRequestStatus) =>
     httpClient.get<AccessRequestsListResponse>(

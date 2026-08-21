@@ -43,6 +43,17 @@ export interface UpsertHubGroupRequest {
   allowed_projects: string[]
 }
 
+// Grupo existente no Google Workspace (não necessariamente importado
+// como HubGroup ainda) — popula o seletor de "criar grupo" na UI.
+export interface WorkspaceGroupInfo {
+  email: string
+  name: string | null
+}
+
+export interface WorkspaceGroupsListResponse {
+  groups: WorkspaceGroupInfo[]
+}
+
 export interface HubProject {
   project_id: string
   // Libera o projeto pra QUALQUER usuário do Hub, inclusive quem ainda
