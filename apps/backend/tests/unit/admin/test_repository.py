@@ -216,12 +216,12 @@ def test_get_group_returns_dict_when_exists():
     doc_ref = MagicMock()
     groups_collection.document.return_value = doc_ref
     doc_ref.get.return_value = _doc(
-        {"group_id": "cliente-a", "members": ["a@dp6.com.br"]}, exists=True
+        {"group_id": "cliente-a", "manual_members": ["a@dp6.com.br"]}, exists=True
     )
 
     result = repository.get_group(client, "cliente-a")
 
-    assert result == {"group_id": "cliente-a", "members": ["a@dp6.com.br"]}
+    assert result == {"group_id": "cliente-a", "manual_members": ["a@dp6.com.br"]}
 
 
 def test_get_group_returns_none_when_missing():
@@ -262,7 +262,7 @@ def test_upsert_group_preserves_created_at_on_existing():
     )
 
     assert result["created_at"] == original_created_at
-    assert result["members"] == ["a@dp6.com.br"]
+    assert result["manual_members"] == ["a@dp6.com.br"]
     assert result["allowed_projects"] == ["proj-a"]
     doc_ref.set.assert_called_once_with(result)
 
@@ -289,21 +289,6 @@ def test_delete_group_deletes_by_group_id():
 
     groups_collection.document.assert_called_once_with("cliente-a")
     doc_ref.delete.assert_called_once()
-
-
-def test_groups_with_member_queries_array_contains():
-    client, collections = _fake_multi_collection_client()
-    groups_collection = collections["hub_groups"]
-    filtered_query = MagicMock()
-    groups_collection.where.return_value = filtered_query
-    filtered_query.stream.return_value = [
-        _doc({"group_id": "cliente-a", "members": ["a@dp6.com.br"]}, exists=True),
-    ]
-
-    result = repository.groups_with_member(client, "a@dp6.com.br")
-
-    groups_collection.where.assert_called_once()
-    assert result == [{"group_id": "cliente-a", "members": ["a@dp6.com.br"]}]
 
 
 def test_create_access_request_uses_auto_generated_doc_id():

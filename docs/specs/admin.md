@@ -1,6 +1,6 @@
 # Spec — Domínio: Admin (controle de acesso por usuário × projeto)
 
-**Versão:** 1.4
+**Versão:** 1.5
 **Status:** Aprovada
 **Fase:** Transversal (não faz parte do roadmap de observabilidade de `docs/prd.md`) — plataforma
 **Última atualização:** 2026-08-21
@@ -140,7 +140,7 @@ escrito; ver "Fora do escopo desta versão".
 
 ---
 
-## Grupos (`hub_groups`, v1.4)
+## Grupos (`hub_groups`, v1.4 + integração Workspace v1.5)
 
 Terceiro eixo de acesso, independente dos outros dois (`hub_users.
 allowed_projects` e `hub_projects.is_public`) — todos se somam, nenhum
@@ -149,13 +149,28 @@ substitui o outro. Motivação: liberar de uma vez todos os projetos de um
 lista de `project_id` em cada `hub_users/{email}` manualmente (e sem
 esquecer de atualizar todo mundo se a lista mudar).
 
-Coleção `hub_groups/{group_id}` — doc ID é o próprio nome do grupo,
-escolhido pelo admin ao criar (mesmo padrão de `hub_projects`):
+**Modelo híbrido (v1.5)**: cada grupo tem dois eixos de membro,
+somados:
+
+- **`manual_members`** — e-mails cadastrados direto na Hub, persistidos
+  em `hub_groups`. Editável pela UI.
+- **`workspace_members`** — membros reais de um grupo do Google
+  Workspace, lidos ao vivo via Admin SDK Directory API (domain-wide
+  delegation), **nunca persistidos em Firestore**. Só leitura na UI.
+  Vazio se a integração ainda não estiver configurada, se o
+  `group_id` não corresponder a um grupo real do Workspace, ou se
+  qualquer chamada à API falhar — nunca um erro (fail-closed, ver
+  `core/workspace_directory.py`).
+
+`group_id` (doc ID em `hub_groups`, escolhido pelo admin ao criar) só
+ativa o lado automático se coincidir com o e-mail de um grupo real do
+Workspace — um nome livre funciona normalmente, só com
+`manual_members` (`workspace_members` fica sempre `[]`).
 
 ```json
 {
-  "group_id": "cliente-a-consultores",
-  "members": ["consultor.a@dp6.com.br", "consultor.b@dp6.com.br"],
+  "group_id": "cliente-a-consultores@dp6.com.br",
+  "manual_members": ["consultor.avulso@dp6.com.br"],
   "allowed_projects": ["client-a-project-1", "client-a-project-2"],
   "created_at": "2026-08-21T10:00:00Z",
   "updated_at": "2026-08-21T10:00:00Z",
@@ -165,11 +180,35 @@ escolhido pelo admin ao criar (mesmo padrão de `hub_projects`):
 
 `allowed_projects` de um grupo aceita `"*"` com a mesma semântica de
 `hub_users.allowed_projects` — libera qualquer projeto que a SA de
-runtime alcançar pra todo membro do grupo.
+runtime alcançar pra todo membro (manual ou Workspace) do grupo.
 
-`has_project_access` ganhou um terceiro checkpoint, depois de
-`hub_projects.is_public` e do acesso individual do usuário — qualquer um
-dos três libera:
+### Integração com o Workspace — `core/workspace_directory.py`
+
+Domain-wide delegation **sem chave de service account**: a SA de
+runtime assina o JWT de delegação usando sua própria identidade
+(`google.auth.iam.Signer`, que chama a IAM Credentials API — `signBlob`
+— em vez de precisar de uma chave privada baixada), depois impersona
+`settings.workspace_impersonate_email` (novo setting,
+`OBSERVABILITY_HUB_WORKSPACE_IMPERSONATE_EMAIL`) pra ler o grupo via
+`google.oauth2.service_account.Credentials.with_subject(...)`.
+
+Pré-requisitos, nenhum gerenciado pelo Terraform/código deste domínio:
+- Admin SDK API habilitada no projeto.
+- `roles/iam.serviceAccountTokenCreator` da SA de runtime **sobre si
+  mesma** (self-binding) — permite assinar o JWT.
+- Domain-wide delegation autorizada no Admin Console do Workspace pro
+  Client ID da SA de runtime, escopos `admin.directory.group.readonly`
+  + `admin.directory.group.member.readonly` (só leitura) — só um Super
+  Admin do Workspace faz (pedido formal registrado em
+  `docs/onboarding-cliente.md`, 2026-08-21).
+
+Cache em memória de 5min por `group_id` (mesmo padrão de
+`domains/pii/service.py::_scan_cache`) — `get_group_members` roda no
+caminho de `has_project_access`, chamado em quase todo endpoint;
+consultar o Workspace sem cache adicionaria latência e risco de cota a
+cada requisição.
+
+### `has_project_access` — três checkpoints
 
 ```python
 def has_project_access(client, email, project_id):
@@ -179,34 +218,51 @@ def has_project_access(client, email, project_id):
     user = repository.get_user(client, email)
     if user and _grants_project(user.get("allowed_projects", []), project_id):
         return True
-    groups = repository.groups_with_member(client, email)
-    return any(_grants_project(g.get("allowed_projects", []), project_id) for g in groups)
+    for group in repository.list_groups(client):
+        if not _grants_project(group.get("allowed_projects", []), project_id):
+            continue
+        if email in group.get("manual_members", []):
+            return True
+        if email in workspace_directory.get_group_members(group["group_id"]):
+            return True
+    return False
 ```
 
-`groups_with_member` consulta `hub_groups` com `array_contains` no campo
-`members` — uma query só, mesmo padrão de `users_with_project_access`.
+Sem query direcionada possível pro terceiro checkpoint (diferente de
+`users_with_project_access`, que usa `array_contains`): membros do
+Workspace não ficam no Firestore, só `manual_members` — precisa
+escanear os grupos (coleção pequena, mesmo racional de
+`list_access_requests`). A checagem de `allowed_projects` vem **antes**
+da consulta ao Workspace, de propósito — evita chamada externa
+desnecessária pra grupos que nem liberam este `project_id`.
 
 A tela `/admin` → aba "Grupos" lista os grupos existentes, permite criar
 um novo (só o nome — membros e projetos são adicionados depois,
-expandindo o grupo) e editar membros/projetos liberados inline (dois
-`ProjectChipEditor` por grupo, reaproveitado também pra e-mail de membro
-apesar do nome do componente — genérico o bastante, não exigiu
-componente novo). A aba "Por usuário" ganhou uma coluna "Grupos"
-mostrando de quais grupos cada usuário é membro, derivada no
+expandindo o grupo) e editar `manual_members`/projetos liberados inline
+(`ProjectChipEditor`, reaproveitado também pra e-mail de membro apesar
+do nome do componente). `workspace_members` aparece na mesma tela, só
+leitura, com nota se estiver vazio ("ou a integração ainda não foi
+configurada" — não dá pra distinguir "grupo sem membros no Workspace"
+de "integração desligada" só pelo payload, e a UI é honesta sobre essa
+ambiguidade em vez de fingir certeza). A aba "Por usuário" mostra de
+quais grupos cada usuário é membro (manual OU Workspace), derivada no
 frontend a partir da mesma lista de grupos já buscada pra aba "Grupos"
 (sem endpoint novo pra isso).
 
 ### Endpoints (mesmo `dependencies=[Depends(require_admin)]` do router)
 
 - `GET /api/v1/admin/groups` — lista todos os `hub_groups`, ordenados
-  por `group_id`.
+  por `group_id`, cada um enriquecido com `workspace_members` resolvido
+  on-the-fly (não vem do Firestore).
 - `PUT /api/v1/admin/groups/{group_id}` — upsert (cria se não existe,
-  atualiza se existe). Body: `{"members": [...], "allowed_projects":
-  [...]}`. `created_at` preservado em updates, mesmo padrão de
-  `hub_users`/`hub_projects`.
+  atualiza se existe). Body: `{"manual_members": [...],
+  "allowed_projects": [...]}` — `workspace_members` nunca é definido
+  pelo cliente, sempre derivado. `created_at` preservado em updates,
+  mesmo padrão de `hub_users`/`hub_projects`.
 - `DELETE /api/v1/admin/groups/{group_id}` — remove o documento
   (idempotente). Membros perdem só o acesso concedido por este grupo —
-  acesso individual (`hub_users`) não é afetado.
+  acesso individual (`hub_users`) não é afetado. Não afeta o grupo no
+  Workspace em si (a Hub nunca escreve lá, só lê).
 
 Diferente de `hub_users`, não existe `LastAdminLockoutError` equivalente
 pra grupos — grupos não carregam status de admin, só acesso a projeto.

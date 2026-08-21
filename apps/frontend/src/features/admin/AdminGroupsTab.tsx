@@ -1,7 +1,8 @@
-import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, ShieldCheck, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { RefreshButton } from '@/components/RefreshButton'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -19,11 +20,14 @@ import { ApiError } from '@/lib/http-client'
 import type { HubGroup } from '@/types/admin'
 
 // Terceiro eixo de acesso (v1.4), ao lado de "Por usuário" e "Por
-// projeto": um grupo tem membros (e-mails) e projetos liberados — cada
-// membro herda o acesso do grupo, além do que já tiver individualmente.
-// Diferente da aba "Por projeto" (que edita concessões pontuais), aqui a
-// edição é direto nas duas listas do grupo (mesmo padrão de
-// UpsertUserDialog, só que com dois ProjectChipEditor em vez de um).
+// projeto": um grupo tem membros e projetos liberados — cada membro
+// herda o acesso do grupo, além do que já tiver individualmente. Modelo
+// híbrido: membros do Workspace (workspace_members) vêm ao vivo do
+// Google Workspace via domain-wide delegation, só leitura aqui; membros
+// manuais (manual_members) são cadastro direto na Hub, editável — os
+// dois se somam. Usar o e-mail de um grupo real do Workspace como
+// group_id ativa o lado automático; um group_id qualquer funciona só
+// com manual_members (workspace_members fica sempre vazio).
 export function AdminGroupsTab() {
   const groupsQuery = useHubGroups()
   const deleteMutation = useDeleteHubGroup()
@@ -46,8 +50,10 @@ export function AdminGroupsTab() {
   return (
     <div className="mt-4 flex flex-col gap-4">
       <p className="text-xs text-muted-foreground">
-        Cada membro de um grupo herda os projetos liberados dele, além do que já tiver
-        individualmente na aba "Por usuário" — os dois eixos se somam, nenhum substitui o outro.
+        Cada membro de um grupo (do Workspace ou cadastrado manualmente) herda os projetos liberados
+        dele, além do que já tiver individualmente na aba "Por usuário" — os eixos se somam, nenhum
+        substitui o outro. Use o e-mail de um grupo real do Workspace como nome pra puxar os membros
+        automaticamente.
       </p>
 
       <div className="flex items-center justify-end gap-2">
@@ -133,7 +139,7 @@ function CreateGroupDialog({
     const value = groupId.trim()
     if (!value) return
     upsertMutation.mutate(
-      { groupId: value, request: { members: [], allowed_projects: [] } },
+      { groupId: value, request: { manual_members: [], allowed_projects: [] } },
       {
         onSuccess: () => {
           setGroupId('')
@@ -162,7 +168,8 @@ function CreateGroupDialog({
         <DialogHeader>
           <DialogTitle>Criar grupo</DialogTitle>
           <DialogDescription>
-            Membros e projetos liberados são adicionados depois, expandindo o grupo na lista.
+            Membros e projetos liberados são adicionados depois, expandindo o grupo na lista. Use o
+            e-mail de um grupo real do Workspace pra puxar os membros automaticamente.
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-1.5">
@@ -177,7 +184,7 @@ function CreateGroupDialog({
                 handleSubmit()
               }
             }}
-            placeholder="cliente-a-consultores"
+            placeholder="cliente-a-consultores@dp6.com.br ou um nome livre"
           />
         </div>
         {errorMessage && <p className="text-sm text-status-error">{errorMessage}</p>}
@@ -205,6 +212,8 @@ function GroupRow({
   onToggleExpanded: () => void
   onRequestDelete: () => void
 }) {
+  const effectiveCount = new Set([...group.workspace_members, ...group.manual_members]).size
+
   return (
     <div className="rounded-md border border-border">
       <div className="flex items-center gap-3 px-3 py-2">
@@ -218,7 +227,7 @@ function GroupRow({
         </button>
         <span className="flex-1 text-sm font-medium">{group.group_id}</span>
         <span className="text-xs text-muted-foreground">
-          {group.members.length} membro{group.members.length === 1 ? '' : 's'}
+          {effectiveCount} membro{effectiveCount === 1 ? '' : 's'}
         </span>
         <Button
           size="sm"
@@ -240,32 +249,51 @@ function GroupDetail({ group }: { group: HubGroup }) {
   const errorMessage =
     upsertMutation.error instanceof ApiError ? upsertMutation.error.message : null
 
-  function saveMembers(members: string[]) {
+  function saveManualMembers(manualMembers: string[]) {
     upsertMutation.mutate({
       groupId: group.group_id,
-      request: { members, allowed_projects: group.allowed_projects },
+      request: { manual_members: manualMembers, allowed_projects: group.allowed_projects },
     })
   }
 
   function saveProjects(allowedProjects: string[]) {
     upsertMutation.mutate({
       groupId: group.group_id,
-      request: { members: group.members, allowed_projects: allowedProjects },
+      request: { manual_members: group.manual_members, allowed_projects: allowedProjects },
     })
   }
 
   return (
     <div className="flex flex-col gap-4 border-t border-border bg-muted/30 px-3 py-3">
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor={`group-members-${group.group_id}`} className="text-xs">
-          Membros
+        <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <ShieldCheck size={12} />
+          Membros do Workspace (via delegação — só leitura)
+        </span>
+        <div className="flex flex-wrap gap-1">
+          {group.workspace_members.length === 0 && (
+            <span className="text-xs text-muted-foreground">
+              Nenhum — ou a integração com o Workspace ainda não foi configurada.
+            </span>
+          )}
+          {group.workspace_members.map((email) => (
+            <Badge key={email} variant="outline">
+              {email}
+            </Badge>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`group-manual-members-${group.group_id}`} className="text-xs">
+          Membros adicionados manualmente
         </Label>
         <ProjectChipEditor
-          inputId={`group-members-${group.group_id}`}
-          chips={group.members}
-          onChange={saveMembers}
+          inputId={`group-manual-members-${group.group_id}`}
+          chips={group.manual_members}
+          onChange={saveManualMembers}
           placeholder="email@dominio.com"
-          emptyLabel="Nenhum membro ainda."
+          emptyLabel="Nenhum membro manual — só os do Workspace acima (se houver)."
         />
       </div>
 

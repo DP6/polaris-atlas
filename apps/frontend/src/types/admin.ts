@@ -20,9 +20,14 @@ export interface UpsertHubUserRequest {
 
 export interface HubGroup {
   group_id: string
-  // E-mails dos membros — cada um herda allowed_projects do grupo, além
-  // do que já tiver individualmente via HubUser.allowed_projects.
-  members: string[]
+  // E-mails cadastrados manualmente na Hub — editável.
+  manual_members: string[]
+  // Membros reais do grupo no Google Workspace — só leitura, resolvido
+  // no backend a cada consulta (cache curto), nunca editado aqui. Vazio
+  // se a integração com o Workspace ainda não estiver configurada.
+  workspace_members: string[]
+  // Cada membro (manual OU do Workspace) herda estes projetos, além do
+  // que já tiver individualmente via HubUser.allowed_projects.
   allowed_projects: string[]
   created_at: string
   updated_at: string
@@ -34,7 +39,7 @@ export interface HubGroupsListResponse {
 }
 
 export interface UpsertHubGroupRequest {
-  members: string[]
+  manual_members: string[]
   allowed_projects: string[]
 }
 

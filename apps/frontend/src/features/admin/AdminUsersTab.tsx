@@ -81,8 +81,9 @@ export function AdminUsersTab() {
           </TableHeader>
           <TableBody>
             {usersQuery.data.users.map((user) => {
-              const userGroups = (groupsQuery.data?.groups ?? []).filter((g) =>
-                g.members.includes(user.email),
+              const userGroups = (groupsQuery.data?.groups ?? []).filter(
+                (g) =>
+                  g.manual_members.includes(user.email) || g.workspace_members.includes(user.email),
               )
               return (
                 <TableRow key={user.email}>

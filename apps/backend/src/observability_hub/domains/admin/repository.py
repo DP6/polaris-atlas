@@ -10,8 +10,10 @@ Quatro coleções:
   marcado is_public libera geral, inclusive usuário sem doc em hub_users.
 - hub_groups/{group_id} — terceiro eixo de acesso (v1.4): membros de um
   grupo herdam allowed_projects do grupo, além do que já tiverem
-  individualmente. Doc ID é o próprio group_id (nome escolhido pelo
-  admin ao criar), mesmo padrão de hub_projects.
+  individualmente. Doc ID é o e-mail do grupo real no Google Workspace
+  (modelo híbrido: só `manual_members` é persistido aqui — membros reais
+  do Workspace são lidos on-the-fly via core/workspace_directory.py,
+  nunca gravados no Firestore).
 - access_requests/{auto_id} — pedidos de acesso, doc_id gerado pelo
   Firestore (não determinístico como em favorites: um usuário pode pedir
   o mesmo projeto de novo depois de negado, cada pedido é um doc à parte).
@@ -128,7 +130,7 @@ def list_groups(client: firestore.Client) -> list[dict]:
 def upsert_group(
     client: firestore.Client,
     group_id: str,
-    members: list[str],
+    manual_members: list[str],
     allowed_projects: list[str],
     updated_by: str,
 ) -> dict:
@@ -136,7 +138,7 @@ def upsert_group(
     existing = get_group(client, group_id)
     data = {
         "group_id": group_id,
-        "members": members,
+        "manual_members": manual_members,
         "allowed_projects": allowed_projects,
         "created_at": existing["created_at"] if existing else now,
         "updated_at": now,
@@ -148,17 +150,6 @@ def upsert_group(
 
 def delete_group(client: firestore.Client, group_id: str) -> None:
     _groups_collection(client).document(group_id).delete()
-
-
-def groups_with_member(client: firestore.Client, email: str) -> list[dict]:
-    """Grupos onde este e-mail é membro — uma query via array_contains,
-    mesmo padrão de users_with_project_access."""
-    docs = (
-        _groups_collection(client)
-        .where(filter=FieldFilter("members", "array_contains", email))
-        .stream()
-    )
-    return [doc.to_dict() for doc in docs]
 
 
 def _access_requests_collection(client: firestore.Client):
