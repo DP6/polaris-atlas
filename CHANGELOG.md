@@ -50,10 +50,15 @@ liberam o `project_id` em questão (evita chamada externa desnecessária).
   uma role de projeto adicional (`roles/iam.serviceAccountAdmin`) que o
   grupo `gcp-ci-polaris@dp6.com.br` não tinha — `resourcemanager.
   projectIamAdmin` não cobre IAM policy de recursos individuais como
-  service accounts. Propagação desse novo grant demorou bem mais que o
-  usual (7+ minutos, sem sucesso confirmado ainda ao fechar esta sessão)
-  — motivo não totalmente esclarecido, possivelmente relacionado a
-  grants de role pra um principal do tipo `group` especificamente.
+  service accounts. Depois da propagação (~21min, mais lenta que o
+  usual), `gcloud iam service-accounts add-iam-policy-binding` continuou
+  falhando com "getIamPolicy denied" mesmo com `get-iam-policy` direto
+  já funcionando — contornado fazendo `get-iam-policy` + editar o JSON +
+  `set-iam-policy` explícito, que funcionou de primeira. Causa exata do
+  `add-iam-policy-binding` (comando de conveniência) falhar nesse caso
+  específico não totalmente esclarecida — mas o contorno (get/edit/set
+  manual) é confiável e documentado aqui pra próxima vez que algo
+  parecido acontecer.
 
 ### Mudanças de arquitetura
 - Nenhuma mudança de arquitetura geral — extensão do domínio `admin`
