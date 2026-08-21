@@ -6,18 +6,22 @@ funções — CLAUDE.md proíbe lógica de negócio em api/.
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 
-from google.cloud import bigquery
+from google.cloud import bigquery, firestore
 
+from observability_hub.core import resourcemanager
 from observability_hub.core.bigquery import discover_regions, get_tables_metadata
 from observability_hub.core.exceptions import TableNotFoundError, TableNotPartitionedError
+from observability_hub.domains.admin import service as admin_service
 from observability_hub.domains.catalog import repository
 from observability_hub.domains.catalog.schemas import (
+    AccessibleProject,
     ColumnDetail,
     DatasetsListResponse,
     DatasetSummary,
     DatasetWithMatch,
     DatasetWithoutMatch,
     PartitionRow,
+    ProjectsListResponse,
     ProjectValidateResponse,
     SearchMode,
     TableDetail,
@@ -26,6 +30,30 @@ from observability_hub.domains.catalog.schemas import (
     TablesListResponse,
     TableSummary,
 )
+
+
+def list_accessible_projects(
+    firestore_client: firestore.Client, user_email: str
+) -> ProjectsListResponse:
+    """Projetos que a SA de runtime alcança (Resource Manager, ver
+    core/resourcemanager.py), cada um com `has_access` indicando se
+    ESTE usuário já tem acesso liberado no Hub — reaproveita
+    has_project_access, mesma checagem de require_project_access, só
+    pra popular o seletor de projeto em vez do usuário digitar de cabeça
+    e descobrir só depois de validar."""
+    raw_projects = resourcemanager.list_reachable_projects()
+    projects = [
+        AccessibleProject(
+            project_id=p["project_id"],
+            display_name=p["display_name"],
+            has_access=admin_service.has_project_access(
+                firestore_client, user_email, p["project_id"]
+            ),
+        )
+        for p in raw_projects
+    ]
+    projects.sort(key=lambda p: p.project_id)
+    return ProjectsListResponse(projects=projects)
 
 
 def validate_project(client: bigquery.Client, project_id: str) -> ProjectValidateResponse:

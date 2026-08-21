@@ -4,9 +4,16 @@ import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { RequestAccessDialog } from '@/features/admin/RequestAccessDialog'
-import { useValidateProject } from '@/features/projects/hooks'
+import { useAccessibleProjects, useValidateProject } from '@/features/projects/hooks'
 import { useProjectContext } from '@/features/projects/ProjectContext'
 import { clearLastProjectId, getLastProjectId, setLastProjectId } from '@/hooks/useLastProject'
 import { ApiError } from '@/lib/http-client'
@@ -20,6 +27,12 @@ export function ProjectSelector() {
   const [requestAccessOpen, setRequestAccessOpen] = useState(false)
 
   const validateQuery = useValidateProject(submittedProjectId)
+  // Projetos que a SA alcança (Resource Manager) — dropdown de atalho
+  // além do campo de texto livre, que continua funcionando como fallback
+  // (lista vazia é normal antes de qualquer projeto ganhar roles/browser,
+  // ver docs/onboarding-cliente.md).
+  const accessibleProjectsQuery = useAccessibleProjects()
+  const accessibleProjects = accessibleProjectsQuery.data?.projects ?? []
 
   // Restaura e revalida automaticamente o projeto salvo no localStorage ao
   // carregar a página (F5) — só no mount, sem o usuário precisar digitar de
@@ -53,10 +66,15 @@ export function ProjectSelector() {
     }
   }, [isRestoring, validateQuery.isError, validateQuery.data])
 
+  function submitProjectId(value: string) {
+    setIsRestoring(false)
+    setInput(value)
+    setSubmittedProjectId(value)
+  }
+
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
-    setIsRestoring(false)
-    if (input.trim()) setSubmittedProjectId(input.trim())
+    if (input.trim()) submitProjectId(input.trim())
   }
 
   const showError = validateQuery.isError || validateQuery.data?.accessible === false
@@ -71,10 +89,41 @@ export function ProjectSelector() {
           <Cloud size={16} />
           <span>GCP Project:</span>
         </div>
+        {accessibleProjects.length > 0 && (
+          <Select
+            value={submittedProjectId ?? ''}
+            onValueChange={(value) => {
+              if (value) submitProjectId(value)
+            }}
+          >
+            <SelectTrigger className="h-7 w-56 text-sm">
+              <SelectValue placeholder="Selecionar projeto…" />
+            </SelectTrigger>
+            <SelectContent>
+              {accessibleProjects.map((p) => (
+                <SelectItem key={p.project_id} value={p.project_id}>
+                  <span className="flex items-center gap-2">
+                    {p.project_id}
+                    {!p.has_access && (
+                      <Badge
+                        variant="outline"
+                        className="border-status-warn/30 bg-status-warn/10 text-[10px] text-status-warn"
+                      >
+                        Sem acesso
+                      </Badge>
+                    )}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="observability-hub-dev"
+          placeholder={
+            accessibleProjects.length > 0 ? 'ou digite o project_id' : 'observability-hub-dev'
+          }
           className="h-7 w-56 text-sm"
         />
         <Button type="submit" size="sm" disabled={!input.trim() || validateQuery.isFetching}>
