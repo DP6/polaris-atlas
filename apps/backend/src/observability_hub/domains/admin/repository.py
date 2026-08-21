@@ -2,12 +2,16 @@
 service.py orquestra, nunca monta paths/queries diretamente (mesmo
 racional de domains/favorites/repository.py).
 
-Três coleções:
+Quatro coleções:
 - hub_users/{email} — separada de users/{email} (namespace já usado por
   favorites/history) porque a semântica é diferente: controle de acesso
   administrado por admins do Hub, não dado pessoal do próprio usuário.
 - hub_projects/{project_id} — eixo independente de hub_users: um projeto
   marcado is_public libera geral, inclusive usuário sem doc em hub_users.
+- hub_groups/{group_id} — terceiro eixo de acesso (v1.4): membros de um
+  grupo herdam allowed_projects do grupo, além do que já tiverem
+  individualmente. Doc ID é o próprio group_id (nome escolhido pelo
+  admin ao criar), mesmo padrão de hub_projects.
 - access_requests/{auto_id} — pedidos de acesso, doc_id gerado pelo
   Firestore (não determinístico como em favorites: um usuário pode pedir
   o mesmo projeto de novo depois de negado, cada pedido é um doc à parte).
@@ -105,6 +109,56 @@ def upsert_project(
     }
     _projects_collection(client).document(project_id).set(data)
     return data
+
+
+def _groups_collection(client: firestore.Client):
+    return client.collection("hub_groups")
+
+
+def get_group(client: firestore.Client, group_id: str) -> dict | None:
+    doc = _groups_collection(client).document(group_id).get()
+    return doc.to_dict() if doc.exists else None
+
+
+def list_groups(client: firestore.Client) -> list[dict]:
+    docs = _groups_collection(client).order_by("group_id").stream()
+    return [doc.to_dict() for doc in docs]
+
+
+def upsert_group(
+    client: firestore.Client,
+    group_id: str,
+    members: list[str],
+    allowed_projects: list[str],
+    updated_by: str,
+) -> dict:
+    now = datetime.now(UTC)
+    existing = get_group(client, group_id)
+    data = {
+        "group_id": group_id,
+        "members": members,
+        "allowed_projects": allowed_projects,
+        "created_at": existing["created_at"] if existing else now,
+        "updated_at": now,
+        "updated_by": updated_by,
+    }
+    _groups_collection(client).document(group_id).set(data)
+    return data
+
+
+def delete_group(client: firestore.Client, group_id: str) -> None:
+    _groups_collection(client).document(group_id).delete()
+
+
+def groups_with_member(client: firestore.Client, email: str) -> list[dict]:
+    """Grupos onde este e-mail é membro — uma query via array_contains,
+    mesmo padrão de users_with_project_access."""
+    docs = (
+        _groups_collection(client)
+        .where(filter=FieldFilter("members", "array_contains", email))
+        .stream()
+    )
+    return [doc.to_dict() for doc in docs]
 
 
 def _access_requests_collection(client: firestore.Client):

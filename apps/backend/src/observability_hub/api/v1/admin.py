@@ -16,11 +16,14 @@ from observability_hub.domains.admin.schemas import (
     AccessRequest,
     AccessRequestsListResponse,
     AccessRequestStatus,
+    HubGroup,
+    HubGroupsListResponse,
     HubProject,
     HubProjectsListResponse,
     HubUser,
     HubUsersListResponse,
     ProjectUsersResponse,
+    UpsertHubGroupRequest,
     UpsertHubProjectRequest,
     UpsertHubUserRequest,
 )
@@ -95,6 +98,29 @@ def revoke_project(
     client: firestore.Client = Depends(get_firestore_client),
 ) -> None:
     service.revoke_project_from_user(client, project_id, email, updated_by=admin_user.email)
+
+
+@router.get("/groups", response_model=HubGroupsListResponse)
+def list_groups(client: firestore.Client = Depends(get_firestore_client)) -> HubGroupsListResponse:
+    return service.list_groups(client)
+
+
+@router.put("/groups/{group_id}", response_model=HubGroup)
+def upsert_group(
+    group_id: str,
+    request: UpsertHubGroupRequest,
+    admin_user: UserInfo = Depends(require_admin),
+    client: firestore.Client = Depends(get_firestore_client),
+) -> HubGroup:
+    return service.upsert_group(client, group_id, request, updated_by=admin_user.email)
+
+
+@router.delete("/groups/{group_id}", status_code=204)
+def delete_group(
+    group_id: str,
+    client: firestore.Client = Depends(get_firestore_client),
+) -> None:
+    service.delete_group(client, group_id)
 
 
 @router.get("/access-requests", response_model=AccessRequestsListResponse)

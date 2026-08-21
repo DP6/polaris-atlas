@@ -19,12 +19,15 @@ from observability_hub.domains.admin import repository
 from observability_hub.domains.admin.schemas import (
     AccessRequest,
     AccessRequestsListResponse,
+    HubGroup,
+    HubGroupsListResponse,
     HubProject,
     HubProjectsListResponse,
     HubUser,
     HubUsersListResponse,
     ProjectAccessGrant,
     ProjectUsersResponse,
+    UpsertHubGroupRequest,
     UpsertHubProjectRequest,
     UpsertHubUserRequest,
 )
@@ -79,20 +82,28 @@ def is_admin(client: firestore.Client, email: str) -> bool:
     return bool(user and user.get("is_admin"))
 
 
+def _grants_project(allowed: list[str], project_id: str) -> bool:
+    return _WILDCARD_PROJECT in allowed or project_id in allowed
+
+
 def has_project_access(client: firestore.Client, email: str, project_id: str) -> bool:
     """hub_projects/{project_id}.is_public checado primeiro — libera
     geral, inclusive quem não tem doc em hub_users (usuário futuro).
-    Senão, sem doc em hub_users -> allowed_projects vazio -> nega tudo
-    (fail closed) — ver docs/specs/admin.md, "Casos de borda"."""
+    Depois o acesso individual do usuário; por último os grupos (v1.4)
+    de que ele é membro — qualquer um dos três libera. Sem nenhum dos
+    três -> nega tudo (fail closed) — ver docs/specs/admin.md, "Casos de
+    borda"."""
     project = repository.get_project(client, project_id)
     if project and project.get("is_public"):
         return True
 
-    user = repository.get_user(client, _normalize_email(email))
-    if not user:
-        return False
-    allowed: list[str] = user.get("allowed_projects", [])
-    return _WILDCARD_PROJECT in allowed or project_id in allowed
+    email = _normalize_email(email)
+    user = repository.get_user(client, email)
+    if user and _grants_project(user.get("allowed_projects", []), project_id):
+        return True
+
+    groups = repository.groups_with_member(client, email)
+    return any(_grants_project(g.get("allowed_projects", []), project_id) for g in groups)
 
 
 # --- hub_projects ------------------------------------------------------------------
@@ -164,6 +175,28 @@ def revoke_project_from_user(
         client, email, existing["is_admin"], allowed, _normalize_email(updated_by)
     )
     return HubUser(**raw)
+
+
+# --- hub_groups (v1.4) --------------------------------------------------------------
+
+
+def list_groups(client: firestore.Client) -> HubGroupsListResponse:
+    raw = repository.list_groups(client)
+    return HubGroupsListResponse(groups=[HubGroup(**g) for g in raw])
+
+
+def upsert_group(
+    client: firestore.Client, group_id: str, request: UpsertHubGroupRequest, updated_by: str
+) -> HubGroup:
+    members = [_normalize_email(m) for m in request.members]
+    raw = repository.upsert_group(
+        client, group_id, members, request.allowed_projects, _normalize_email(updated_by)
+    )
+    return HubGroup(**raw)
+
+
+def delete_group(client: firestore.Client, group_id: str) -> None:
+    repository.delete_group(client, group_id)
 
 
 # --- access_requests -----------------------------------------------------------------

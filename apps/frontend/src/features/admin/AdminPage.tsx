@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AdminAccessRequestsTab } from '@/features/admin/AdminAccessRequestsTab'
+import { AdminGroupsTab } from '@/features/admin/AdminGroupsTab'
 import { AdminProjectsTab } from '@/features/admin/AdminProjectsTab'
 import { AdminUsageTab } from '@/features/admin/AdminUsageTab'
 import { AdminUsersTab } from '@/features/admin/AdminUsersTab'
@@ -10,6 +11,7 @@ import { usePendingAccessRequests } from '@/features/admin/hooks'
 
 const USERS_TAB = 'users'
 const PROJECTS_TAB = 'projects'
+const GROUPS_TAB = 'groups'
 const REQUESTS_TAB = 'requests'
 const USAGE_TAB = 'usage'
 
@@ -40,6 +42,7 @@ export function AdminPage() {
         <TabsList className="w-fit">
           <TabsTrigger value={USERS_TAB}>Por usuário</TabsTrigger>
           <TabsTrigger value={PROJECTS_TAB}>Por projeto</TabsTrigger>
+          <TabsTrigger value={GROUPS_TAB}>Grupos</TabsTrigger>
           <TabsTrigger value={REQUESTS_TAB} className="gap-1.5">
             Solicitações
             {pendingCount > 0 && (
@@ -60,6 +63,10 @@ export function AdminPage() {
 
         <TabsContent value={PROJECTS_TAB}>
           <AdminProjectsTab />
+        </TabsContent>
+
+        <TabsContent value={GROUPS_TAB}>
+          <AdminGroupsTab />
         </TabsContent>
 
         <TabsContent value={REQUESTS_TAB}>

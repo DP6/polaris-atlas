@@ -45,6 +45,28 @@ class UpsertHubProjectRequest(BaseModel):
     is_public: bool = False
 
 
+class HubGroup(BaseModel):
+    group_id: str
+    # E-mails dos membros do grupo — cada membro herda allowed_projects
+    # do grupo, além do que já tiver individualmente em hub_users. Ver
+    # domains/admin/service.py::has_project_access.
+    members: list[str] = Field(default_factory=list)
+    # Mesma semântica de HubUser.allowed_projects, incluindo "*".
+    allowed_projects: list[str] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+    updated_by: str
+
+
+class HubGroupsListResponse(BaseModel):
+    groups: list[HubGroup]
+
+
+class UpsertHubGroupRequest(BaseModel):
+    members: list[str] = Field(default_factory=list)
+    allowed_projects: list[str] = Field(default_factory=list)
+
+
 class ProjectAccessGrant(BaseModel):
     email: str
     is_admin: bool
