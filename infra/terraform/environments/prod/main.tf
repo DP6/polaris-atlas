@@ -15,10 +15,6 @@ module "backend_cloud_run" {
   # módulo pode ser dona, as outras três (frontend-dev, backend-prod,
   # frontend-prod) reaproveitam via manage_artifact_registry = false.
   manage_artifact_registry = false
-  # roles/run.invoker do service agent do IAP já foi concedido pelo
-  # backend_cloud_run de dev, neste mesmo projeto (grant de projeto, não
-  # por serviço — ver comentário equivalente em environments/dev/main.tf).
-  manage_iap_service_agent_invoker = false
 
   # Ambiente de prod: protege o serviço contra destroy acidental.
   deletion_protection = true
@@ -52,9 +48,6 @@ module "frontend_cloud_run" {
   # Reaproveita o repositório Artifact Registry criado pelo backend_cloud_run
   # de dev, neste mesmo projeto (ver comentário acima).
   manage_artifact_registry = false
-  # roles/run.invoker do service agent do IAP já foi concedido pelo
-  # backend_cloud_run de dev, neste mesmo projeto (ver comentário acima).
-  manage_iap_service_agent_invoker = false
 
   # Ambiente de prod: protege o serviço contra destroy acidental.
   deletion_protection = true

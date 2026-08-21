@@ -130,14 +130,17 @@ resource "google_iap_web_cloud_run_service_iam_member" "access" {
 
 # O IAP nativo do Cloud Run intercepta a requisição, valida a identidade e
 # repassa pro serviço usando sua própria identidade de serviço — que
-# precisa de roles/run.invoker no projeto pra isso funcionar. Concedido só
-# uma vez por projeto (dev e prod compartilham o mesmo projeto GCP nesta
-# topologia single-project), não por serviço — mesma lógica de
-# manage_artifact_registry.
-resource "google_project_iam_member" "iap_service_agent_invoker" {
-  count = var.manage_iap_service_agent_invoker && var.iap_enabled ? 1 : 0
-
-  project = var.project_id
-  role    = "roles/run.invoker"
-  member  = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-iap.iam.gserviceaccount.com"
-}
+# precisa de roles/run.invoker no projeto pra isso funcionar. NÃO gerenciado
+# aqui: exige resourcemanager.projects.setIamPolicy, permissão maior do que
+# a SA de deploy do CI tem (só roles/iap.admin, que não cobre IAM genérico
+# de projeto) — pedir isso pra SA de deploy seria uma concessão mais ampla
+# do que o allUsers que esta mudança inteira existe pra evitar. Aplicado
+# manualmente uma única vez por projeto (dev e prod compartilham o mesmo
+# projeto GCP nesta topologia single-project), mesmo padrão de
+# infra/terraform/bootstrap:
+#
+#   gcloud projects add-iam-policy-binding <project_id> \
+#     --member="serviceAccount:service-<PROJECT_NUMBER>@gcp-sa-iap.iam.gserviceaccount.com" \
+#     --role="roles/run.invoker"
+#
+# Já aplicado em dp6-ci-polaris (ver docs/onboarding-cliente.md).

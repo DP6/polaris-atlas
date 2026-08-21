@@ -73,12 +73,6 @@ variable "iap_access_members" {
   default     = []
 }
 
-variable "manage_iap_service_agent_invoker" {
-  description = "Se true, este módulo concede roles/run.invoker ao service agent do IAP no projeto. É um grant de projeto (não por serviço) — deixe true em só uma instância do módulo por projeto, igual ao manage_artifact_registry."
-  type        = bool
-  default     = true
-}
-
 variable "deletion_protection" {
   description = "Se true, bloqueia `terraform destroy` deste serviço Cloud Run."
   type        = bool
