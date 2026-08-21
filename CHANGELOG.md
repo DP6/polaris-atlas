@@ -5,6 +5,69 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Admin v1.5: grupos vinculados a grupos reais do Google Workspace
+
+Direto depois da v1.4 (grupos de acesso), pedido do usuário pra não
+precisar cadastrar membro manualmente — vincular aos grupos que já
+existem no Workspace.
+
+### O que foi feito
+Modelo híbrido: cada grupo (`hub_groups`) passa a ter dois eixos de
+membro que se somam — `manual_members` (cadastro direto na Hub, como
+antes) e `workspace_members` (membros reais de um grupo do Google
+Workspace, lidos ao vivo via Admin SDK Directory API, nunca persistidos
+em Firestore). Novo módulo `core/workspace_directory.py` faz domain-wide
+delegation **sem chave de service account** — a SA de runtime assina o
+próprio JWT de delegação via IAM Credentials API (`signBlob`), não
+precisa de chave baixada. Cache de 5min por grupo (mesmo padrão do scan
+de PII) — a leitura roda no caminho de `has_project_access`, chamado em
+quase todo endpoint.
+
+`has_project_access` ganhou uma reescrita: como membros do Workspace não
+ficam no Firestore, não dá pra fazer uma query `array_contains`
+direcionada como antes (`groups_with_member`, removida) — agora escaneia
+os grupos (coleção pequena) e só consulta o Workspace pros grupos que já
+liberam o `project_id` em questão (evita chamada externa desnecessária).
+
+### Erros cometidos e aprendizados
+- Minha primeira versão de `get_group_members` tinha a construção das
+  credenciais **fora** do `try/except` — uma falha ali (ex: domain-wide
+  delegation ainda não configurada) propagava a exceção em vez de
+  retornar lista vazia, quebrando o próprio princípio de fail-closed que
+  o módulo documenta. Pego pelo teste
+  `test_get_group_members_returns_empty_and_does_not_raise_on_credentials_error`
+  antes de subir — o teste existia especificamente pra validar esse
+  comportamento, e falhou corretamente.
+- Pesquisei a técnica de "domain-wide delegation sem chave" antes de
+  implementar (webfetch de fontes técnicas + inspeção do código-fonte de
+  `google.auth.iam.Signer` e `google.oauth2.service_account.Credentials`
+  na própria lib instalada) em vez de confiar de memória — resumos de
+  blog encontrados na busca tinham detalhes desatualizados/imprecisos
+  (endpoint OAuth legado, formato de payload divergente); a fonte de
+  verdade acabou sendo o código-fonte real da lib já instalada no
+  projeto.
+- Concessão de IAM a nível de recurso (SA sobre si mesma) precisou de
+  uma role de projeto adicional (`roles/iam.serviceAccountAdmin`) que o
+  grupo `gcp-ci-polaris@dp6.com.br` não tinha — `resourcemanager.
+  projectIamAdmin` não cobre IAM policy de recursos individuais como
+  service accounts. Depois da propagação (~21min, mais lenta que o
+  usual), `gcloud iam service-accounts add-iam-policy-binding` continuou
+  falhando com "getIamPolicy denied" mesmo com `get-iam-policy` direto
+  já funcionando — contornado fazendo `get-iam-policy` + editar o JSON +
+  `set-iam-policy` explícito, que funcionou de primeira. Causa exata do
+  `add-iam-policy-binding` (comando de conveniência) falhar nesse caso
+  específico não totalmente esclarecida — mas o contorno (get/edit/set
+  manual) é confiável e documentado aqui pra próxima vez que algo
+  parecido acontecer.
+
+### Mudanças de arquitetura
+- Nenhuma mudança de arquitetura geral — extensão do domínio `admin`
+  (ADR-009). A técnica de domain-wide delegation sem chave é nova no
+  projeto, mas isolada em `core/workspace_directory.py`, sem acoplar
+  nenhum outro domínio a ela.
+
+---
+
 ## Admin v1.4: grupos de acesso + fix de bug no roteamento de `/admin`
 
 ### O que foi feito

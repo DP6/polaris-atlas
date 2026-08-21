@@ -75,6 +75,13 @@ class Settings(BaseSettings):
     # frontend roda em outra origem tanto em dev — Vite dev server — quanto
     # em prod — outro serviço Cloud Run).
     cors_origins: str = "http://localhost:5173"
+    # E-mail de um usuário do Workspace com permissão de leitura de grupos,
+    # impersonado via domain-wide delegation pra ler membros de grupos reais
+    # do Workspace (core/workspace_directory.py, domains/admin, v1.4 da
+    # spec). None = integração desligada (grupos usam só manual_members) —
+    # default seguro até a TI configurar a delegação, ver
+    # docs/onboarding-cliente.md.
+    workspace_impersonate_email: str | None = None
 
     @property
     def cors_origins_list(self) -> list[str]:

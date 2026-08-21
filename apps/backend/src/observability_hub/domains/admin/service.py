@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 
 from google.cloud import firestore
 
+from observability_hub.core import workspace_directory
 from observability_hub.core.exceptions import AccessRequestNotFoundError, LastAdminLockoutError
 from observability_hub.domains.admin import repository
 from observability_hub.domains.admin.schemas import (
@@ -102,8 +103,19 @@ def has_project_access(client: firestore.Client, email: str, project_id: str) ->
     if user and _grants_project(user.get("allowed_projects", []), project_id):
         return True
 
-    groups = repository.groups_with_member(client, email)
-    return any(_grants_project(g.get("allowed_projects", []), project_id) for g in groups)
+    # Sem query direcionada possível aqui (diferente de
+    # users_with_project_access): membros do Workspace não ficam no
+    # Firestore, só manual_members — precisa escanear os grupos (coleção
+    # pequena, mesmo racional de list_access_requests) e, só pros que já
+    # liberam este project_id, checar membership (manual + Workspace).
+    for group in repository.list_groups(client):
+        if not _grants_project(group.get("allowed_projects", []), project_id):
+            continue
+        if email in group.get("manual_members", []):
+            return True
+        if email in workspace_directory.get_group_members(group["group_id"]):
+            return True
+    return False
 
 
 # --- hub_projects ------------------------------------------------------------------
@@ -180,19 +192,25 @@ def revoke_project_from_user(
 # --- hub_groups (v1.4) --------------------------------------------------------------
 
 
+def _to_hub_group(raw: dict) -> HubGroup:
+    """workspace_members nunca vem do Firestore — resolvido on-the-fly a
+    cada leitura (cache curto em core/workspace_directory.py)."""
+    return HubGroup(**raw, workspace_members=workspace_directory.get_group_members(raw["group_id"]))
+
+
 def list_groups(client: firestore.Client) -> HubGroupsListResponse:
     raw = repository.list_groups(client)
-    return HubGroupsListResponse(groups=[HubGroup(**g) for g in raw])
+    return HubGroupsListResponse(groups=[_to_hub_group(g) for g in raw])
 
 
 def upsert_group(
     client: firestore.Client, group_id: str, request: UpsertHubGroupRequest, updated_by: str
 ) -> HubGroup:
-    members = [_normalize_email(m) for m in request.members]
+    manual_members = [_normalize_email(m) for m in request.manual_members]
     raw = repository.upsert_group(
-        client, group_id, members, request.allowed_projects, _normalize_email(updated_by)
+        client, group_id, manual_members, request.allowed_projects, _normalize_email(updated_by)
     )
-    return HubGroup(**raw)
+    return _to_hub_group(raw)
 
 
 def delete_group(client: firestore.Client, group_id: str) -> None:

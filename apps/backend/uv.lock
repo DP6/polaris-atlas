@@ -680,6 +680,7 @@ source = { editable = "." }
 dependencies = [
     { name = "authlib" },
     { name = "fastapi" },
+    { name = "google-auth" },
     { name = "google-cloud-bigquery" },
     { name = "google-cloud-firestore" },
     { name = "google-cloud-logging" },
@@ -701,6 +702,7 @@ dev = [
 requires-dist = [
     { name = "authlib", specifier = ">=1.3" },
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "google-auth", specifier = ">=2.35" },
     { name = "google-cloud-bigquery", specifier = ">=3.25" },
     { name = "google-cloud-firestore", specifier = ">=2.19" },
     { name = "google-cloud-logging", specifier = ">=3.16.2" },

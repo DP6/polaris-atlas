@@ -47,11 +47,21 @@ class UpsertHubProjectRequest(BaseModel):
 
 class HubGroup(BaseModel):
     group_id: str
-    # E-mails dos membros do grupo — cada membro herda allowed_projects
-    # do grupo, além do que já tiver individualmente em hub_users. Ver
+    # E-mails cadastrados manualmente na Hub — editável na UI, persistido
+    # em hub_groups. Pra quem precisa de acesso via este grupo sem estar
+    # no grupo real do Workspace.
+    manual_members: list[str] = Field(default_factory=list)
+    # Membros reais do grupo no Google Workspace (Admin SDK Directory
+    # API, domain-wide delegation) — só leitura, nunca persistido em
+    # Firestore, resolvido on-the-fly a cada leitura (com cache curto,
+    # ver core/workspace_directory.py). Lista vazia se a integração
+    # ainda não estiver configurada ou o grupo não existir/for
+    # inacessível no Workspace — nunca um erro.
+    workspace_members: list[str] = Field(default_factory=list)
+    # Cada membro (manual OU do Workspace) herda estes projetos, além do
+    # que já tiver individualmente em hub_users. Mesma semântica de
+    # HubUser.allowed_projects, incluindo "*". Ver
     # domains/admin/service.py::has_project_access.
-    members: list[str] = Field(default_factory=list)
-    # Mesma semântica de HubUser.allowed_projects, incluindo "*".
     allowed_projects: list[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
@@ -63,7 +73,7 @@ class HubGroupsListResponse(BaseModel):
 
 
 class UpsertHubGroupRequest(BaseModel):
-    members: list[str] = Field(default_factory=list)
+    manual_members: list[str] = Field(default_factory=list)
     allowed_projects: list[str] = Field(default_factory=list)
 
 
