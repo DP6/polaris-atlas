@@ -17,8 +17,9 @@ module "backend_cloud_run" {
   manage_artifact_registry = false
 
   # Ambiente de prod: protege o serviço contra destroy acidental.
-  deletion_protection   = true
-  allow_unauthenticated = true
+  deletion_protection = true
+  iap_enabled         = true
+  iap_access_members  = var.iap_access_members
 
   # Libera CORS pras duas URLs válidas do frontend em prod — todo Cloud Run
   # responde tanto na URL canônica (com hash) quanto na URL legada baseada
@@ -49,8 +50,9 @@ module "frontend_cloud_run" {
   manage_artifact_registry = false
 
   # Ambiente de prod: protege o serviço contra destroy acidental.
-  deletion_protection   = true
-  allow_unauthenticated = true
+  deletion_protection = true
+  iap_enabled         = true
+  iap_access_members  = var.iap_access_members
 }
 
 # Firestore named database do ambiente prod — dev e prod estão no mesmo

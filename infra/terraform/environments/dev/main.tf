@@ -11,8 +11,9 @@ module "backend_cloud_run" {
   image        = var.backend_image
 
   # Ambiente de dev: sem proteção contra destroy, permite scale-to-zero.
-  deletion_protection   = false
-  allow_unauthenticated = true
+  deletion_protection = false
+  iap_enabled         = true
+  iap_access_members  = var.iap_access_members
 
   # Libera CORS pras duas URLs válidas do frontend em dev (canônica + legada
   # por número do projeto, ver environments/prod/main.tf), mantendo o Vite
@@ -45,8 +46,9 @@ module "frontend_cloud_run" {
   manage_artifact_registry = false
 
   # Ambiente de dev: sem proteção contra destroy, permite scale-to-zero.
-  deletion_protection   = false
-  allow_unauthenticated = true
+  deletion_protection = false
+  iap_enabled         = true
+  iap_access_members  = var.iap_access_members
 }
 
 # Firestore named database do ambiente dev — dev e prod estão no mesmo

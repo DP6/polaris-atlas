@@ -31,11 +31,18 @@ resource "google_service_account" "runtime" {
 }
 
 resource "google_cloud_run_v2_service" "service" {
+  # iap_enabled só existe no provider google-beta, com launch_stage = "BETA"
+  # — a feature em si (IAP nativo no Cloud Run, sem Load Balancer) é GA no
+  # GCP, mas o suporte no provider Terraform ainda está atrás desse gate.
+  provider = google-beta
+
   project             = var.project_id
   name                = var.service_name
   location            = var.region
   ingress             = "INGRESS_TRAFFIC_ALL"
+  launch_stage        = "BETA"
   deletion_protection = var.deletion_protection
+  iap_enabled         = var.iap_enabled
 
   template {
     service_account = google_service_account.runtime.email
@@ -107,12 +114,33 @@ resource "google_cloud_run_v2_service" "service" {
   depends_on = [google_artifact_registry_repository.apps]
 }
 
-resource "google_cloud_run_v2_service_iam_member" "public_invoker" {
-  count = var.allow_unauthenticated ? 1 : 0
+resource "google_iap_web_cloud_run_service_iam_member" "access" {
+  for_each = var.iap_enabled ? toset(var.iap_access_members) : toset([])
 
-  project  = google_cloud_run_v2_service.service.project
-  location = google_cloud_run_v2_service.service.location
-  name     = google_cloud_run_v2_service.service.name
-  role     = "roles/run.invoker"
-  member   = "allUsers"
+  # Apesar da doc do resource dizer "project id", a API espera project
+  # number aqui — confirmado em issue real do provider (hashicorp/
+  # terraform-provider-google#23092). Com project_id o binding é aceito
+  # mas o acesso via IAP não funciona.
+  project                = tostring(data.google_project.current.number)
+  location               = google_cloud_run_v2_service.service.location
+  cloud_run_service_name = google_cloud_run_v2_service.service.name
+  role                   = "roles/iap.httpsResourceAccessor"
+  member                 = each.value
 }
+
+# O IAP nativo do Cloud Run intercepta a requisição, valida a identidade e
+# repassa pro serviço usando sua própria identidade de serviço — que
+# precisa de roles/run.invoker no projeto pra isso funcionar. NÃO gerenciado
+# aqui: exige resourcemanager.projects.setIamPolicy, permissão maior do que
+# a SA de deploy do CI tem (só roles/iap.admin, que não cobre IAM genérico
+# de projeto) — pedir isso pra SA de deploy seria uma concessão mais ampla
+# do que o allUsers que esta mudança inteira existe pra evitar. Aplicado
+# manualmente uma única vez por projeto (dev e prod compartilham o mesmo
+# projeto GCP nesta topologia single-project), mesmo padrão de
+# infra/terraform/bootstrap:
+#
+#   gcloud projects add-iam-policy-binding <project_id> \
+#     --member="serviceAccount:service-<PROJECT_NUMBER>@gcp-sa-iap.iam.gserviceaccount.com" \
+#     --role="roles/run.invoker"
+#
+# Já aplicado em dp6-ci-polaris (ver docs/onboarding-cliente.md).
