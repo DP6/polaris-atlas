@@ -88,8 +88,11 @@ resource "google_cloud_run_v2_service" "service" {
           path = var.health_check_path
           port = var.container_port
         }
+        # failure_threshold=3 (~15s) era curto demais — revisões observadas
+        # levando até 24.8s pra ficar prontas, causando 503 em instâncias
+        # novas de autoscaling mesmo com a revisão já Ready.
         period_seconds    = 5
-        failure_threshold = 3
+        failure_threshold = 8
       }
 
       liveness_probe {
