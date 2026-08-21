@@ -4,12 +4,14 @@ import { accessRequestsApi } from '@/lib/api/accessRequests'
 import { adminApi } from '@/lib/api/admin'
 import type {
   AccessRequestStatus,
+  UpsertHubGroupRequest,
   UpsertHubProjectRequest,
   UpsertHubUserRequest,
 } from '@/types/admin'
 
 export const ADMIN_USERS_QUERY_KEY = ['admin-users']
 export const ADMIN_PROJECTS_QUERY_KEY = ['admin-projects']
+export const ADMIN_GROUPS_QUERY_KEY = ['admin-groups']
 export const ADMIN_ACCESS_REQUESTS_QUERY_KEY = ['admin-access-requests']
 
 export function useHubUsers() {
@@ -97,6 +99,34 @@ export function useRevokeProjectAccess() {
 // (só admin vê o badge no Topbar). refetchInterval curto o bastante pra
 // o badge de pendentes atualizar sozinho sem precisar de F5, sem
 // precisar de websocket.
+export function useHubGroups() {
+  return useQuery({
+    queryKey: ADMIN_GROUPS_QUERY_KEY,
+    queryFn: adminApi.listGroups,
+  })
+}
+
+export function useUpsertHubGroup() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ groupId, request }: { groupId: string; request: UpsertHubGroupRequest }) =>
+      adminApi.upsertGroup(groupId, request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ADMIN_GROUPS_QUERY_KEY })
+    },
+  })
+}
+
+export function useDeleteHubGroup() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (groupId: string) => adminApi.removeGroup(groupId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ADMIN_GROUPS_QUERY_KEY })
+    },
+  })
+}
+
 export function usePendingAccessRequests() {
   const userQuery = useCurrentUser()
   return useQuery({

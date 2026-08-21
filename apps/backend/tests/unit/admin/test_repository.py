@@ -20,6 +20,7 @@ def _fake_multi_collection_client():
     collections: dict[str, MagicMock] = {
         "hub_users": MagicMock(),
         "hub_projects": MagicMock(),
+        "hub_groups": MagicMock(),
         "access_requests": MagicMock(),
     }
     client = MagicMock()
@@ -204,6 +205,105 @@ def test_upsert_project_sets_created_at_on_new():
 
 
 # --- access_requests -----------------------------------------------------------------
+
+
+# --- hub_groups (v1.4) --------------------------------------------------------------
+
+
+def test_get_group_returns_dict_when_exists():
+    client, collections = _fake_multi_collection_client()
+    groups_collection = collections["hub_groups"]
+    doc_ref = MagicMock()
+    groups_collection.document.return_value = doc_ref
+    doc_ref.get.return_value = _doc(
+        {"group_id": "cliente-a", "members": ["a@dp6.com.br"]}, exists=True
+    )
+
+    result = repository.get_group(client, "cliente-a")
+
+    assert result == {"group_id": "cliente-a", "members": ["a@dp6.com.br"]}
+
+
+def test_get_group_returns_none_when_missing():
+    client, collections = _fake_multi_collection_client()
+    groups_collection = collections["hub_groups"]
+    doc_ref = MagicMock()
+    groups_collection.document.return_value = doc_ref
+    doc_ref.get.return_value = _doc(None, exists=False)
+
+    assert repository.get_group(client, "ghost-group") is None
+
+
+def test_list_groups_orders_by_group_id():
+    client, collections = _fake_multi_collection_client()
+    groups_collection = collections["hub_groups"]
+    ordered_query = MagicMock()
+    groups_collection.order_by.return_value = ordered_query
+    ordered_query.stream.return_value = [_doc({"group_id": "cliente-a"}, exists=True)]
+
+    result = repository.list_groups(client)
+
+    groups_collection.order_by.assert_called_once_with("group_id")
+    assert result == [{"group_id": "cliente-a"}]
+
+
+def test_upsert_group_preserves_created_at_on_existing():
+    client, collections = _fake_multi_collection_client()
+    groups_collection = collections["hub_groups"]
+    doc_ref = MagicMock()
+    groups_collection.document.return_value = doc_ref
+    original_created_at = datetime(2026, 1, 1, tzinfo=UTC)
+    doc_ref.get.return_value = _doc(
+        {"group_id": "cliente-a", "created_at": original_created_at}, exists=True
+    )
+
+    result = repository.upsert_group(
+        client, "cliente-a", ["a@dp6.com.br"], ["proj-a"], updated_by="admin@dp6.com.br"
+    )
+
+    assert result["created_at"] == original_created_at
+    assert result["members"] == ["a@dp6.com.br"]
+    assert result["allowed_projects"] == ["proj-a"]
+    doc_ref.set.assert_called_once_with(result)
+
+
+def test_upsert_group_sets_created_at_on_new():
+    client, collections = _fake_multi_collection_client()
+    groups_collection = collections["hub_groups"]
+    doc_ref = MagicMock()
+    groups_collection.document.return_value = doc_ref
+    doc_ref.get.return_value = _doc(None, exists=False)
+
+    result = repository.upsert_group(client, "cliente-b", [], [], updated_by="admin@dp6.com.br")
+
+    assert result["created_at"] == result["updated_at"]
+
+
+def test_delete_group_deletes_by_group_id():
+    client, collections = _fake_multi_collection_client()
+    groups_collection = collections["hub_groups"]
+    doc_ref = MagicMock()
+    groups_collection.document.return_value = doc_ref
+
+    repository.delete_group(client, "cliente-a")
+
+    groups_collection.document.assert_called_once_with("cliente-a")
+    doc_ref.delete.assert_called_once()
+
+
+def test_groups_with_member_queries_array_contains():
+    client, collections = _fake_multi_collection_client()
+    groups_collection = collections["hub_groups"]
+    filtered_query = MagicMock()
+    groups_collection.where.return_value = filtered_query
+    filtered_query.stream.return_value = [
+        _doc({"group_id": "cliente-a", "members": ["a@dp6.com.br"]}, exists=True),
+    ]
+
+    result = repository.groups_with_member(client, "a@dp6.com.br")
+
+    groups_collection.where.assert_called_once()
+    assert result == [{"group_id": "cliente-a", "members": ["a@dp6.com.br"]}]
 
 
 def test_create_access_request_uses_auto_generated_doc_id():

@@ -5,7 +5,11 @@ import pytest
 
 from observability_hub.core.exceptions import AccessRequestNotFoundError, LastAdminLockoutError
 from observability_hub.domains.admin import service
-from observability_hub.domains.admin.schemas import UpsertHubProjectRequest, UpsertHubUserRequest
+from observability_hub.domains.admin.schemas import (
+    UpsertHubGroupRequest,
+    UpsertHubProjectRequest,
+    UpsertHubUserRequest,
+)
 
 
 def _fake_client() -> MagicMock:
@@ -201,10 +205,12 @@ def test_is_admin_normalizes_email_case(monkeypatch):
 
 def _stub_no_public_project(monkeypatch):
     """Default pra quem não é o foco do teste: nenhum projeto marcado
-    is_public. Sem isso, MagicMock().get("is_public") é truthy por
-    padrão e todo teste de has_project_access que não mocka get_project
-    passaria por engano (fail-closed quebrado)."""
+    is_public e nenhum grupo concedendo acesso. Sem isso, MagicMock()
+    tanto pra get_project quanto pro retorno não-mockado de
+    groups_with_member quebraria testes que não são sobre esses eixos
+    (fail-closed quebrado, ou TypeError ao iterar um MagicMock)."""
     monkeypatch.setattr(service.repository, "get_project", lambda client, project_id: None)
+    monkeypatch.setattr(service.repository, "groups_with_member", lambda client, email: [])
 
 
 def test_has_project_access_false_when_no_doc(monkeypatch):
@@ -262,8 +268,127 @@ def test_has_project_access_false_when_project_exists_but_not_public(monkeypatch
         service.repository, "get_project", lambda client, project_id: {"is_public": False}
     )
     monkeypatch.setattr(service.repository, "get_user", lambda client, email: None)
+    monkeypatch.setattr(service.repository, "groups_with_member", lambda client, email: [])
 
     assert service.has_project_access(_fake_client(), "ghost@dp6.com.br", "proj-a") is False
+
+
+def test_has_project_access_true_via_group_wildcard(monkeypatch):
+    _stub_no_public_project(monkeypatch)
+    monkeypatch.setattr(service.repository, "get_user", lambda client, email: None)
+    monkeypatch.setattr(
+        service.repository,
+        "groups_with_member",
+        lambda client, email: [{"group_id": "cliente-a", "allowed_projects": ["*"]}],
+    )
+    assert service.has_project_access(_fake_client(), "a@dp6.com.br", "any-project") is True
+
+
+def test_has_project_access_true_via_group_explicit_project(monkeypatch):
+    _stub_no_public_project(monkeypatch)
+    monkeypatch.setattr(service.repository, "get_user", lambda client, email: None)
+    monkeypatch.setattr(
+        service.repository,
+        "groups_with_member",
+        lambda client, email: [{"group_id": "cliente-a", "allowed_projects": ["proj-a"]}],
+    )
+    assert service.has_project_access(_fake_client(), "a@dp6.com.br", "proj-a") is True
+
+
+def test_has_project_access_false_when_group_does_not_grant(monkeypatch):
+    _stub_no_public_project(monkeypatch)
+    monkeypatch.setattr(service.repository, "get_user", lambda client, email: None)
+    monkeypatch.setattr(
+        service.repository,
+        "groups_with_member",
+        lambda client, email: [{"group_id": "cliente-a", "allowed_projects": ["proj-b"]}],
+    )
+    assert service.has_project_access(_fake_client(), "a@dp6.com.br", "proj-a") is False
+
+
+def test_has_project_access_true_from_own_grant_even_without_matching_group(monkeypatch):
+    """Acesso individual (hub_users) e de grupo são independentes — um
+    não precisa do outro, qualquer um dos dois libera."""
+    _stub_no_public_project(monkeypatch)
+    monkeypatch.setattr(
+        service.repository,
+        "get_user",
+        lambda client, email: {"allowed_projects": ["proj-a"]},
+    )
+    groups_mock = MagicMock()
+    monkeypatch.setattr(service.repository, "groups_with_member", groups_mock)
+
+    result = service.has_project_access(_fake_client(), "a@dp6.com.br", "proj-a")
+
+    assert result is True
+    # Acesso individual já resolveu — nem precisa consultar grupos.
+    groups_mock.assert_not_called()
+
+
+# --- hub_groups (v1.4) --------------------------------------------------------------
+
+
+def test_list_groups_builds_response(monkeypatch):
+    raw = [
+        {
+            "group_id": "cliente-a",
+            "members": ["a@dp6.com.br"],
+            "allowed_projects": ["proj-a"],
+            "created_at": "2026-01-01T00:00:00+00:00",
+            "updated_at": "2026-01-01T00:00:00+00:00",
+            "updated_by": "admin@dp6.com.br",
+        }
+    ]
+    monkeypatch.setattr(service.repository, "list_groups", lambda client: raw)
+
+    result = service.list_groups(_fake_client())
+
+    assert len(result.groups) == 1
+    assert result.groups[0].group_id == "cliente-a"
+
+
+def test_upsert_group_normalizes_member_emails_and_updated_by(monkeypatch):
+    captured = {}
+
+    def fake_upsert(client, group_id, members, allowed_projects, updated_by):
+        captured.update(
+            group_id=group_id,
+            members=members,
+            allowed_projects=allowed_projects,
+            updated_by=updated_by,
+        )
+        return {
+            "group_id": group_id,
+            "members": members,
+            "allowed_projects": allowed_projects,
+            "created_at": "2026-01-01T00:00:00+00:00",
+            "updated_at": "2026-01-01T00:00:00+00:00",
+            "updated_by": updated_by,
+        }
+
+    monkeypatch.setattr(service.repository, "get_group", lambda client, group_id: None)
+    monkeypatch.setattr(service.repository, "upsert_group", fake_upsert)
+
+    result = service.upsert_group(
+        _fake_client(),
+        "cliente-a",
+        UpsertHubGroupRequest(members=["A@DP6.com.br"], allowed_projects=["proj-a"]),
+        updated_by="ADMIN@dp6.com.br",
+    )
+
+    assert captured["members"] == ["a@dp6.com.br"]
+    assert captured["updated_by"] == "admin@dp6.com.br"
+    assert result.group_id == "cliente-a"
+
+
+def test_delete_group_calls_repository(monkeypatch):
+    delete_mock = MagicMock()
+    monkeypatch.setattr(service.repository, "delete_group", delete_mock)
+    client = _fake_client()
+
+    service.delete_group(client, "cliente-a")
+
+    delete_mock.assert_called_once_with(client, "cliente-a")
 
 
 # --- hub_projects ------------------------------------------------------------------

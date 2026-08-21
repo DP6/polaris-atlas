@@ -5,6 +5,8 @@ import type {
   AccessRequestStatus,
   AccessRequestsListResponse,
   FavoritesAnalyticsResponse,
+  HubGroup,
+  HubGroupsListResponse,
   HubProject,
   HubProjectsListResponse,
   HubUser,
@@ -14,6 +16,7 @@ import type {
   PiiScanActivityResponse,
   ProfilingActivityResponse,
   ProjectUsersResponse,
+  UpsertHubGroupRequest,
   UpsertHubProjectRequest,
   UpsertHubUserRequest,
 } from '@/types/admin'
@@ -46,6 +49,14 @@ export const adminApi = {
     httpClient.delete<undefined>(
       `/api/v1/admin/projects/${encodeURIComponent(projectId)}/users/${encodeURIComponent(email)}`,
     ),
+
+  listGroups: () => httpClient.get<HubGroupsListResponse>('/api/v1/admin/groups'),
+
+  upsertGroup: (groupId: string, request: UpsertHubGroupRequest) =>
+    httpClient.put<HubGroup>(`/api/v1/admin/groups/${encodeURIComponent(groupId)}`, request),
+
+  removeGroup: (groupId: string) =>
+    httpClient.delete<undefined>(`/api/v1/admin/groups/${encodeURIComponent(groupId)}`),
 
   listAccessRequests: (status?: AccessRequestStatus) =>
     httpClient.get<AccessRequestsListResponse>(

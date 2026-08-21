@@ -18,6 +18,26 @@ export interface UpsertHubUserRequest {
   allowed_projects: string[]
 }
 
+export interface HubGroup {
+  group_id: string
+  // E-mails dos membros — cada um herda allowed_projects do grupo, além
+  // do que já tiver individualmente via HubUser.allowed_projects.
+  members: string[]
+  allowed_projects: string[]
+  created_at: string
+  updated_at: string
+  updated_by: string
+}
+
+export interface HubGroupsListResponse {
+  groups: HubGroup[]
+}
+
+export interface UpsertHubGroupRequest {
+  members: string[]
+  allowed_projects: string[]
+}
+
 export interface HubProject {
   project_id: string
   // Libera o projeto pra QUALQUER usuário do Hub, inclusive quem ainda

@@ -1,9 +1,9 @@
 # Spec — Domínio: Admin (controle de acesso por usuário × projeto)
 
-**Versão:** 1.3
+**Versão:** 1.4
 **Status:** Aprovada
 **Fase:** Transversal (não faz parte do roadmap de observabilidade de `docs/prd.md`) — plataforma
-**Última atualização:** 2026-08-17
+**Última atualização:** 2026-08-21
 
 ---
 
@@ -42,9 +42,15 @@ existia) e atividade de scans de PII (mesmo padrão do profiling,
 gravação nova em `pii_scan_history`) — ver "Analytics de uso (v1.3)"
 abaixo.
 
+**Novo na v1.4**: terceiro eixo de acesso — grupos (`hub_groups`). Um
+grupo tem membros (e-mails) e projetos liberados; cada membro herda o
+acesso do grupo, além do que já tiver individualmente. Aba "Grupos" nova
+em `/admin`; aba "Por usuário" ganhou uma coluna mostrando de quais
+grupos cada usuário faz parte. Ver "Grupos (`hub_groups`, v1.4)" abaixo.
+
 Ver [ADR-009](../adr/ADR-009-acl-usuario-projeto.md) para o contexto da
-decisão arquitetural (não revisado nesta versão — a v1.1 é uma extensão
-da mesma decisão, não uma mudança de arquitetura).
+decisão arquitetural (não revisado nesta versão — as extensões v1.1-v1.4
+são extensões da mesma decisão, não mudança de arquitetura).
 
 ---
 
@@ -128,7 +134,82 @@ escolhe um projeto e vê (e gerencia) quem tem acesso — via
 `GET /admin/projects/{id}/users`, que consulta `hub_users` com
 `array_contains_any [project_id, "*"]` (uma query só, sem escanear a
 coleção inteira) e marca cada resultado como `granted_via: "explicit"`
-ou `"wildcard"`.
+ou `"wildcard"`. **Não inclui acesso concedido via grupo** (v1.4,
+abaixo) — só os dois eixos que já existiam quando este endpoint foi
+escrito; ver "Fora do escopo desta versão".
+
+---
+
+## Grupos (`hub_groups`, v1.4)
+
+Terceiro eixo de acesso, independente dos outros dois (`hub_users.
+allowed_projects` e `hub_projects.is_public`) — todos se somam, nenhum
+substitui o outro. Motivação: liberar de uma vez todos os projetos de um
+"time Cliente A" pra um conjunto de consultores, sem repetir a mesma
+lista de `project_id` em cada `hub_users/{email}` manualmente (e sem
+esquecer de atualizar todo mundo se a lista mudar).
+
+Coleção `hub_groups/{group_id}` — doc ID é o próprio nome do grupo,
+escolhido pelo admin ao criar (mesmo padrão de `hub_projects`):
+
+```json
+{
+  "group_id": "cliente-a-consultores",
+  "members": ["consultor.a@dp6.com.br", "consultor.b@dp6.com.br"],
+  "allowed_projects": ["client-a-project-1", "client-a-project-2"],
+  "created_at": "2026-08-21T10:00:00Z",
+  "updated_at": "2026-08-21T10:00:00Z",
+  "updated_by": "admin@dp6.com.br"
+}
+```
+
+`allowed_projects` de um grupo aceita `"*"` com a mesma semântica de
+`hub_users.allowed_projects` — libera qualquer projeto que a SA de
+runtime alcançar pra todo membro do grupo.
+
+`has_project_access` ganhou um terceiro checkpoint, depois de
+`hub_projects.is_public` e do acesso individual do usuário — qualquer um
+dos três libera:
+
+```python
+def has_project_access(client, email, project_id):
+    project = repository.get_project(client, project_id)
+    if project and project.get("is_public"):
+        return True
+    user = repository.get_user(client, email)
+    if user and _grants_project(user.get("allowed_projects", []), project_id):
+        return True
+    groups = repository.groups_with_member(client, email)
+    return any(_grants_project(g.get("allowed_projects", []), project_id) for g in groups)
+```
+
+`groups_with_member` consulta `hub_groups` com `array_contains` no campo
+`members` — uma query só, mesmo padrão de `users_with_project_access`.
+
+A tela `/admin` → aba "Grupos" lista os grupos existentes, permite criar
+um novo (só o nome — membros e projetos são adicionados depois,
+expandindo o grupo) e editar membros/projetos liberados inline (dois
+`ProjectChipEditor` por grupo, reaproveitado também pra e-mail de membro
+apesar do nome do componente — genérico o bastante, não exigiu
+componente novo). A aba "Por usuário" ganhou uma coluna "Grupos"
+mostrando de quais grupos cada usuário é membro, derivada no
+frontend a partir da mesma lista de grupos já buscada pra aba "Grupos"
+(sem endpoint novo pra isso).
+
+### Endpoints (mesmo `dependencies=[Depends(require_admin)]` do router)
+
+- `GET /api/v1/admin/groups` — lista todos os `hub_groups`, ordenados
+  por `group_id`.
+- `PUT /api/v1/admin/groups/{group_id}` — upsert (cria se não existe,
+  atualiza se existe). Body: `{"members": [...], "allowed_projects":
+  [...]}`. `created_at` preservado em updates, mesmo padrão de
+  `hub_users`/`hub_projects`.
+- `DELETE /api/v1/admin/groups/{group_id}` — remove o documento
+  (idempotente). Membros perdem só o acesso concedido por este grupo —
+  acesso individual (`hub_users`) não é afetado.
+
+Diferente de `hub_users`, não existe `LastAdminLockoutError` equivalente
+pra grupos — grupos não carregam status de admin, só acesso a projeto.
 
 ---
 
@@ -352,6 +433,22 @@ Revoga — remove só este `project_id` da lista do usuário. **Não afeta**
 `hub_projects.is_public`: se o projeto está público, o usuário continua
 acessando por esse eixo independente mesmo depois da revogação explícita.
 
+### GET /api/v1/admin/groups
+Lista `hub_groups`, ordenados por `group_id`.
+
+### PUT /api/v1/admin/groups/{group_id}
+Upsert (cria se não existe, atualiza se existe). `created_at` é
+preservado em updates.
+
+**Body:**
+```json
+{"members": ["a@dp6.com.br"], "allowed_projects": ["client-a-project"]}
+```
+
+### DELETE /api/v1/admin/groups/{group_id}
+Remove o documento (idempotente). Membros perdem só o acesso concedido
+por este grupo — `hub_users` não é afetado.
+
 ### GET /api/v1/admin/access-requests?status=pending
 Lista `access_requests`, mais recente primeiro. `status` opcional
 (`pending`/`approved`/`denied`); sem o parâmetro, lista todas.
@@ -429,6 +526,7 @@ apps/backend/src/observability_hub/
 │   ├── admin/                  # schemas, repository, service — hub_users + hub_projects (v1.1)
 │   │                           # + access_requests (v1.1)
 │   │                           # + analytics_{schemas,repository,service}.py (v1.2, +3 funções v1.3)
+│   │                           # + hub_groups (v1.4)
 │   ├── quality/history_repository.py  # + project_id/dataset_id/table_id no run (v1.2)
 │   ├── pii/history_repository.py      # novo (v1.3) — pii_scan_history/{doc}/scans
 │   └── auth/schemas.py         # UserInfo + is_admin
@@ -445,11 +543,13 @@ apps/frontend/src/
 │   └── ApiErrorNotice.tsx      # + prop `action` (v1.1) — CTA opcional junto da mensagem
 ├── features/
 │   ├── admin/
-│   │   ├── AdminPage.tsx        # shell de abas (v1.1): Por usuário / Por projeto / Solicitações
-│   │   ├── AdminUsersTab.tsx    # conteúdo da v1.0, extraído (v1.1)
+│   │   ├── AdminPage.tsx        # shell de abas: Por usuário / Por projeto / Grupos (v1.4) / Solicitações
+│   │   ├── AdminUsersTab.tsx    # conteúdo da v1.0, extraído (v1.1); + coluna "Grupos" (v1.4)
 │   │   ├── AdminProjectsTab.tsx # novo (v1.1) — visão projeto -> usuários + is_public
+│   │   ├── AdminGroupsTab.tsx   # novo (v1.4) — CRUD de hub_groups (membros + projetos)
 │   │   ├── AdminAccessRequestsTab.tsx  # novo (v1.1)
-│   │   ├── ProjectChipEditor.tsx       # novo (v1.1) — compartilhado
+│   │   ├── ProjectChipEditor.tsx       # novo (v1.1) — compartilhado, reaproveitado
+│   │   │                               # também pra e-mail de membro de grupo (v1.4)
 │   │   ├── RequestAccessDialog.tsx     # novo (v1.1)
 │   │   ├── RequireAdmin.tsx
 │   │   ├── AdminUsageTab.tsx           # v1.2 (3 seções) + 3 novas (v1.3)
@@ -464,7 +564,9 @@ apps/frontend/src/
 ├── app/
 │   ├── router.tsx               # rota /admin, gated por RequireAdmin
 │   ├── topbar.tsx                # link + badge de pendentes (v1.1) + botão "Solicitar acesso"
-│   └── layout.tsx                # CTA "Solicitar acesso" no estado vazio (v1.1)
+│   └── layout.tsx                # CTA "Solicitar acesso" no estado vazio (v1.1); fix (v1.4):
+│                                  # /admin não depende mais de projectId selecionado — só as
+│                                  # rotas de dado de projeto dependem
 ├── lib/
 │   ├── http-client.ts            # + método put
 │   └── api/accessRequests.ts     # novo (v1.1)
@@ -475,6 +577,7 @@ apps/frontend/src/
                                    #   ProfilingActivityResponse (v1.2)
                                    # + AccessRequestAnalyticsResponse, NavigationAnalyticsResponse,
                                    #   PiiScanActivityResponse (v1.3)
+                                   # + HubGroup, HubGroupsListResponse, UpsertHubGroupRequest (v1.4)
 ```
 
 ---
@@ -496,6 +599,10 @@ apps/frontend/src/
 | Aprovar pedido de projeto que virou público nesse meio-tempo | `grant_project_to_user` roda normalmente (idempotente — resultado final é o mesmo) |
 | Revogar (`DELETE .../projects/{id}/users/{email}`) o único acesso explícito de alguém a um projeto público | Sem efeito real — o projeto continua público, `is_public` não muda por essa chamada (eixos independentes) |
 | `request_id` inexistente em approve/deny | 404 (`AccessRequestNotFoundError`) |
+| Usuário é membro de um grupo com acesso a um projeto e também tem o mesmo projeto individualmente | Sem efeito duplo — `has_project_access` já retorna `True` no primeiro checkpoint que bater; revogar um dos dois eixos não afeta o outro |
+| Grupo com `"*"` em `allowed_projects` | Libera qualquer projeto que a SA de runtime alcançar pra todo membro do grupo, mesma semântica do wildcard individual |
+| Remover um grupo (`DELETE /admin/groups/{id}`) | Membros perdem só o acesso concedido por esse grupo — acesso individual (`hub_users`) e outros grupos não são afetados |
+| `GET /admin/projects/{id}/users` com usuário que só tem acesso via grupo | Não aparece na lista — esse endpoint reflete só `hub_users`/`hub_projects`, não soma acesso de grupo (fora do escopo desta versão, ver abaixo) |
 | Firestore indisponível no momento do login | Login continua funcionando; gravação de `login_events` falha silenciosamente (logada), sem expor erro ao usuário |
 | Run de profiling gravado antes da v1.2 (sem `project_id`) | Filtrado da visão global de atividade; sai da janela sozinho quando o cap de 30/tabela rotacionar |
 | Favorito de dataset inteiro (`table_id: null`) na visão "por base" | Agrupado como linha própria, separado de favoritos de tabelas específicas do mesmo dataset |
@@ -518,8 +625,16 @@ apps/frontend/src/
   completo de mudanças ao longo do tempo.
 - **Expiração automática de acesso** (ex: acesso temporário por N dias)
   — todo acesso concedido é permanente até um admin revogar manualmente.
-- **Grupos/times** (ex: liberar todos os projetos de um "time Cliente A"
-  de uma vez) — hoje é sempre usuário × projeto, sem agrupamento.
+- **`GET /admin/projects/{id}/users` refletir acesso via grupo** — esse
+  endpoint (aba "Por projeto") continua mostrando só `hub_users`/
+  `hub_projects`; um usuário que só tem acesso via `hub_groups` (v1.4)
+  não aparece nessa lista, ainda que `has_project_access` já retorne
+  `True` pra ele. Juntar os três eixos nessa visão específica é mais
+  complexo (não dá pra fazer com uma query `array_contains_any` simples)
+  e não fazia parte do pedido original — revisitar se virar necessidade
+  real de uso.
+- **Grupos aninhados** (grupo dentro de grupo) — `hub_groups` é uma
+  estrutura plana, um membro é sempre um e-mail, nunca outro `group_id`.
 - **Tela de acompanhamento do próprio usuário** ("minhas solicitações")
   — só o admin vê/gerencia `access_requests`; quem solicita só recebe a
   confirmação de envio no momento, sem histórico de status depois.

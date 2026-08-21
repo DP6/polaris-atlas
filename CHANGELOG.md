@@ -5,6 +5,36 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Admin v1.4: grupos de acesso + fix de bug no roteamento de `/admin`
+
+### O que foi feito
+- **Bug corrigido**: `/admin` só abria depois de um `project_id`
+  validado no seletor do Topbar — `AppLayout` gateava o `<Outlet />`
+  inteiro atrás de `projectId`, incluindo rotas (como admin) que não
+  dependem de projeto nenhum. Agora só as rotas de dado de projeto
+  exigem `projectId`; `/admin` funciona mesmo sem nenhum acesso
+  liberado ainda (importante justamente pro caso de bootstrap, antes de
+  qualquer projeto GCP estar liberado).
+- **Grupos (`hub_groups`)**: terceiro eixo de controle de acesso, ao
+  lado de `hub_users.allowed_projects` (individual) e
+  `hub_projects.is_public` (público) — um grupo tem membros (e-mails) e
+  projetos liberados; cada membro herda o acesso do grupo, além do que
+  já tiver individualmente. Nova aba "Grupos" em `/admin` (CRUD
+  completo); aba "Por usuário" ganhou uma coluna mostrando de quais
+  grupos cada usuário faz parte. Ver `docs/specs/admin.md` v1.4 pra
+  detalhes completos (schema, endpoints, casos de borda).
+
+### Erros cometidos e aprendizados
+- Nenhum nesta mudança — spec lida antes de implementar (v1.3 já
+  registrava "Grupos/times" como fora do escopo, virou o ponto de
+  partida do desenho da v1.4).
+
+### Mudanças de arquitetura
+- Nenhuma — extensão do mesmo domínio `admin` (ADR-009), sem novo
+  serviço nem mudança de padrão de acesso a dado.
+
+---
+
 ## CI/CD: gate de aprovação manual antes de deploy de app em prod
 
 Direto em `main`, fora de qualquer sprint — pedido do usuário depois de

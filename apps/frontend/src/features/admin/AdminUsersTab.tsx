@@ -23,7 +23,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { useDeleteHubUser, useHubUsers, useUpsertHubUser } from '@/features/admin/hooks'
+import {
+  useDeleteHubUser,
+  useHubGroups,
+  useHubUsers,
+  useUpsertHubUser,
+} from '@/features/admin/hooks'
 import { ProjectChipEditor } from '@/features/admin/ProjectChipEditor'
 import { formatDate } from '@/lib/format'
 import { ApiError } from '@/lib/http-client'
@@ -31,6 +36,7 @@ import type { HubUser } from '@/types/admin'
 
 export function AdminUsersTab() {
   const usersQuery = useHubUsers()
+  const groupsQuery = useHubGroups()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<HubUser | null>(null)
   const [deletingEmail, setDeletingEmail] = useState<string | null>(null)
@@ -68,61 +74,79 @@ export function AdminUsersTab() {
               <TableHead>E-mail</TableHead>
               <TableHead>Admin</TableHead>
               <TableHead>Projetos liberados</TableHead>
+              <TableHead>Grupos</TableHead>
               <TableHead>Atualizado</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {usersQuery.data.users.map((user) => (
-              <TableRow key={user.email}>
-                <TableCell className="font-medium">{user.email}</TableCell>
-                <TableCell>
-                  {user.is_admin ? (
-                    <Badge>Admin</Badge>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap gap-1">
-                    {user.allowed_projects.length === 0 && (
-                      <span className="text-xs text-muted-foreground">Nenhum</span>
+            {usersQuery.data.users.map((user) => {
+              const userGroups = (groupsQuery.data?.groups ?? []).filter((g) =>
+                g.members.includes(user.email),
+              )
+              return (
+                <TableRow key={user.email}>
+                  <TableCell className="font-medium">{user.email}</TableCell>
+                  <TableCell>
+                    {user.is_admin ? (
+                      <Badge>Admin</Badge>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
                     )}
-                    {user.allowed_projects.map((p) => (
-                      <Badge key={p} variant="outline">
-                        {p === '*' ? 'Todos os projetos' : p}
-                      </Badge>
-                    ))}
-                  </div>
-                </TableCell>
-                <TableCell className="text-xs text-muted-foreground">
-                  {formatDate(user.updated_at)} por {user.updated_by}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-1">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      aria-label={`Editar ${user.email}`}
-                      onClick={() => openEditDialog(user)}
-                    >
-                      <Pencil size={14} />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      aria-label={`Remover ${user.email}`}
-                      onClick={() => setDeletingEmail(user.email)}
-                    >
-                      <Trash2 size={14} />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {user.allowed_projects.length === 0 && (
+                        <span className="text-xs text-muted-foreground">Nenhum</span>
+                      )}
+                      {user.allowed_projects.map((p) => (
+                        <Badge key={p} variant="outline">
+                          {p === '*' ? 'Todos os projetos' : p}
+                        </Badge>
+                      ))}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {userGroups.length === 0 && (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                      {userGroups.map((g) => (
+                        <Badge key={g.group_id} variant="outline">
+                          {g.group_id}
+                        </Badge>
+                      ))}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {formatDate(user.updated_at)} por {user.updated_by}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-label={`Editar ${user.email}`}
+                        onClick={() => openEditDialog(user)}
+                      >
+                        <Pencil size={14} />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-label={`Remover ${user.email}`}
+                        onClick={() => setDeletingEmail(user.email)}
+                      >
+                        <Trash2 size={14} />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )
+            })}
             {usersQuery.data.users.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground">
+                <TableCell colSpan={6} className="text-center text-muted-foreground">
                   Nenhum usuário administrado ainda.
                 </TableCell>
               </TableRow>
