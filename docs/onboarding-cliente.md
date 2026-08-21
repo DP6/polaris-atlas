@@ -43,11 +43,14 @@ projeto:
 
 | Ambiente do Hub | Service account |
 |---|---|
-| Produção (uso real com cliente) | `backend-prod-run@observability-hub.iam.gserviceaccount.com` |
-| Dev (teste interno) | `backend-dev-run@observability-hub.iam.gserviceaccount.com` |
+| Produção (uso real com cliente) | `backend-prod-run@dp6-ci-polaris.iam.gserviceaccount.com` |
+| Dev (teste interno) | `backend-dev-run@dp6-ci-polaris.iam.gserviceaccount.com` |
 
-Dev e prod rodam no mesmo projeto GCP (`observability-hub`) — o que
-diferencia as duas service accounts é o nome, não o projeto.
+Dev e prod rodam no mesmo projeto GCP (`dp6-ci-polaris`, repo real
+`polaris-hub-gcp`) — o que diferencia as duas service accounts é o nome,
+não o projeto. (Nota: os nomes acima referenciavam o projeto do
+piloto/repo de origem, `observability-hub` — corrigido em 2026-08-21 pra
+refletir o projeto real deste repositório.)
 
 Roles necessárias — granularidade sempre a nível de **projeto** (nenhum
 domínio hoje opera com IAM a nível de dataset ou tabela):
@@ -71,7 +74,7 @@ domínio hoje opera com IAM a nível de dataset ou tabela):
 > ([doc oficial](https://docs.cloud.google.com/logging/docs/access-control))
 
 ```bash
-SA_EMAIL="backend-prod-run@observability-hub.iam.gserviceaccount.com"  # ou backend-dev-run@...
+SA_EMAIL="backend-prod-run@dp6-ci-polaris.iam.gserviceaccount.com"  # ou backend-dev-run@...
 
 gcloud projects add-iam-policy-binding {PROJECT_ID} \
   --member="serviceAccount:${SA_EMAIL}" --role="roles/bigquery.metadataViewer" --condition=None
