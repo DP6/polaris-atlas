@@ -7,6 +7,12 @@ on:
     paths:
       - "apps/backend/**"
       - ".github/workflows/backend-deploy-prod.yml"
+  # Permite redeployar o commit atual sem precisar de um push que toque
+  # apps/backend/** — usado, por exemplo, quando o serviço Cloud Run é
+  # criado depois que a imagem já existe e precisa de um primeiro deploy.
+  # O gate de aprovação manual (environment: production) continua valendo
+  # independente do disparo ser push ou manual.
+  workflow_dispatch: {}
 
 permissions:
   contents: read
