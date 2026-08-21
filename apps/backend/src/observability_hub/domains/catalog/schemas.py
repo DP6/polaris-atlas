@@ -27,6 +27,21 @@ class ProjectValidateResponse(BaseModel):
     is_native: bool
 
 
+class AccessibleProject(BaseModel):
+    project_id: str
+    display_name: str | None = None
+    # Se o usuário ATUAL (não a SA) tem acesso liberado no Hub pra este
+    # projeto — mesma lógica de domains/admin/service.py::has_project_access
+    # (individual, hub_projects.is_public ou grupo). A SA já alcança todo
+    # projeto desta lista (é o que list_reachable_projects garante); este
+    # flag é sobre o usuário, não sobre a SA.
+    has_access: bool
+
+
+class ProjectsListResponse(BaseModel):
+    projects: list[AccessibleProject]
+
+
 class DatasetSummary(BaseModel):
     dataset_id: str
     location: str

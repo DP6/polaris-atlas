@@ -444,6 +444,23 @@ wheels = [
 ]
 
 [[package]]
+name = "google-cloud-resource-manager"
+version = "1.18.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "google-api-core", extra = ["grpc"] },
+    { name = "google-auth" },
+    { name = "grpc-google-iam-v1" },
+    { name = "grpcio" },
+    { name = "proto-plus" },
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/12/70/d467d93528905700826d26a48ad16ac39d4b36dd6efb5a86fb338efa81aa/google_cloud_resource_manager-1.18.0.tar.gz", hash = "sha256:db689f800a14c66d041196a7fbb8bb8aae8dc87f28c2929e101a5ec766b15512", size = 463674, upload-time = "2026-06-22T23:22:27.09Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3f/62/2dbecda08a32aa9d4e6909eba3e31731c2d4452687bb6364a8d7950aed74/google_cloud_resource_manager-1.18.0-py3-none-any.whl", hash = "sha256:69bab144acd75878ebe44b720903dc3d140cb7d3be3261eaa8bc81e48afaff33", size = 404211, upload-time = "2026-06-22T23:20:25.88Z" },
+]
+
+[[package]]
 name = "google-cloud-secret-manager"
 version = "2.30.0"
 source = { registry = "https://pypi.org/simple" }
@@ -684,6 +701,7 @@ dependencies = [
     { name = "google-cloud-bigquery" },
     { name = "google-cloud-firestore" },
     { name = "google-cloud-logging" },
+    { name = "google-cloud-resource-manager" },
     { name = "google-cloud-secret-manager" },
     { name = "google-cloud-storage" },
     { name = "pydantic-settings" },
@@ -706,6 +724,7 @@ requires-dist = [
     { name = "google-cloud-bigquery", specifier = ">=3.25" },
     { name = "google-cloud-firestore", specifier = ">=2.19" },
     { name = "google-cloud-logging", specifier = ">=3.16.2" },
+    { name = "google-cloud-resource-manager", specifier = ">=1.14" },
     { name = "google-cloud-secret-manager", specifier = ">=2.20" },
     { name = "google-cloud-storage", specifier = ">=3.13.1" },
     { name = "pydantic-settings", specifier = ">=2.5" },

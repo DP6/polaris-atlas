@@ -19,6 +19,39 @@ def _fake_client(project: str = "observability-hub-dev") -> MagicMock:
     return client
 
 
+# --- list_accessible_projects -------------------------------------------------------
+
+
+def test_list_accessible_projects_flags_access_per_project(monkeypatch):
+    monkeypatch.setattr(
+        service.resourcemanager,
+        "list_reachable_projects",
+        lambda: [
+            {"project_id": "project-b", "display_name": "Project B"},
+            {"project_id": "project-a", "display_name": "Project A"},
+        ],
+    )
+    monkeypatch.setattr(
+        service.admin_service,
+        "has_project_access",
+        lambda client, email, project_id: project_id == "project-a",
+    )
+
+    result = service.list_accessible_projects(MagicMock(name="firestore.Client"), "a@dp6.com.br")
+
+    assert [p.project_id for p in result.projects] == ["project-a", "project-b"]
+    assert result.projects[0].has_access is True
+    assert result.projects[1].has_access is False
+
+
+def test_list_accessible_projects_empty_when_sa_reaches_nothing(monkeypatch):
+    monkeypatch.setattr(service.resourcemanager, "list_reachable_projects", list)
+
+    result = service.list_accessible_projects(MagicMock(name="firestore.Client"), "a@dp6.com.br")
+
+    assert result.projects == []
+
+
 def test_validate_project_happy_path(monkeypatch):
     client = _fake_client()
     monkeypatch.setattr(service, "discover_regions", lambda project_id, client: ["US"])

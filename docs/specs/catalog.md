@@ -1,9 +1,9 @@
 # Spec — Domínio: Catálogo (catalog)
 
-**Versão:** 1.5 (metadados de partição, endpoint de partições, busca reversa)
+**Versão:** 1.6 (descoberta automática de projetos alcançáveis pela SA)
 **Status:** Aprovada
 **Fase:** 2 — MVP v1 (Sprint 2.2/2.3)
-**Última atualização:** 2026-08-13 (v1.5)
+**Última atualização:** 2026-08-21 (v1.6)
 
 ---
 
@@ -81,6 +81,35 @@ BQ_REGIONS = [
 ---
 
 ## Endpoints da API
+
+### GET /api/v1/projects (v1.6)
+Lista projetos GCP que a service account de runtime alcança, descobertos
+via Cloud Resource Manager (`core/resourcemanager.py::list_reachable_projects`,
+`search_projects(query="state:ACTIVE")` — requer `roles/browser` da SA
+no projeto alvo, ver `docs/onboarding-cliente.md` seção 2; role
+**opcional**, não bloqueia nenhum outro domínio). Cada item vem com
+`has_access`: se o usuário **atual** (não a SA) já tem acesso liberado
+no Hub pra aquele `project_id`, mesma checagem de
+`admin_service.has_project_access` usada por `require_project_access`.
+Alimenta o seletor de projeto no frontend — antes desta versão o
+usuário só tinha o campo de texto livre pra digitar o `project_id` de
+cabeça; agora vê os projetos que a SA alcança já com a marcação de quais
+ele pode entrar direto. Fail-closed: lista vazia (nunca erro) se a SA
+não tiver `roles/browser` em nenhum projeto ainda, ou se a Resource
+Manager API falhar — o campo de texto livre continua funcionando como
+fallback nesse caso. `Depends(get_current_user)`, não
+`require_project_access` — não recebe `project_id` no path, é
+project-agnostic por natureza.
+
+**Response 200:**
+```json
+{
+  "projects": [
+    {"project_id": "dp6-ci-polaris", "display_name": "polaris-hub-gcp", "has_access": true},
+    {"project_id": "cliente-a-dw", "display_name": "Cliente A DW", "has_access": false}
+  ]
+}
+```
 
 ### GET /api/v1/projects/{project_id}/validate
 Valida acesso e descobre automaticamente as regiões com datasets.
@@ -422,19 +451,29 @@ GROUP BY 1
 ```
 apps/backend/src/observability_hub/
 ├── api/v1/
-│   ├── projects.py       # GET /projects/{project_id}/validate
+│   ├── projects.py       # GET /projects (v1.6) + GET /projects/{project_id}/validate
 │   └── catalog.py
 ├── core/
-│   ├── config.py         # BQ_REGIONS e demais configs
-│   └── bigquery.py       # discover_regions(), get_client()
+│   ├── config.py            # BQ_REGIONS e demais configs
+│   ├── bigquery.py          # discover_regions(), get_client()
+│   └── resourcemanager.py   # novo (v1.6) — list_reachable_projects()
 ├── domains/catalog/
 │   ├── __init__.py
-│   ├── service.py
+│   ├── service.py        # + list_accessible_projects (v1.6)
 │   ├── repository.py
-│   └── schemas.py
-└── tests/unit/catalog/
-    ├── test_service.py
-    └── test_schemas.py
+│   └── schemas.py        # + AccessibleProject, ProjectsListResponse (v1.6)
+└── tests/unit/
+    ├── catalog/
+    │   ├── test_service.py
+    │   └── test_schemas.py
+    └── core/test_resourcemanager.py  # novo (v1.6)
+
+apps/frontend/src/
+├── features/projects/
+│   ├── ProjectSelector.tsx  # + dropdown de projetos alcançados pela SA (v1.6)
+│   └── hooks.ts             # + useAccessibleProjects (v1.6)
+├── lib/api/projects.ts      # + list() (v1.6)
+└── types/projects.ts        # + AccessibleProject, ProjectsListResponse (v1.6)
 ```
 
 ---

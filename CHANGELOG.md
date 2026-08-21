@@ -5,6 +5,65 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Catalog v1.6: seletor de projeto lista os projetos que a SA alcança
+
+Pedido do usuário logo após reportar (e eu confirmar via logs) que a
+integração com o Workspace da v1.5/v1.6 do Admin está retornando 403 —
+achado registrado em backlog pelo usuário, não resolvido nesta entrada
+(ver seção anterior no histórico da sessão, não neste CHANGELOG: a causa
+é a conta impersonada não ter privilégio de admin no Workspace). Trocando
+de prioridade, o pedido novo: "no seletor de projetos, sejam listados
+todos os projetos que a SA tem acesso e com flags pro usuario de quais
+deles ele tem ou não acesso como user".
+
+### O que foi feito
+Até aqui o seletor de projeto (`ProjectSelector.tsx`) era só um campo de
+texto livre — o usuário digitava o `project_id` de cabeça e clicava
+"Validar" pra descobrir se tinha acesso. Não existia nenhuma descoberta
+automática de quais projetos GCP a service account de runtime alcança —
+só validação de UM projeto por vez, sob demanda.
+
+Novo endpoint `GET /api/v1/projects` (`core/resourcemanager.py::list_reachable_projects`,
+Cloud Resource Manager `search_projects`) lista os projetos que a SA
+enxerga — requer `roles/browser` da SA no projeto alvo, role nova,
+**opcional** (não bloqueia nenhum domínio de observabilidade existente,
+só não aparece no seletor sem ela). Cada projeto retornado já vem com
+`has_access` calculado pra o usuário atual (reaproveita
+`admin_service.has_project_access`, mesma checagem de
+`require_project_access`). O frontend ganhou um `Select` com esses
+projetos (mostrando "Sem acesso" nos que o usuário não pode entrar ainda)
+ao lado do campo de texto livre, que continua funcionando como fallback
+— importante porque a lista da SA só cresce conforme mais projetos
+ganham `roles/browser` no onboarding, e nem todo projeto onboardado até
+hoje tem essa role ainda.
+
+Granted `roles/browser` pras duas SAs de runtime (`backend-dev-run`,
+`backend-prod-run`) no próprio `dp6-ci-polaris` nesta sessão, já que é o
+único projeto-alvo registrado até agora (topologia single-project) —
+registrado em `docs/onboarding-cliente.md`.
+
+### Erros cometidos e aprendizados
+- Antes de implementar, investiguei se a Resource Manager API listaria os
+  projetos que a SA alcança só com as roles do checklist atual
+  (`bigquery.*`, `logging.*`, `storage.*`) — nenhuma delas implica
+  `resourcemanager.projects.get`, então `search_projects` teria retornado
+  sempre vazio sem uma role nova. Evitou implementar uma feature que
+  pareceria funcionar em teste unitário (mockado) mas nunca retornaria
+  nada em produção.
+- `GET /api/v1/projects` não pode usar `require_project_access` (a
+  dependency de router original) porque essa dependency exige
+  `project_id` como path param — o endpoint novo é project-agnostic.
+  Resolvido movendo `require_project_access` de dependency de router pra
+  dependency só da rota `/validate`, e usando `get_current_user` (menos
+  restritivo) no nível do router.
+
+### Mudanças de arquitetura
+- Nenhuma — nova role opcional (`roles/browser`) e um client novo isolado
+  (`core/resourcemanager.py`), mesmo padrão dos outros clients GCP em
+  `core/`.
+
+---
+
 ## Admin v1.6: descoberta automática de grupos no "Criar grupo"
 
 Direto depois da v1.5 (grupos vinculados ao Workspace), feedback do
