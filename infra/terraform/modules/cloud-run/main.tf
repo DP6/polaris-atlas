@@ -36,13 +36,25 @@ resource "google_cloud_run_v2_service" "service" {
   # GCP, mas o suporte no provider Terraform ainda está atrás desse gate.
   provider = google-beta
 
-  project             = var.project_id
-  name                = var.service_name
-  location            = var.region
-  ingress             = "INGRESS_TRAFFIC_ALL"
-  launch_stage        = "BETA"
+  project  = var.project_id
+  name     = var.service_name
+  location = var.region
+  ingress  = "INGRESS_TRAFFIC_ALL"
+  # BETA só é necessário quando iap_enabled=true; serviços sem IAP (ex:
+  # backend, que usa invoker_iam_disabled em vez de IAP — ver variables.tf)
+  # ficam em GA normalmente.
+  launch_stage        = var.iap_enabled ? "BETA" : "GA"
   deletion_protection = var.deletion_protection
   iap_enabled         = var.iap_enabled
+  # Desliga a checagem de IAM do invoker sem criar nenhum binding de IAM
+  # (nem allUsers nem outro member) — não esbarra na Org Policy
+  # iam.allowedPolicyMemberDomains, que rege members de IAM policy, não
+  # essa flag de configuração do recurso. Usado no backend, que fica
+  # protegido pelo próprio OAuth+JWT (domains/auth) em vez de IAP — o
+  # frontend chama o backend via fetch() cross-site, e o cookie de sessão
+  # do IAP (que não controlamos o SameSite) não sobrevive esse tipo de
+  # request; o cookie do app, sim (SameSite=None de propósito).
+  invoker_iam_disabled = var.invoker_iam_disabled
 
   template {
     service_account = google_service_account.runtime.email
@@ -88,8 +100,11 @@ resource "google_cloud_run_v2_service" "service" {
           path = var.health_check_path
           port = var.container_port
         }
+        # failure_threshold=3 (~15s) era curto demais — revisões observadas
+        # levando até 24.8s pra ficar prontas, causando 503 em instâncias
+        # novas de autoscaling mesmo com a revisão já Ready.
         period_seconds    = 5
-        failure_threshold = 3
+        failure_threshold = 8
       }
 
       liveness_probe {

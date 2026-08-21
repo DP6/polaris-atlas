@@ -12,8 +12,11 @@ module "backend_cloud_run" {
 
   # Ambiente de dev: sem proteção contra destroy, permite scale-to-zero.
   deletion_protection = false
-  iap_enabled         = true
-  iap_access_members  = var.iap_access_members
+  # Backend não fica atrás do IAP: o frontend chama via fetch() cross-site,
+  # e o cookie de sessão do IAP não sobrevive isso (ver comentário em
+  # modules/cloud-run/main.tf). Protegido só pelo próprio OAuth+JWT.
+  iap_enabled          = false
+  invoker_iam_disabled = true
 
   # Libera CORS pras duas URLs válidas do frontend em dev (canônica + legada
   # por número do projeto, ver environments/prod/main.tf), mantendo o Vite

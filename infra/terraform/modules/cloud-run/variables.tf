@@ -67,6 +67,12 @@ variable "iap_enabled" {
   default     = true
 }
 
+variable "invoker_iam_disabled" {
+  description = "Se true, desliga a checagem de IAM do invoker sem conceder allUsers nem nenhum outro member — usado em serviços que não podem ficar atrás do IAP (ver comentário em main.tf) e dependem só da própria auth de aplicação."
+  type        = bool
+  default     = false
+}
+
 variable "iap_access_members" {
   description = "Principals (formato \"group:email\", \"user:email\" etc.) que recebem roles/iap.httpsResourceAccessor no serviço, quando iap_enabled = true."
   type        = list(string)

@@ -18,8 +18,11 @@ module "backend_cloud_run" {
 
   # Ambiente de prod: protege o serviço contra destroy acidental.
   deletion_protection = true
-  iap_enabled         = true
-  iap_access_members  = var.iap_access_members
+  # Backend não fica atrás do IAP: o frontend chama via fetch() cross-site,
+  # e o cookie de sessão do IAP não sobrevive isso (ver comentário em
+  # modules/cloud-run/main.tf). Protegido só pelo próprio OAuth+JWT.
+  iap_enabled          = false
+  invoker_iam_disabled = true
 
   # Libera CORS pras duas URLs válidas do frontend em prod — todo Cloud Run
   # responde tanto na URL canônica (com hash) quanto na URL legada baseada
