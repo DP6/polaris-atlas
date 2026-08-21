@@ -5,6 +5,40 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Admin v1.6: descoberta automática de grupos no "Criar grupo"
+
+Direto depois da v1.5 (grupos vinculados ao Workspace), feedback do
+usuário sobre a própria v1.5: "a guia grupos no adm não está retornando
+os grupos existentes no workspace" — esperava a aba listar os grupos do
+Workspace sozinha (autocomplete/seleção), não continuar exigindo digitar
+o e-mail exato de um grupo real pra ativar o lado automático.
+
+### O que foi feito
+Novo endpoint `GET /api/v1/admin/workspace-groups`
+(`workspace_directory.list_domain_groups`) lista todos os grupos do
+domínio via Admin SDK Directory API (`groups?domain=...`, paginado,
+mesmo cache de 5min e mesmo fail-closed de `get_group_members` — lista
+vazia em qualquer erro, nunca propaga exceção). O diálogo "Criar grupo"
+em `AdminGroupsTab.tsx` trocou o campo de texto livre por um `Select`
+populado com esses grupos (já filtrando os que já viraram `hub_group`),
+com uma opção "Nome livre" que volta pro campo de texto antigo pra quem
+quer um grupo só com `manual_members`, sem vínculo a nenhum grupo real.
+
+### Erros cometidos e aprendizados
+- `ruff` sinalizou `lambda: []` num teste novo sugerindo o builtin
+  `list` no lugar — trivial, mas serve de lembrete de rodar `ruff check`
+  antes de considerar a parte de backend pronta, mesmo em testes.
+- `Select.onValueChange` do shadcn/ui aceita `string | null` (o `null`
+  vem de deselect), incompatível direto com `useState<string>` — mesmo
+  padrão já usado em `ProfilingDialog.tsx` (`value ?? fallback`), só não
+  copiado de primeira.
+
+### Mudanças de arquitetura
+- Nenhuma — mesmo módulo isolado `core/workspace_directory.py` da v1.5,
+  só ganhou uma função de leitura a mais.
+
+---
+
 ## Admin v1.5: grupos vinculados a grupos reais do Google Workspace
 
 Direto depois da v1.4 (grupos de acesso), pedido do usuário pra não

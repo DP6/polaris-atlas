@@ -77,6 +77,19 @@ class UpsertHubGroupRequest(BaseModel):
     allowed_projects: list[str] = Field(default_factory=list)
 
 
+class WorkspaceGroupInfo(BaseModel):
+    """Grupo existente no Google Workspace (não necessariamente
+    importado como hub_group ainda) — pra popular o seletor de "criar
+    grupo" na UI. Ver core/workspace_directory.py::list_domain_groups."""
+
+    email: str
+    name: str | None = None
+
+
+class WorkspaceGroupsListResponse(BaseModel):
+    groups: list[WorkspaceGroupInfo]
+
+
 class ProjectAccessGrant(BaseModel):
     email: str
     is_admin: bool

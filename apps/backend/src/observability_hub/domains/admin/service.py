@@ -31,6 +31,8 @@ from observability_hub.domains.admin.schemas import (
     UpsertHubGroupRequest,
     UpsertHubProjectRequest,
     UpsertHubUserRequest,
+    WorkspaceGroupInfo,
+    WorkspaceGroupsListResponse,
 )
 
 # Wildcard: libera qualquer project_id que a service account de runtime
@@ -215,6 +217,14 @@ def upsert_group(
 
 def delete_group(client: firestore.Client, group_id: str) -> None:
     repository.delete_group(client, group_id)
+
+
+def list_workspace_groups() -> WorkspaceGroupsListResponse:
+    """Grupos existentes no domínio do Workspace, pra popular o seletor
+    de "criar grupo" na UI — não depende do Firestore, client não é
+    necessário aqui."""
+    raw = workspace_directory.list_domain_groups()
+    return WorkspaceGroupsListResponse(groups=[WorkspaceGroupInfo(**g) for g in raw])
 
 
 # --- access_requests -----------------------------------------------------------------

@@ -26,6 +26,7 @@ from observability_hub.domains.admin.schemas import (
     UpsertHubGroupRequest,
     UpsertHubProjectRequest,
     UpsertHubUserRequest,
+    WorkspaceGroupsListResponse,
 )
 from observability_hub.domains.auth.schemas import UserInfo
 
@@ -121,6 +122,11 @@ def delete_group(
     client: firestore.Client = Depends(get_firestore_client),
 ) -> None:
     service.delete_group(client, group_id)
+
+
+@router.get("/workspace-groups", response_model=WorkspaceGroupsListResponse)
+def list_workspace_groups() -> WorkspaceGroupsListResponse:
+    return service.list_workspace_groups()
 
 
 @router.get("/access-requests", response_model=AccessRequestsListResponse)

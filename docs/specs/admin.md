@@ -1,6 +1,6 @@
 # Spec — Domínio: Admin (controle de acesso por usuário × projeto)
 
-**Versão:** 1.5
+**Versão:** 1.6
 **Status:** Aprovada
 **Fase:** Transversal (não faz parte do roadmap de observabilidade de `docs/prd.md`) — plataforma
 **Última atualização:** 2026-08-21
@@ -140,7 +140,7 @@ escrito; ver "Fora do escopo desta versão".
 
 ---
 
-## Grupos (`hub_groups`, v1.4 + integração Workspace v1.5)
+## Grupos (`hub_groups`, v1.4 + integração Workspace v1.5 + descoberta automática v1.6)
 
 Terceiro eixo de acesso, independente dos outros dois (`hub_users.
 allowed_projects` e `hub_projects.is_public`) — todos se somam, nenhum
@@ -237,8 +237,7 @@ da consulta ao Workspace, de propósito — evita chamada externa
 desnecessária pra grupos que nem liberam este `project_id`.
 
 A tela `/admin` → aba "Grupos" lista os grupos existentes, permite criar
-um novo (só o nome — membros e projetos são adicionados depois,
-expandindo o grupo) e editar `manual_members`/projetos liberados inline
+um novo e editar `manual_members`/projetos liberados inline
 (`ProjectChipEditor`, reaproveitado também pra e-mail de membro apesar
 do nome do componente). `workspace_members` aparece na mesma tela, só
 leitura, com nota se estiver vazio ("ou a integração ainda não foi
@@ -248,6 +247,18 @@ ambiguidade em vez de fingir certeza). A aba "Por usuário" mostra de
 quais grupos cada usuário é membro (manual OU Workspace), derivada no
 frontend a partir da mesma lista de grupos já buscada pra aba "Grupos"
 (sem endpoint novo pra isso).
+
+**v1.6 — descoberta automática de grupos no diálogo "Criar grupo":** a
+v1.5 já resolvia membros ao vivo pra um `group_id` existente, mas quem
+criava um grupo novo ainda precisava digitar o e-mail exato de um grupo
+do Workspace de cabeça — sem lista, sem autocomplete. `GET
+/api/v1/admin/workspace-groups` (`workspace_directory.list_domain_groups`)
+lista todos os grupos do domínio via Admin SDK Directory API
+(`groups?domain=...`, paginado, mesmo cache de 5min e mesmo fail-closed
+— lista vazia em qualquer erro, nunca 500) e o diálogo "Criar grupo" virou
+um `Select` populado com esses grupos (já filtrando os que já viraram
+`hub_group`), com uma opção "Nome livre" que volta pro campo de texto
+antigo pra quem quer um grupo só com `manual_members`.
 
 ### Endpoints (mesmo `dependencies=[Depends(require_admin)]` do router)
 
@@ -263,6 +274,12 @@ frontend a partir da mesma lista de grupos já buscada pra aba "Grupos"
   (idempotente). Membros perdem só o acesso concedido por este grupo —
   acesso individual (`hub_users`) não é afetado. Não afeta o grupo no
   Workspace em si (a Hub nunca escreve lá, só lê).
+- `GET /api/v1/admin/workspace-groups` (v1.6) — lista `{email, name}` de
+  todos os grupos do domínio do Workspace (não filtrado por já-importado
+  como `hub_group` — o frontend faz esse filtro). Lista vazia se a
+  integração não estiver configurada ou a Directory API falhar
+  (fail-closed, mesmo padrão de `get_group_members`). Não depende do
+  Firestore.
 
 Diferente de `hub_users`, não existe `LastAdminLockoutError` equivalente
 pra grupos — grupos não carregam status de admin, só acesso a projeto.
@@ -498,12 +515,17 @@ preservado em updates.
 
 **Body:**
 ```json
-{"members": ["a@dp6.com.br"], "allowed_projects": ["client-a-project"]}
+{"manual_members": ["a@dp6.com.br"], "allowed_projects": ["client-a-project"]}
 ```
 
 ### DELETE /api/v1/admin/groups/{group_id}
 Remove o documento (idempotente). Membros perdem só o acesso concedido
 por este grupo — `hub_users` não é afetado.
+
+### GET /api/v1/admin/workspace-groups (v1.6)
+Lista `{email, name}` de todos os grupos do domínio do Workspace, pra
+popular o seletor de "criar grupo" na UI. Lista vazia se a integração
+não estiver configurada ou a Directory API falhar — nunca erro.
 
 ### GET /api/v1/admin/access-requests?status=pending
 Lista `access_requests`, mais recente primeiro. `status` opcional
@@ -582,7 +604,7 @@ apps/backend/src/observability_hub/
 │   ├── admin/                  # schemas, repository, service — hub_users + hub_projects (v1.1)
 │   │                           # + access_requests (v1.1)
 │   │                           # + analytics_{schemas,repository,service}.py (v1.2, +3 funções v1.3)
-│   │                           # + hub_groups (v1.4)
+│   │                           # + hub_groups (v1.4) — service.list_workspace_groups (v1.6)
 │   ├── quality/history_repository.py  # + project_id/dataset_id/table_id no run (v1.2)
 │   ├── pii/history_repository.py      # novo (v1.3) — pii_scan_history/{doc}/scans
 │   └── auth/schemas.py         # UserInfo + is_admin
@@ -603,6 +625,7 @@ apps/frontend/src/
 │   │   ├── AdminUsersTab.tsx    # conteúdo da v1.0, extraído (v1.1); + coluna "Grupos" (v1.4)
 │   │   ├── AdminProjectsTab.tsx # novo (v1.1) — visão projeto -> usuários + is_public
 │   │   ├── AdminGroupsTab.tsx   # novo (v1.4) — CRUD de hub_groups (membros + projetos)
+│   │   │                        # + seletor de grupos do Workspace no "Criar grupo" (v1.6)
 │   │   ├── AdminAccessRequestsTab.tsx  # novo (v1.1)
 │   │   ├── ProjectChipEditor.tsx       # novo (v1.1) — compartilhado, reaproveitado
 │   │   │                               # também pra e-mail de membro de grupo (v1.4)
