@@ -18,11 +18,14 @@ module "backend_cloud_run" {
   iap_enabled          = false
   invoker_iam_disabled = true
 
-  # Libera CORS pras duas URLs válidas do frontend em dev (canônica + legada
-  # por número do projeto, ver environments/prod/main.tf), mantendo o Vite
-  # dev server local (localhost:5173) funcionando contra o backend de dev.
+  # Libera CORS pro domínio customizado (primeiro da lista de propósito —
+  # core/domains/auth/service.py::build_redirect_uri usa a primeira https://
+  # da lista como redirect_uri do OAuth, então o domínio customizado vira o
+  # canônico pós-login) + as duas URLs *.run.app (canônica + legada por
+  # número do projeto, ver environments/prod/main.tf, mantidas por segurança
+  # durante a transição) + o Vite dev server local.
   env = {
-    OBSERVABILITY_HUB_CORS_ORIGINS = "${module.frontend_cloud_run.service_url},${module.frontend_cloud_run.service_url_alt},http://localhost:5173"
+    OBSERVABILITY_HUB_CORS_ORIGINS = "https://observability-hub-dev.dp6.io,${module.frontend_cloud_run.service_url},${module.frontend_cloud_run.service_url_alt},http://localhost:5173"
     # Único sinal de ambiente do backend (core/config.py::settings.environment)
     # — nunca mais inferido do project_id, que é o mesmo pros dois ambientes
     # nesta topologia.

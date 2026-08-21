@@ -24,11 +24,14 @@ module "backend_cloud_run" {
   iap_enabled          = false
   invoker_iam_disabled = true
 
-  # Libera CORS pras duas URLs válidas do frontend em prod — todo Cloud Run
-  # responde tanto na URL canônica (com hash) quanto na URL legada baseada
-  # no número do projeto, e o browser pode acessar por qualquer uma das duas.
+  # Libera CORS pro domínio customizado (primeiro da lista de propósito —
+  # core/domains/auth/service.py::build_redirect_uri usa a primeira https://
+  # da lista como redirect_uri do OAuth, então o domínio customizado vira o
+  # canônico pós-login) + as duas URLs *.run.app válidas do frontend em prod
+  # (canônica + legada por número do projeto, mantidas por segurança durante
+  # a transição).
   env = {
-    OBSERVABILITY_HUB_CORS_ORIGINS = "${module.frontend_cloud_run.service_url},${module.frontend_cloud_run.service_url_alt}"
+    OBSERVABILITY_HUB_CORS_ORIGINS = "https://observability-hub.dp6.io,${module.frontend_cloud_run.service_url},${module.frontend_cloud_run.service_url_alt}"
     # Único sinal de ambiente do backend (core/config.py::settings.environment)
     # — nunca mais inferido do project_id, que é o mesmo pros dois ambientes
     # nesta topologia.
