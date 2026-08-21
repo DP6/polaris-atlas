@@ -27,6 +27,11 @@ module "backend_cloud_run" {
     # — nunca mais inferido do project_id, que é o mesmo pros dois ambientes
     # nesta topologia.
     OBSERVABILITY_HUB_ENVIRONMENT = "dev"
+    # Conta do Workspace impersonada via domain-wide delegation pra ler
+    # grupos reais (core/workspace_directory.py, domains/admin v1.5) —
+    # indicada pela TI ao autorizar a delegação, ver
+    # docs/onboarding-cliente.md (2026-08-21).
+    OBSERVABILITY_HUB_WORKSPACE_IMPERSONATE_EMAIL = "matheus.fuzati@dp6.com.br"
   }
 }
 
