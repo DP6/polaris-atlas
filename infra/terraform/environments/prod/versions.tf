@@ -6,6 +6,12 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 6.0"
     }
+    # iap_enabled em google_cloud_run_v2_service só existe no provider beta
+    # (launch_stage = "BETA") — ver modules/cloud-run/main.tf.
+    google-beta = {
+      source  = "hashicorp/google-beta"
+      version = "~> 6.0"
+    }
   }
 
   # Nome do bucket vem do output `state_bucket_name` do bootstrap (único,
@@ -19,6 +25,11 @@ terraform {
 }
 
 provider "google" {
+  project = var.project_id
+  region  = var.region
+}
+
+provider "google-beta" {
   project = var.project_id
   region  = var.region
 }

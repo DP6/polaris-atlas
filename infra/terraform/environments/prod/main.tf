@@ -15,10 +15,15 @@ module "backend_cloud_run" {
   # módulo pode ser dona, as outras três (frontend-dev, backend-prod,
   # frontend-prod) reaproveitam via manage_artifact_registry = false.
   manage_artifact_registry = false
+  # roles/run.invoker do service agent do IAP já foi concedido pelo
+  # backend_cloud_run de dev, neste mesmo projeto (grant de projeto, não
+  # por serviço — ver comentário equivalente em environments/dev/main.tf).
+  manage_iap_service_agent_invoker = false
 
   # Ambiente de prod: protege o serviço contra destroy acidental.
-  deletion_protection   = true
-  allow_unauthenticated = true
+  deletion_protection = true
+  iap_enabled         = true
+  iap_access_members  = var.iap_access_members
 
   # Libera CORS pras duas URLs válidas do frontend em prod — todo Cloud Run
   # responde tanto na URL canônica (com hash) quanto na URL legada baseada
@@ -47,10 +52,14 @@ module "frontend_cloud_run" {
   # Reaproveita o repositório Artifact Registry criado pelo backend_cloud_run
   # de dev, neste mesmo projeto (ver comentário acima).
   manage_artifact_registry = false
+  # roles/run.invoker do service agent do IAP já foi concedido pelo
+  # backend_cloud_run de dev, neste mesmo projeto (ver comentário acima).
+  manage_iap_service_agent_invoker = false
 
   # Ambiente de prod: protege o serviço contra destroy acidental.
-  deletion_protection   = true
-  allow_unauthenticated = true
+  deletion_protection = true
+  iap_enabled         = true
+  iap_access_members  = var.iap_access_members
 }
 
 # Firestore named database do ambiente prod — dev e prod estão no mesmo

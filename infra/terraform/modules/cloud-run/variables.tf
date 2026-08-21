@@ -61,8 +61,20 @@ variable "max_instance_count" {
   default     = 2
 }
 
-variable "allow_unauthenticated" {
-  description = "Se true, concede roles/run.invoker a allUsers. Hoje o serviço só expõe /health, sem dados sensíveis; revisitar quando entrar autenticação real de usuário."
+variable "iap_enabled" {
+  description = "Se true, habilita Identity-Aware Proxy nativo do Cloud Run (sem Load Balancer) — substitui o antigo roles/run.invoker a allUsers, bloqueado pela Org Policy iam.allowedPolicyMemberDomains."
+  type        = bool
+  default     = true
+}
+
+variable "iap_access_members" {
+  description = "Principals (formato \"group:email\", \"user:email\" etc.) que recebem roles/iap.httpsResourceAccessor no serviço, quando iap_enabled = true."
+  type        = list(string)
+  default     = []
+}
+
+variable "manage_iap_service_agent_invoker" {
+  description = "Se true, este módulo concede roles/run.invoker ao service agent do IAP no projeto. É um grant de projeto (não por serviço) — deixe true em só uma instância do módulo por projeto, igual ao manage_artifact_registry."
   type        = bool
   default     = true
 }

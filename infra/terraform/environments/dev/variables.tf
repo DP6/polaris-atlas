@@ -21,3 +21,9 @@ variable "frontend_image" {
   type        = string
   default     = "us-docker.pkg.dev/cloudrun/container/hello"
 }
+
+variable "iap_access_members" {
+  description = "Principals com acesso ao Hub via IAP (roles/iap.httpsResourceAccessor) nos serviços backend e frontend deste ambiente."
+  type        = list(string)
+  default     = ["group:gcp-ci-polaris@dp6.com.br"]
+}
