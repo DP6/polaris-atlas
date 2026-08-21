@@ -34,6 +34,12 @@ locals {
     # Necessário pro google_firestore_database criado em cada ambiente
     # (environments/{dev,prod}/main.tf).
     "roles/datastore.owner",
+    # Necessário pro módulo cloud-run gerenciar
+    # google_iap_web_cloud_run_service_iam_member (acesso via IAP nativo,
+    # substitui allUsers). TI concedeu isso ao grupo humano
+    # (gcp-ci-polaris@dp6.com.br) em vez das SAs de deploy — faltava aqui e
+    # causou falha em CI (Error 403 em Plan/Apply dev, PR #1).
+    "roles/iap.admin",
   ]
 
   # Cada par (ambiente, role) vira uma google_project_iam_member — flatten
