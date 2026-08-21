@@ -7,6 +7,10 @@ on:
     paths:
       - "apps/frontend/**"
       - ".github/workflows/frontend-deploy-dev.yml"
+  # Permite redeployar o commit atual sem precisar de um push que toque
+  # apps/frontend/** — usado, por exemplo, quando o serviço Cloud Run é
+  # criado depois que a imagem já existe e precisa de um primeiro deploy.
+  workflow_dispatch: {}
 
 permissions:
   contents: read
