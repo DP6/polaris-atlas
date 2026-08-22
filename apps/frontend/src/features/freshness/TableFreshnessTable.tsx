@@ -3,37 +3,23 @@ import { useMemo, useState } from 'react'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
-import { SLA_LABELS, SLA_ORDER, SLA_TEXT_COLOR } from '@/features/freshness/sla'
+import { SLA_LABELS, SLA_ORDER, SLA_SHORT_LABELS, SLA_TEXT_COLOR } from '@/features/freshness/sla'
 import { formatBytes, formatDate, formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { SLAStatus, TableFreshness } from '@/types/freshness'
 
-type SlaBucket = 'ok' | 'warning' | 'stale'
-const SLA_BUCKET_FILTER_ALL = 'all'
+const SLA_FILTER_ALL = 'all'
+type SlaFilter = SLAStatus | typeof SLA_FILTER_ALL
 
-// Mesmo agrupamento visual já usado em toda a app (SLA_TEXT_COLOR) — verde/
-// amarelo/vermelho, não os 6 status granulares um a um.
-const SLA_BUCKET_BY_STATUS: Record<SLAStatus, SlaBucket> = SLA_ORDER.reduce(
+// Ponto colorido de cada pill de filtro — mesma cor do texto do status na
+// tabela (SLA_TEXT_COLOR), só trocando text- por bg-.
+const SLA_DOT_COLOR: Record<SLAStatus, string> = SLA_ORDER.reduce(
   (acc, status) => {
-    const color = SLA_TEXT_COLOR[status]
-    acc[status] =
-      color === 'text-status-ok' ? 'ok' : color === 'text-status-warn' ? 'warning' : 'stale'
+    acc[status] = SLA_TEXT_COLOR[status].replace('text-', 'bg-')
     return acc
   },
-  {} as Record<SLAStatus, SlaBucket>,
+  {} as Record<SLAStatus, string>,
 )
-
-const SLA_BUCKET_LABELS: Record<SlaBucket, string> = {
-  ok: 'Ok',
-  warning: 'Alerta',
-  stale: 'Obsoleta',
-}
-
-const SLA_BUCKET_DOT_COLOR: Record<SlaBucket, string> = {
-  ok: 'bg-status-ok',
-  warning: 'bg-status-warn',
-  stale: 'bg-status-error',
-}
 
 type SortKey =
   | 'table_id'
@@ -62,9 +48,7 @@ function compare(a: TableFreshness, b: TableFreshness, key: SortKey): number {
 
 export function TableFreshnessTable({ tables }: { tables: TableFreshness[] }) {
   const [nameFilter, setNameFilter] = useState('')
-  const [bucketFilter, setBucketFilter] = useState<SlaBucket | typeof SLA_BUCKET_FILTER_ALL>(
-    SLA_BUCKET_FILTER_ALL,
-  )
+  const [slaFilter, setSlaFilter] = useState<SlaFilter>(SLA_FILTER_ALL)
   const [sortKey, setSortKey] = useState<SortKey>('sla_status')
   const [sortDir, setSortDir] = useState<SortDirection>('desc')
 
@@ -80,14 +64,12 @@ export function TableFreshnessTable({ tables }: { tables: TableFreshness[] }) {
   const visibleTables = useMemo(() => {
     const filtered = tables.filter((table) => {
       const matchesName = table.table_id.toLowerCase().includes(nameFilter.toLowerCase())
-      const matchesBucket =
-        bucketFilter === SLA_BUCKET_FILTER_ALL ||
-        (table.sla_status && SLA_BUCKET_BY_STATUS[table.sla_status] === bucketFilter)
-      return matchesName && matchesBucket
+      const matchesSla = slaFilter === SLA_FILTER_ALL || table.sla_status === slaFilter
+      return matchesName && matchesSla
     })
     const sign = sortDir === 'asc' ? 1 : -1
     return [...filtered].sort((a, b) => sign * compare(a, b, sortKey))
-  }, [tables, nameFilter, bucketFilter, sortKey, sortDir])
+  }, [tables, nameFilter, slaFilter, sortKey, sortDir])
 
   return (
     <>
@@ -104,23 +86,23 @@ export function TableFreshnessTable({ tables }: { tables: TableFreshness[] }) {
             className="pl-8"
           />
         </div>
-        <div className="flex gap-2">
-          {(['all', 'ok', 'warning', 'stale'] as const).map((bucket) => (
+        <div className="flex flex-wrap gap-2">
+          {([SLA_FILTER_ALL, ...SLA_ORDER] as const).map((filter) => (
             <button
-              key={bucket}
+              key={filter}
               type="button"
-              onClick={() => setBucketFilter(bucket)}
+              onClick={() => setSlaFilter(filter)}
               className={cn(
                 'flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-                bucketFilter === bucket
+                slaFilter === filter
                   ? 'border-primary bg-primary/10 text-foreground'
                   : 'border-border text-muted-foreground hover:bg-muted',
               )}
             >
-              {bucket !== 'all' && (
-                <span className={cn('size-2 rounded-full', SLA_BUCKET_DOT_COLOR[bucket])} />
+              {filter !== SLA_FILTER_ALL && (
+                <span className={cn('size-2 rounded-full', SLA_DOT_COLOR[filter])} />
               )}
-              {bucket === 'all' ? 'Todos' : SLA_BUCKET_LABELS[bucket]}
+              {filter === SLA_FILTER_ALL ? 'Todos' : SLA_SHORT_LABELS[filter]}
             </button>
           ))}
         </div>
