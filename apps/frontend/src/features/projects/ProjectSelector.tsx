@@ -1,4 +1,4 @@
-import { CheckCircle2, Cloud } from 'lucide-react'
+import { CheckCircle2, Cloud, Undo2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { Badge } from '@/components/ui/badge'
@@ -19,20 +19,35 @@ import { clearLastProjectId, getLastProjectId, setLastProjectId } from '@/hooks/
 import { ApiError } from '@/lib/http-client'
 import { cn } from '@/lib/utils'
 
+const CUSTOM_PROJECT_OPTION = '__custom__'
+
 export function ProjectSelector() {
   const { projectId, setProjectId } = useProjectContext()
   const [input, setInput] = useState('')
   const [submittedProjectId, setSubmittedProjectId] = useState<string | undefined>(undefined)
   const [isRestoring, setIsRestoring] = useState(false)
   const [requestAccessOpen, setRequestAccessOpen] = useState(false)
+  // Alterna entre o Select (lista de projetos que a SA alcança) e o campo
+  // de texto livre — só um dos dois fica visível por vez, nunca os dois
+  // juntos (eram redundantes antes desta versão).
+  const [manualEntry, setManualEntry] = useState(false)
 
   const validateQuery = useValidateProject(submittedProjectId)
-  // Projetos que a SA alcança (Resource Manager) — dropdown de atalho
-  // além do campo de texto livre, que continua funcionando como fallback
-  // (lista vazia é normal antes de qualquer projeto ganhar roles/browser,
-  // ver docs/onboarding-cliente.md).
+  // Projetos que a SA alcança (Resource Manager) — populam o Select, que
+  // vira o controle principal quando não-vazio; lista vazia é normal antes
+  // de qualquer projeto ganhar roles/browser (ver docs/onboarding-cliente.md)
+  // e nesse caso o campo livre é o único controle mostrado.
   const accessibleProjectsQuery = useAccessibleProjects()
   const accessibleProjects = accessibleProjectsQuery.data?.projects ?? []
+  // Projeto restaurado do localStorage (ou digitado antes) que não está na
+  // lista da SA — mostra o campo livre com ele preenchido em vez de um
+  // Select "vazio" enquanto na verdade há um project_id em validação.
+  const isRestoredButUnknown = Boolean(
+    submittedProjectId &&
+      accessibleProjects.length > 0 &&
+      !accessibleProjects.some((p) => p.project_id === submittedProjectId),
+  )
+  const showManualInput = accessibleProjects.length === 0 || manualEntry || isRestoredButUnknown
 
   // Restaura e revalida automaticamente o projeto salvo no localStorage ao
   // carregar a página (F5) — só no mount, sem o usuário precisar digitar de
@@ -89,11 +104,39 @@ export function ProjectSelector() {
           <Cloud size={16} />
           <span>GCP Project:</span>
         </div>
-        {accessibleProjects.length > 0 && (
+        {showManualInput ? (
+          <>
+            <Input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="observability-hub-dev"
+              className="h-7 w-56 text-sm"
+            />
+            <Button type="submit" size="sm" disabled={!input.trim() || validateQuery.isFetching}>
+              {validateQuery.isFetching ? 'Validando…' : 'Validar'}
+            </Button>
+            {accessibleProjects.length > 0 && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setManualEntry(false)}
+                aria-label="Voltar para a lista de projetos"
+              >
+                <Undo2 size={14} />
+              </Button>
+            )}
+          </>
+        ) : (
           <Select
             value={submittedProjectId ?? ''}
             onValueChange={(value) => {
-              if (value) submitProjectId(value)
+              if (!value) return
+              if (value === CUSTOM_PROJECT_OPTION) {
+                setManualEntry(true)
+                return
+              }
+              submitProjectId(value)
             }}
           >
             <SelectTrigger className="h-7 w-56 text-sm">
@@ -115,20 +158,10 @@ export function ProjectSelector() {
                   </span>
                 </SelectItem>
               ))}
+              <SelectItem value={CUSTOM_PROJECT_OPTION}>Outro (digitar manualmente)</SelectItem>
             </SelectContent>
           </Select>
         )}
-        <Input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder={
-            accessibleProjects.length > 0 ? 'ou digite o project_id' : 'observability-hub-dev'
-          }
-          className="h-7 w-56 text-sm"
-        />
-        <Button type="submit" size="sm" disabled={!input.trim() || validateQuery.isFetching}>
-          {validateQuery.isFetching ? 'Validando…' : 'Validar'}
-        </Button>
         {validateQuery.data?.accessible && submittedProjectId === projectId && (
           <>
             <CheckCircle2 size={16} className="text-status-ok" aria-label="Projeto acessível" />
