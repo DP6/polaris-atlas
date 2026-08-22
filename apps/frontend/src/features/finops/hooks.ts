@@ -34,11 +34,12 @@ export function useBudget(
   projectId: string | undefined,
   groupBy: BudgetGroupBy = 'table',
   limit = 10,
+  enabled = true,
 ) {
   return useQuery({
     queryKey: ['finops-budget', projectId, groupBy, limit],
     queryFn: () => finopsApi.getBudget(projectId as string, groupBy, limit),
-    enabled: Boolean(projectId),
+    enabled: Boolean(projectId) && enabled,
   })
 }
 

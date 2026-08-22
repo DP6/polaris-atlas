@@ -8,6 +8,13 @@ import { SqlPreview } from '@/components/SqlPreview'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   Table,
   TableBody,
   TableCell,
@@ -34,6 +41,8 @@ const GROUP_BY_OPTIONS: { value: BudgetGroupBy; label: string }[] = [
   { value: 'month', label: 'Mês' },
   { value: 'year', label: 'Ano' },
 ]
+
+const LIMIT_OPTIONS = [5, 10, 20, 50] as const
 
 const GROUP_KEY_COLUMN_LABEL: Record<BudgetGroupBy, string> = {
   table: 'Tabela',
@@ -65,8 +74,77 @@ function compareQuery(a: CostlyQuery, b: CostlyQuery, key: QuerySortKey): number
 export function BudgetPage() {
   const { projectId } = useProjectContext()
   const [groupBy, setGroupBy] = useState<BudgetGroupBy>('table')
-  const query = useBudget(projectId, groupBy)
+  const [limit, setLimit] = useState(10)
+  const [hasRun, setHasRun] = useState(false)
+  const query = useBudget(projectId, groupBy, limit, hasRun)
   const data = query.data
+
+  if (!hasRun) {
+    return (
+      <div className="flex flex-col gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">FinOps — Budget de custo</h1>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            Estima o custo do mês corrente via audit logs de jobs do BigQuery (bytes cobrados) +
+            preço público on-demand — sem depender do Cloud Billing Export. Escolha o agrupamento e
+            o limite de itens antes de rodar.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-4 rounded-lg border border-border p-4">
+          <div>
+            <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              Agrupar por
+            </span>
+            <div className="flex gap-2">
+              {GROUP_BY_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setGroupBy(option.value)}
+                  className={cn(
+                    'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                    groupBy === option.value
+                      ? 'border-primary bg-primary/10 text-foreground'
+                      : 'border-border text-muted-foreground hover:bg-muted',
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              Limite de itens
+            </span>
+            <Select
+              value={String(limit)}
+              onValueChange={(value) => value && setLimit(Number(value))}
+            >
+              <SelectTrigger className="w-24">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LIMIT_OPTIONS.map((option) => (
+                  <SelectItem key={option} value={String(option)}>
+                    {option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Button onClick={() => setHasRun(true)} disabled={query.isFetching}>
+              {query.isFetching ? 'Executando…' : 'Executar'}
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -78,7 +156,12 @@ export function BudgetPage() {
             escaneados, cobrança on-demand.
           </p>
         </div>
-        <RefreshButton isRefreshing={query.isFetching} onRefresh={() => query.refetch()} />
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setHasRun(false)}>
+            Nova busca
+          </Button>
+          <RefreshButton isRefreshing={query.isFetching} onRefresh={() => query.refetch()} />
+        </div>
       </div>
 
       {query.isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}

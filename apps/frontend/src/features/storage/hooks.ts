@@ -13,10 +13,11 @@ export function useBuckets(projectId: string | undefined) {
 export function useWasteCandidates(
   projectId: string | undefined,
   minDaysUnused: MinDaysUnused = 60,
+  enabled = true,
 ) {
   return useQuery({
     queryKey: ['storage', 'waste-candidates', projectId, minDaysUnused],
     queryFn: () => storageApi.getWasteCandidates(projectId as string, minDaysUnused),
-    enabled: Boolean(projectId),
+    enabled: Boolean(projectId) && enabled,
   })
 }

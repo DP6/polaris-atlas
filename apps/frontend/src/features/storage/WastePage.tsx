@@ -3,6 +3,7 @@ import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Select,
   SelectContent,
@@ -70,7 +71,8 @@ function ConfidenceBadge({ candidate }: { candidate: WasteCandidate }) {
 export function WastePage() {
   const { projectId } = useProjectContext()
   const [minDaysUnused, setMinDaysUnused] = useState<MinDaysUnused>(60)
-  const wasteQuery = useWasteCandidates(projectId, minDaysUnused)
+  const [hasRun, setHasRun] = useState(false)
+  const wasteQuery = useWasteCandidates(projectId, minDaysUnused, hasRun)
   const data = wasteQuery.data
 
   const {
@@ -84,6 +86,53 @@ export function WastePage() {
     compare,
     matches: () => true,
   })
+
+  if (!hasRun) {
+    return (
+      <div className="flex flex-col gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Scanner de desperdício</h1>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            Sinaliza buckets com objetos em storage class STANDARD parados há muito tempo,
+            candidatos a mudar pra uma classe mais barata (Nearline/Coldline/Archive) — baseado em
+            idade do objeto + ausência de lifecycle rule já configurada. Quando o audit log de
+            leitura de objeto (DATA_READ) está habilitado no projeto, a confiança sobe pra "sem
+            leitura confirmada" em vez de só "configuração"; sem ele, a checagem degrada
+            graciosamente pra só idade + config, sem bloquear o resultado.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-4 rounded-lg border border-border p-4">
+          <div>
+            <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              Objetos STANDARD sem modificação há pelo menos
+            </span>
+            <Select
+              value={String(minDaysUnused)}
+              onValueChange={(value) => setMinDaysUnused(Number(value) as MinDaysUnused)}
+            >
+              <SelectTrigger className="w-24">
+                <SelectValue>{(value: string) => `${value} dias`}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {MIN_DAYS_OPTIONS.map((days) => (
+                  <SelectItem key={days} value={String(days)}>
+                    {days} dias
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Button onClick={() => setHasRun(true)} disabled={wasteQuery.isFetching}>
+              {wasteQuery.isFetching ? 'Executando…' : 'Executar'}
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   if (wasteQuery.isLoading) {
     return <p className="text-muted-foreground">Carregando…</p>
@@ -104,10 +153,15 @@ export function WastePage() {
             {data.candidates.length} buckets candidatos a mudança de storage class
           </p>
         </div>
-        <RefreshButton
-          isRefreshing={wasteQuery.isFetching}
-          onRefresh={() => wasteQuery.refetch()}
-        />
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setHasRun(false)}>
+            Nova busca
+          </Button>
+          <RefreshButton
+            isRefreshing={wasteQuery.isFetching}
+            onRefresh={() => wasteQuery.refetch()}
+          />
+        </div>
       </div>
 
       {data.usage_check_warning && (
