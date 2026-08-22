@@ -221,9 +221,11 @@ Mapeamento de domínios:
 
 ---
 
-## Modo claro (opcional, futuro)
+## Modo claro
 
-O brand dp6 tem versão light (fundo branco, texto `#1D1D1B`). Não implementar no MVP — dark mode é o padrão. Quando implementar, inverter apenas `--color-bg-*` e `--color-text-*`, mantendo `#FFB302` como acento.
+Implementado (pedido do usuário, 2026-08-22) — `apps/frontend/src/hooks/useTheme.ts` alterna a classe `.dark` em `<html>`, persistida em `localStorage` (`observability-hub:theme`), com botão de alternância no Topbar (`components/ThemeToggle.tsx`). Dark continua sendo o padrão (ausência de valor salvo = dark); script bloqueante em `index.html` aplica a classe antes do primeiro paint pra evitar flash do tema errado.
+
+Variáveis de cor em `src/index.css`: `--color-bg-*`/`--color-text-*` invertidos entre `:root` (light) e `.dark`, `#FFB302` e as cores de status/accent-* mantidas idênticas nos dois temas, exatamente como esta seção já previa antes de ser implementada.
 
 ---
 

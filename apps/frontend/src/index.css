@@ -8,9 +8,12 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Identidade dp6 (docs/skills/frontend.md) — dark mode é o único tema do
-   MVP, então os valores vivem tanto em :root quanto em .dark (sem toggle
-   de tema por enquanto). */
+/* Identidade dp6 (docs/skills/frontend.md) — dark é o tema padrão
+   (:root, também aplicado como classe .dark), light é a versão que a
+   skill já previa ("Modo claro (opcional, futuro)": inverter só
+   --color-bg-* e --color-text-*, manter #FFB302 como acento) — hooks/
+   useTheme.ts alterna a classe .dark em <html>, script bloqueante em
+   index.html evita flash do tema errado antes do React montar. */
 @theme inline {
   --font-sans: "Ubuntu", "Verdana", system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
@@ -62,7 +65,50 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-:root,
+/* Light — inversão de --color-bg-* e --color-text-* só, mesmo acento
+   #FFB302 e mesmas cores de status/accent-* do dark (docs/skills/
+   frontend.md, "Modo claro"). Grays neutros novos (sem equivalente na
+   skill, que só documentava o dark): superfícies levemente acinzentadas
+   pra manter a mesma relação de profundidade que --card/--sidebar têm
+   sobre --background no dark, sem virar branco puro chapado. */
+:root {
+  --background: #ffffff;
+  --foreground: #1d1d1b;
+  --card: #f4f4f2;
+  --card-foreground: #1d1d1b;
+  --popover: #f4f4f2;
+  --popover-foreground: #1d1d1b;
+  --primary: #ffb302;
+  --primary-foreground: #1d1d1b;
+  --secondary: #e9e9e6;
+  --secondary-foreground: #1d1d1b;
+  --muted: #e9e9e6;
+  --muted-foreground: #555b62;
+  --accent: #e9e9e6;
+  --accent-foreground: #1d1d1b;
+  --destructive: #e53e3e;
+  --border: #dedcda;
+  --input: #dedcda;
+  --ring: #ffb302;
+  --radius: 0.5rem;
+  --status-ok: #34d399;
+  --status-warn: #ffb302;
+  --status-error: #e53e3e;
+  --status-info: #63b3ed;
+  --accent-blue: #1a365d;
+  --accent-purple: #6b46c1;
+  --accent-green: #059669;
+  --accent-orange: #f97316;
+  --sidebar: #f4f4f2;
+  --sidebar-foreground: #1d1d1b;
+  --sidebar-primary: #ffb302;
+  --sidebar-primary-foreground: #1d1d1b;
+  --sidebar-accent: #e9e9e6;
+  --sidebar-accent-foreground: #1d1d1b;
+  --sidebar-border: #dedcda;
+  --sidebar-ring: #ffb302;
+}
+
 .dark {
   --background: #1d1d1b;
   --foreground: #ffffff;
