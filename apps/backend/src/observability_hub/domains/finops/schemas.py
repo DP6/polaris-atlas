@@ -57,6 +57,7 @@ class PartitionCandidatesResponse(BaseModel):
 
 class BudgetGroupBy(str, Enum):
     TABLE = "table"
+    DATASET = "dataset"
     USER = "user"
     DAY = "day"
     MONTH = "month"

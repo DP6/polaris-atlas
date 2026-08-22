@@ -39,7 +39,7 @@ export interface PartitionCandidatesResponse {
   warning: string | null
 }
 
-export type BudgetGroupBy = 'table' | 'user' | 'day' | 'month' | 'year'
+export type BudgetGroupBy = 'table' | 'dataset' | 'user' | 'day' | 'month' | 'year'
 
 export interface CostGroup {
   key: string
