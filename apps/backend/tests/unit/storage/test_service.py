@@ -28,6 +28,50 @@ def _bucket(
     )
 
 
+def test_browse_bucket_builds_response(monkeypatch):
+    blob = SimpleNamespace(
+        name="dt=2026-01-01/file.csv", size=1024, updated=_UPDATED, storage_class="STANDARD"
+    )
+    monkeypatch.setattr(
+        service.repository,
+        "browse_bucket_objects",
+        lambda client, project_id, bucket_name, prefix, page_token: (
+            [blob],
+            ["dt=2026-01-01/", "dt=2026-01-02/"],
+            "token-2",
+        ),
+    )
+
+    result = service.browse_bucket(MagicMock(), "proj", "landing", None, None)
+
+    assert result.bucket_name == "landing"
+    assert result.prefix is None
+    assert result.objects == [
+        service.StorageObjectEntry(
+            name="dt=2026-01-01/file.csv",
+            size_bytes=1024,
+            updated=_UPDATED,
+            storage_class="STANDARD",
+        )
+    ]
+    assert result.prefixes == ["dt=2026-01-01/", "dt=2026-01-02/"]
+    assert result.next_page_token == "token-2"
+
+
+def test_browse_bucket_defaults_size_and_storage_class_when_missing(monkeypatch):
+    blob = SimpleNamespace(name="orphan-object", size=None, updated=_UPDATED, storage_class=None)
+    monkeypatch.setattr(
+        service.repository,
+        "browse_bucket_objects",
+        lambda client, project_id, bucket_name, prefix, page_token: ([blob], [], None),
+    )
+
+    result = service.browse_bucket(MagicMock(), "proj", "landing", "dt=2026-01-01/", None)
+
+    assert result.objects[0].size_bytes == 0
+    assert result.objects[0].storage_class == ""
+
+
 def test_list_buckets_builds_response(monkeypatch):
     buckets = [
         _bucket("landing", lifecycle_rules=[{"action": {"type": "SetStorageClass"}}]),

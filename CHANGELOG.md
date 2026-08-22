@@ -5,6 +5,45 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Storage v1.2: navegar dentro de um bucket
+
+Parte 6/7 (último item de feature nova) do plano combinado desta sessão
+— o único dos 11 itens que é capacidade nova de verdade, não
+reordenação/gate de UI existente.
+
+### O que foi feito
+Novo endpoint `GET /api/v1/storage/{project}/{bucket_name}/objects`
+(`domains/storage/repository.py::browse_bucket_objects`) pagina objetos
+de um bucket sob demanda — diferente de `list_bucket_objects_cached`
+(lista TUDO de uma vez, usado só pra agregação/scanner), aqui é uma
+página por vez via `client.list_blobs(..., delimiter="/", page_token=,
+max_results=100)`. `delimiter="/"` simula navegação por "pasta" (GCS não
+tem pastas reais) — `iterator.prefixes` vira a lista de subpastas do
+prefixo atual.
+
+Frontend: nova rota `storage/:bucketName` (`BucketBrowserPage.tsx`),
+breadcrumb clicável, paginação por pilha de `page_token` (GCS pagina por
+token encadeado, não por offset — "página anterior" só existe porque a
+pilha guarda os tokens já visitados). Link novo em cada linha de
+`BucketsPage.tsx` pra entrar no bucket. Nenhuma IAM nova —
+`roles/storage.objectViewer` já cobria `storage.objects.list`/`.get`.
+
+### Erros cometidos e aprendizados
+- Primeira versão do reset de paginação ao trocar de prefixo usava
+  `useEffect` — o linter (biome, regra de exhaustive-deps) reclamou
+  corretamente que o efeito não *lê* `prefix`, só reage à mudança dele,
+  então a dependência "não é necessária" do ponto de vista da regra.
+  Troquei pelo padrão que o próprio React recomenda pra "ajustar estado
+  quando uma prop muda" sem `useEffect` (comparar com um estado
+  "valor na última vez" durante o render, resetar inline se mudou) — mais
+  simples e sem o round-trip extra de um efeito rodando depois do render.
+
+### Mudanças de arquitetura
+- Nenhuma — mesmo client (`core/storage_client.py`), mesmo domínio
+  (`domains/storage`), só uma função de repository nova.
+
+---
+
 ## FinOps Budget + Storage waste scanner: tela de pré-execução
 
 Parte 5/7 do plano combinado desta sessão. Diferente do PR anterior

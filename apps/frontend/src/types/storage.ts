@@ -13,6 +13,23 @@ export interface BucketsListResponse {
   buckets: BucketSummary[]
 }
 
+export interface StorageObjectEntry {
+  name: string
+  size_bytes: number
+  updated: string
+  storage_class: string
+}
+
+export interface BucketObjectsResponse {
+  bucket_name: string
+  prefix: string | null
+  objects: StorageObjectEntry[]
+  // "Pastas" filhas do prefixo atual (caminho completo, não só o último
+  // segmento) — GCS não tem pastas reais, é delimiter="/" simulando.
+  prefixes: string[]
+  next_page_token: string | null
+}
+
 export type MinDaysUnused = 30 | 60 | 90
 
 export type WasteConfidence = 'config_based' | 'usage_confirmed'

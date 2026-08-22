@@ -13,6 +13,7 @@ import { FinOpsPage } from '@/features/finops/FinOpsPage'
 import { DatasetFreshnessPage } from '@/features/freshness/DatasetFreshnessPage'
 import { FreshnessPage } from '@/features/freshness/FreshnessPage'
 import { OrphansPage } from '@/features/lineage/OrphansPage'
+import { BucketBrowserPage } from '@/features/storage/BucketBrowserPage'
 import { BucketsPage } from '@/features/storage/BucketsPage'
 import { WastePage } from '@/features/storage/WastePage'
 
@@ -33,6 +34,7 @@ export function AppRoutes() {
           <Route path="search" element={<SearchPage />} />
           <Route path="storage" element={<BucketsPage />} />
           <Route path="storage/waste" element={<WastePage />} />
+          <Route path="storage/:bucketName" element={<BucketBrowserPage />} />
           <Route element={<RequireAdmin />}>
             <Route path="admin" element={<AdminPage />} />
           </Route>

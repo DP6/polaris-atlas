@@ -58,6 +58,26 @@ class WasteCandidate(BaseModel):
     confidence: WasteConfidence
 
 
+class StorageObjectEntry(BaseModel):
+    name: str
+    size_bytes: int
+    updated: datetime
+    storage_class: str
+
+
+class BucketObjectsResponse(BaseModel):
+    bucket_name: str
+    # Prefixo navegado (None/"" = raiz do bucket) — eco do query param,
+    # pra o frontend montar o breadcrumb sem guardar estado extra.
+    prefix: str | None
+    objects: list[StorageObjectEntry]
+    # "Pastas" filhas do prefixo atual — GCS não tem pastas reais, isto é
+    # client.list_blobs(..., delimiter="/").prefixes, sempre caminho
+    # completo (igual StorageObjectEntry.name), não só o último segmento.
+    prefixes: list[str]
+    next_page_token: str | None
+
+
 class WasteCandidatesResponse(BaseModel):
     project_id: str
     min_days_unused: MinDaysUnused
