@@ -5,6 +5,48 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Frontend: modo claro (light/dark toggle)
+
+Pedido do usuário — `docs/skills/frontend.md` já previa isso como
+"opcional, futuro" desde a v1 da skill, com a regra exata de como
+inverter as cores (só `--color-bg-*`/`--color-text-*`, mantendo
+`#FFB302` e as cores de status/accent-* idênticas nos dois temas).
+
+### O que foi feito
+- `src/index.css`: as variáveis de cor que viviam em `:root, .dark`
+  (mesmos valores nos dois seletores, ou seja, sem efeito real de tema)
+  foram separadas — `:root` ganhou valores light novos (fundo branco,
+  superfícies cinza-claro neutras, texto escuro), `.dark` manteve
+  exatamente os valores de antes.
+- `hooks/useTheme.ts` (novo) — estado do tema, persistido em
+  `localStorage` (`observability-hub:theme`), alterna a classe `.dark`
+  em `<html>`. Dark é o padrão: só "light" é persistido, ausência de
+  valor salvo sempre cai em dark.
+- `components/ThemeToggle.tsx` (novo) — botão no Topbar (ícone
+  sol/lua), mesmo padrão visual dos outros botões de ícone com Tooltip
+  já existentes ali.
+- `index.html` — troquei `<html class="dark">` fixo por um script
+  bloqueante inline que aplica a classe antes do primeiro paint (lendo
+  a mesma chave do `localStorage`), evitando flash do tema errado
+  enquanto o React ainda não montou.
+
+### Erros cometidos e aprendizados
+- Primeira versão dos comentários novos em `index.css` usava a notação
+  `--color-bg-*/--color-text-*` (com barra colada no asterisco) — a
+  sequência `*/` fechou o comentário CSS no meio da frase, quebrando o
+  parser (confirmado pelo `biome check`, ~95 erros de parse em cascata
+  a partir daquele ponto). Corrigido trocando a barra por "e" — mesmo
+  cuidado vale pra qualquer comentário CSS que mencione múltiplos
+  padrões `--algo-*` separados por `/`.
+
+### Mudanças de arquitetura
+- Nenhuma — CSS variables + classe `.dark` já era o mecanismo usado
+  (via Tailwind v4 `@custom-variant dark`), só não tinha um segundo
+  valor real nem um jeito de alternar. `docs/skills/frontend.md`
+  atualizada de "não implementar no MVP" pra documentar o que existe.
+
+---
+
 ## Freshness (filtro granular na visão de datasets) + FinOps Budget v1.2 (group_by=dataset)
 
 Dois pedidos pontuais do usuário, entregues juntos por serem pequenos e

@@ -1,6 +1,7 @@
 import { LogOut, Send, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { usePendingAccessRequests } from '@/features/admin/hooks'
@@ -29,6 +30,8 @@ export function Topbar() {
       <ProjectSelector />
 
       <div className="ml-auto flex items-center gap-3">
+        <ThemeToggle />
+
         <Tooltip>
           <TooltipTrigger
             render={
