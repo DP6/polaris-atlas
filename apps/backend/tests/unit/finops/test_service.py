@@ -454,6 +454,25 @@ def test_get_budget_groups_by_table(monkeypatch):
     assert groups["proj.RAW.a"].cost_usd > groups["proj.TRUSTED.b"].cost_usd
 
 
+def test_get_budget_groups_by_dataset(monkeypatch):
+    events = [
+        # duas tabelas do mesmo dataset RAW no mesmo evento — não deve
+        # contar o billed_bytes duas vezes pro dataset (fan-out dedup via
+        # set, mesma lógica de group_by=TABLE).
+        _event([("proj", "RAW", "a"), ("proj", "RAW", "b")], _now(), total_billed_bytes=10**12),
+        _event([("proj", "TRUSTED", "c")], _now(), total_billed_bytes=10**11),
+    ]
+    _stub_budget_events(monkeypatch, events)
+
+    result = service.get_budget(MagicMock(), "proj", group_by=BudgetGroupBy.DATASET)
+
+    groups = {g.key: g for g in result.groups}
+    assert set(groups) == {"proj.RAW", "proj.TRUSTED"}
+    assert groups["proj.RAW"].billed_bytes == 10**12
+    assert groups["proj.TRUSTED"].billed_bytes == 10**11
+    assert groups["proj.RAW"].cost_usd > groups["proj.TRUSTED"].cost_usd
+
+
 def test_get_budget_groups_by_user(monkeypatch):
     events = [
         _event(

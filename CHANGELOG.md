@@ -5,6 +5,33 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Freshness (filtro granular na visão de datasets) + FinOps Budget v1.2 (group_by=dataset)
+
+Dois pedidos pontuais do usuário, entregues juntos por serem pequenos e
+independentes.
+
+### O que foi feito
+- `DatasetFreshnessTable.tsx` (visão `/freshness`, lista de datasets)
+  ganhou o mesmo tratamento que `TableFreshnessTable.tsx` já tinha
+  recebido numa sessão anterior: filtro de 3 buckets agregados
+  (Ok/Alerta/Obsoleta) trocado pelas 6 faixas granulares de SLA, e cada
+  uma das 6 colunas de contagem por faixa virou ordenável (clicar em
+  "12h a 24h" ordena pela contagem daquela faixa específica), além da
+  ordenação por "Pior status" que já existia.
+- `BudgetGroupBy` ganhou `dataset` como opção nova, ao lado de
+  table/user/day/month/year — a v1.1 desta spec tinha **removido** um
+  "custo por dataset" fixo em favor do `group_by` genérico; a v1.2 traz
+  `dataset` de volta como uma opção dentro do mesmo mecanismo (pedido do
+  usuário — granularidade de tabela é demais pra uma visão "quanto cada
+  área/dataset custa"). Fan-out dedup a nível de dataset: duas tabelas
+  do mesmo dataset tocadas pela mesma query contam uma vez, não duas.
+
+### Mudanças de arquitetura
+- Nenhuma — `dataset` reaproveita a mesma função `_group_keys` e o
+  mesmo mecanismo `group_by` já existente, só mais um branch.
+
+---
+
 ## Storage v1.2: navegar dentro de um bucket
 
 Parte 6/7 (último item de feature nova) do plano combinado desta sessão

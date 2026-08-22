@@ -3,46 +3,26 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { Input } from '@/components/ui/input'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
 import { SLA_LABELS, SLA_ORDER, SLA_SHORT_LABELS, SLA_TEXT_COLOR } from '@/features/freshness/sla'
 import { cn } from '@/lib/utils'
 import type { DatasetFreshnessSummary, SLAStatus } from '@/types/freshness'
 
-type SlaBucket = 'ok' | 'warning' | 'stale'
-const SLA_BUCKET_FILTER_ALL = 'all'
+const SLA_FILTER_ALL = 'all'
+type SlaFilter = SLAStatus | typeof SLA_FILTER_ALL
 
-// Mesmo agrupamento visual já usado em toda a app (SLA_TEXT_COLOR) — verde/
-// amarelo/vermelho, não os 6 status granulares um a um.
-const SLA_BUCKET_BY_STATUS: Record<SLAStatus, SlaBucket> = SLA_ORDER.reduce(
+// Ponto colorido de cada pill de filtro — mesma cor do texto do status
+// na tabela (SLA_TEXT_COLOR), só trocando text- por bg- (mesmo padrão
+// de TableFreshnessTable.tsx).
+const SLA_DOT_COLOR: Record<SLAStatus, string> = SLA_ORDER.reduce(
   (acc, status) => {
-    const color = SLA_TEXT_COLOR[status]
-    acc[status] =
-      color === 'text-status-ok' ? 'ok' : color === 'text-status-warn' ? 'warning' : 'stale'
+    acc[status] = SLA_TEXT_COLOR[status].replace('text-', 'bg-')
     return acc
   },
-  {} as Record<SLAStatus, SlaBucket>,
+  {} as Record<SLAStatus, string>,
 )
 
-const SLA_BUCKET_LABELS: Record<SlaBucket, string> = {
-  ok: 'Ok',
-  warning: 'Alerta',
-  stale: 'Obsoleta',
-}
-
-const SLA_BUCKET_DOT_COLOR: Record<SlaBucket, string> = {
-  ok: 'bg-status-ok',
-  warning: 'bg-status-warn',
-  stale: 'bg-status-error',
-}
-
-type SortKey = 'dataset_id' | 'location' | 'total_tables' | 'worst_status'
+type SortKey = 'dataset_id' | 'location' | 'total_tables' | 'worst_status' | SLAStatus
 type SortDirection = 'asc' | 'desc'
 
 function compare(a: DatasetFreshnessSummary, b: DatasetFreshnessSummary, key: SortKey): number {
@@ -52,14 +32,14 @@ function compare(a: DatasetFreshnessSummary, b: DatasetFreshnessSummary, key: So
       d.worst_status ? SLA_ORDER.indexOf(d.worst_status) : -1
     return rank(a) - rank(b)
   }
-  return a[key].localeCompare(b[key])
+  if (key === 'dataset_id' || key === 'location') return a[key].localeCompare(b[key])
+  // key é um SLAStatus — ordena pela contagem daquela faixa específica.
+  return a[key] - b[key]
 }
 
 export function DatasetFreshnessTable({ datasets }: { datasets: DatasetFreshnessSummary[] }) {
   const [nameFilter, setNameFilter] = useState('')
-  const [bucketFilter, setBucketFilter] = useState<SlaBucket | typeof SLA_BUCKET_FILTER_ALL>(
-    SLA_BUCKET_FILTER_ALL,
-  )
+  const [slaFilter, setSlaFilter] = useState<SlaFilter>(SLA_FILTER_ALL)
   const [sortKey, setSortKey] = useState<SortKey>('worst_status')
   const [sortDir, setSortDir] = useState<SortDirection>('desc')
 
@@ -75,14 +55,12 @@ export function DatasetFreshnessTable({ datasets }: { datasets: DatasetFreshness
   const visibleDatasets = useMemo(() => {
     const filtered = datasets.filter((dataset) => {
       const matchesName = dataset.dataset_id.toLowerCase().includes(nameFilter.toLowerCase())
-      const matchesBucket =
-        bucketFilter === SLA_BUCKET_FILTER_ALL ||
-        (dataset.worst_status && SLA_BUCKET_BY_STATUS[dataset.worst_status] === bucketFilter)
-      return matchesName && matchesBucket
+      const matchesSla = slaFilter === SLA_FILTER_ALL || dataset.worst_status === slaFilter
+      return matchesName && matchesSla
     })
     const sign = sortDir === 'asc' ? 1 : -1
     return [...filtered].sort((a, b) => sign * compare(a, b, sortKey))
-  }, [datasets, nameFilter, bucketFilter, sortKey, sortDir])
+  }, [datasets, nameFilter, slaFilter, sortKey, sortDir])
 
   return (
     <>
@@ -99,23 +77,23 @@ export function DatasetFreshnessTable({ datasets }: { datasets: DatasetFreshness
             className="pl-8"
           />
         </div>
-        <div className="flex gap-2">
-          {(['all', 'ok', 'warning', 'stale'] as const).map((bucket) => (
+        <div className="flex flex-wrap gap-2">
+          {([SLA_FILTER_ALL, ...SLA_ORDER] as const).map((filter) => (
             <button
-              key={bucket}
+              key={filter}
               type="button"
-              onClick={() => setBucketFilter(bucket)}
+              onClick={() => setSlaFilter(filter)}
               className={cn(
                 'flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-                bucketFilter === bucket
+                slaFilter === filter
                   ? 'border-primary bg-primary/10 text-foreground'
                   : 'border-border text-muted-foreground hover:bg-muted',
               )}
             >
-              {bucket !== 'all' && (
-                <span className={cn('size-2 rounded-full', SLA_BUCKET_DOT_COLOR[bucket])} />
+              {filter !== SLA_FILTER_ALL && (
+                <span className={cn('size-2 rounded-full', SLA_DOT_COLOR[filter])} />
               )}
-              {bucket === 'all' ? 'Todos' : SLA_BUCKET_LABELS[bucket]}
+              {filter === SLA_FILTER_ALL ? 'Todos' : SLA_SHORT_LABELS[filter]}
             </button>
           ))}
         </div>
@@ -144,9 +122,14 @@ export function DatasetFreshnessTable({ datasets }: { datasets: DatasetFreshness
               align="right"
             />
             {SLA_ORDER.map((status) => (
-              <TableHead key={status} className="text-right">
-                {SLA_SHORT_LABELS[status]}
-              </TableHead>
+              <SortableTableHead
+                key={status}
+                label={SLA_SHORT_LABELS[status]}
+                active={sortKey === status}
+                direction={sortDir}
+                onClick={() => toggleSort(status)}
+                align="right"
+              />
             ))}
             <SortableTableHead
               label="Pior status"

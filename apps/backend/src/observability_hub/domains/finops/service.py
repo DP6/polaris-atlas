@@ -290,12 +290,14 @@ def scan_partition_candidates(
 def _group_keys(
     group_by: BudgetGroupBy, event: ScanEvent, real_tables: list[TableRefTuple]
 ) -> list[str]:
-    """Uma chave por tabela real tocada (fan-out, mesma lógica de
-    by_dataset da v1 — uma query com JOIN entre tabelas conta em cada
-    uma) pra group_by=TABLE; uma chave só pras demais dimensões, que são
-    por evento, não por tabela."""
+    """Uma chave por tabela (ou dataset) real tocado (fan-out — uma query
+    com JOIN entre tabelas/datasets conta em cada um) pra group_by=TABLE/
+    DATASET; uma chave só pras demais dimensões, que são por evento, não
+    por tabela."""
     if group_by == BudgetGroupBy.TABLE:
         return sorted({f"{p}.{d}.{t}" for p, d, t in real_tables})
+    if group_by == BudgetGroupBy.DATASET:
+        return sorted({f"{p}.{d}" for p, d, _t in real_tables})
     if group_by == BudgetGroupBy.USER:
         return [event.principal_email]
     assert event.timestamp is not None  # já filtrado antes de chamar

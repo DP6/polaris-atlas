@@ -1,9 +1,9 @@
 # Spec — Domínio: FinOps — Budget de custo
 
-**Versão:** 1.1
+**Versão:** 1.2 (`group_by=dataset` de volta, agora como opção — não fixo)
 **Status:** Aprovada
 **Fase:** 4 — FinOps (segunda frente: budget por dataset/projeto)
-**Última atualização:** 2026-08-15
+**Última atualização:** 2026-08-22
 
 ---
 
@@ -12,9 +12,15 @@
 Três visões de custo do mês corrente, todas derivadas da mesma fonte já
 usada pelo scanner de desperdício — nenhuma integração nova:
 
-1. **Custo agrupado, agrupamento configurável** — Tabela | Usuário | Dia
-   | Mês | Ano (`group_by`). Substituiu a v1.0, que só tinha "custo por
-   dataset" fixo — ver "Agrupamento configurável" abaixo.
+1. **Custo agrupado, agrupamento configurável** — Tabela | Dataset |
+   Usuário | Dia | Mês | Ano (`group_by`). A v1.1 tinha substituído o
+   "custo por dataset" fixo da v1.0 pelo `group_by` genérico (table por
+   default cobria o caso, achatando dataset em detalhe extra) — a v1.2
+   trouxe `dataset` de volta como uma **opção** dentro do mesmo
+   `group_by` (pedido do usuário: granularidade de tabela é demais pra
+   uma visão "quanto cada área/dataset custa", útil quando um
+   dataset ≈ um time/domínio de dado). Ver "Agrupamento configurável"
+   abaixo.
 2. **Top N queries mais caras** — os jobs individuais de maior custo.
 3. **Projeção do mês** — custo até agora, média diária, projeção pro
    total do mês.
@@ -116,8 +122,8 @@ Sempre relativo ao **mês corrente** (dia 1 até agora, UTC) — não é uma
 janela fixa como o scanner de desperdício.
 
 **Parâmetros opcionais:**
-- `group_by` (query, default `table`) — um de `table`, `user`, `day`,
-  `month`, `year`. Ver "Agrupamento configurável".
+- `group_by` (query, default `table`) — um de `table`, `dataset`,
+  `user`, `day`, `month`, `year`. Ver "Agrupamento configurável".
 - `limit` (query, default `10`, mínimo `1`, máximo `50`) — tamanho de
   `top_queries`.
 
@@ -168,15 +174,19 @@ Uma ou mais chaves por evento, calculadas em `service._group_keys()`:
 | `group_by` | Chave | Cardinalidade por evento |
 |---|---|---|
 | `table` (default) | `project.dataset.table` de cada tabela real referenciada | 1 por tabela tocada — fan-out em `JOIN`, mesma aproximação de "custo por dataset" da v1.0 |
+| `dataset` (v1.2) | `project.dataset` de cada dataset real referenciado | 1 por dataset tocado — mesmo fan-out do `table`, mas deduplicado a nível de dataset: duas tabelas do mesmo dataset no mesmo evento (`JOIN` entre elas) contam **uma vez** pro dataset, não duas |
 | `user` | `principal_email` | 1 |
 | `day` | `timestamp.date().isoformat()` | 1 |
 | `month` | `timestamp.strftime('%Y-%m')` | 1 |
 | `year` | `str(timestamp.year)` | 1 |
 
-Só `group_by=table` tem fan-out (uma query com `JOIN` entre tabelas soma
-o custo inteiro em cada tabela tocada, não dividido pela proporção real
-de bytes — mesma limitação da v1.0, ver "Fora do escopo"); as demais
-dimensões são 1:1 por evento.
+`table` e `dataset` são os únicos com fan-out (uma query com `JOIN`
+soma o custo inteiro em cada tabela/dataset tocado, não dividido pela
+proporção real de bytes — mesma limitação da v1.0, ver "Fora do
+escopo"); as demais dimensões são 1:1 por evento. Link de "voltar pro
+dataset" na UI (`BudgetPage.tsx::groupKeyLink`) funciona igual nos dois
+— a chave de `dataset` já É `project.dataset`, sem terceiro segmento
+pra cortar.
 
 ---
 
@@ -255,6 +265,7 @@ tinha com o texto da query inline na célula).
 | Evento com `total_billed_bytes <= 0` | Ignorado em toda agregação — não soma custo nem `job_count` |
 | Evento anterior a `month_start` | Ignorado (a folga de `lookback_days = dias + 1` pode trazer alguns) |
 | Query com `JOIN` entre tabelas (`group_by=table`) | Custo somado em **cada** tabela tocada, não dividido — mesma aproximação do scanner de desperdício |
+| Query com `JOIN` entre tabelas do mesmo dataset (`group_by=dataset`) | Custo somado **uma vez** pro dataset (dedup via `set`), diferente de `group_by=table` — evita inflar artificialmente o custo de um dataset só porque a query tocou duas tabelas dele |
 | Mesmo usuário com múltiplos jobs no mês (`group_by=user`) | Um único `CostGroup`, `job_count` e `billed_bytes` somados |
 | Texto de query maior que 2000 caracteres | Truncado com "…" no fim (`repository._QUERY_TEXT_MAX_CHARS`) |
 | Mês com mais de 30 dias corridos até agora (dia 31) | `warning` avisa sobre a retenção padrão de 30 dias do Cloud Logging — o início do mês pode estar faltando |

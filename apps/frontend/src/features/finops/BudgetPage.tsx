@@ -36,6 +36,7 @@ const QUERIES_TAB = 'queries'
 
 const GROUP_BY_OPTIONS: { value: BudgetGroupBy; label: string }[] = [
   { value: 'table', label: 'Tabela' },
+  { value: 'dataset', label: 'Dataset' },
   { value: 'user', label: 'Usuário' },
   { value: 'day', label: 'Dia' },
   { value: 'month', label: 'Mês' },
@@ -46,6 +47,7 @@ const LIMIT_OPTIONS = [5, 10, 20, 50] as const
 
 const GROUP_KEY_COLUMN_LABEL: Record<BudgetGroupBy, string> = {
   table: 'Tabela',
+  dataset: 'Dataset',
   user: 'Usuário',
   day: 'Dia',
   month: 'Mês',
@@ -226,10 +228,11 @@ export function BudgetPage() {
   )
 }
 
-function tableGroupLink(
-  projectId: string,
-  key: string,
-): { datasetId: string; label: string } | null {
+// Link pro dataset dono do grupo — funciona tanto pra group_by=table
+// (key "project.dataset.table") quanto group_by=dataset (key
+// "project.dataset", sem terceiro segmento): rest.split('.')[0] é o
+// dataset_id nos dois casos.
+function groupKeyLink(projectId: string, key: string): { datasetId: string; label: string } | null {
   if (!key.startsWith(`${projectId}.`)) return null
   const rest = key.slice(projectId.length + 1)
   const [datasetId] = rest.split('.')
@@ -316,7 +319,10 @@ function CostByGroupTab({
         </TableHeader>
         <TableBody>
           {visibleGroups.map((group) => {
-            const link = groupBy === 'table' ? tableGroupLink(projectId, group.key) : null
+            const link =
+              groupBy === 'table' || groupBy === 'dataset'
+                ? groupKeyLink(projectId, group.key)
+                : null
             return (
               <TableRow key={group.key}>
                 <TableCell className="font-medium">
