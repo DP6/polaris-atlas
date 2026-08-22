@@ -2,8 +2,8 @@
 
 **Pergunta que este playbook responde:** "quero rodar minha própria cópia
 do Hub — hospedagem e administração — num projeto GCP diferente do
-`observability-hub` original. O que precisa ser feito, do zero, pra
-outra pessoa replicar isto?"
+`dp6-ci-polaris` original. O que precisa ser feito, do zero, pra outra
+pessoa replicar isto?"
 
 Este repositório usa **topologia single-project**: dev e prod rodam
 **no mesmo projeto GCP** — restrição permanente da empresa que hospeda
@@ -17,10 +17,102 @@ Este é um playbook de **bootstrap único** — a maioria dos passos roda
 uma vez e nunca mais. Depois de concluído, o dia a dia é só `git push`
 (ver `CLAUDE.md`, "CI/CD e deploy").
 
-Não confundir com o outro playbook,
-[`liberar-projeto-para-o-hub.md`](liberar-projeto-para-o-hub.md) — aquele
-é sobre liberar acesso a um projeto *que o Hub vai observar*; este é
+Não confundir com o outro documento,
+[`docs/onboarding-cliente.md`](../onboarding-cliente.md) — aquele é
+sobre liberar acesso a um projeto *que o Hub vai observar*; este é
 sobre onde o Hub *em si* roda.
+
+---
+
+## 0. Antes de tudo — o que o time de TI precisa preparar
+
+**Para quem é esta seção:** o time de TI/infra que administra a conta
+Google Cloud e o GitHub da empresa — não precisa entender o
+funcionamento interno do Hub, só garantir que o essencial abaixo existe
+antes de alguém seguir o resto deste playbook a partir da seção 1.
+
+**Resumo em uma frase:** um projeto Google Cloud novo, com billing
+vinculado, e uma pessoa com permissão de administrar esse projeto — mais
+um repositório GitHub onde essa mesma pessoa tenha acesso de
+administrador.
+
+### 0.1 Google Cloud
+
+- [ ] Criar (ou autorizar a criação de) **um único projeto Google Cloud**
+      para o Hub — ele hospeda dev e prod dentro do mesmo projeto, não
+      são necessários dois.
+- [ ] Escolher e informar o **ID do projeto** (ex: `acme-hub`) — vira
+      referência em vários arquivos de configuração (seção 6).
+- [ ] Vincular uma conta de faturamento e **confirmar que ela tem quota
+      disponível para mais um projeto vinculado** — contas de billing
+      têm um limite de projetos simultâneos; se já estiver no limite,
+      `gcloud billing projects link` falha com `Cloud billing quota
+      exceeded` (aconteceu de verdade no piloto deste playbook).
+- [ ] Conceder papel de **Owner** no projeto novo à pessoa que vai
+      executar o resto deste playbook (ou, mais granular: Project IAM
+      Admin + Service Usage Admin + Storage Admin + Workload Identity
+      Pool Admin + Service Account Admin — o restante do playbook assume
+      Owner por simplicidade).
+
+### 0.2 Coisas que costumam estar restritas por política organizacional
+
+Nenhuma dessas restrições apareceu no piloto (projeto sem organização
+por trás), mas empresas com Google Workspace/Cloud Identity
+frequentemente têm Org Policies que podem bloquear partes do playbook
+silenciosamente — vale uma conversa preventiva com quem administra a
+organização no Google Cloud:
+
+- [ ] **Workload Identity Federation não pode estar bloqueada** — o
+      deploy usa WIF pra autenticar o GitHub Actions sem chave de
+      service account (seção 7); uma Org Policy restringindo criação de
+      Workload Identity Pools derruba o bootstrap.
+- [ ] **Domain Restricted Sharing não pode impedir conceder papéis a
+      identidades federadas do GitHub** — se a organização usa a
+      constraint `iam.allowedPolicyMemberDomains` de forma restritiva,
+      conceder `roles/iam.workloadIdentityUser` às identidades do GitHub
+      Actions pode ser bloqueado.
+- [ ] **Firestore Native mode precisa estar disponível** no projeto —
+      API `firestore.googleapis.com`, sem restrição específica
+      conhecida, mas vale confirmar se a organização usa alguma política
+      de "APIs permitidas".
+
+Se qualquer restrição dessas existir, quem for rodar o resto deste
+playbook vai precisar de uma exceção específica pra este projeto —
+melhor descobrir isso antes de começar do que no meio do bootstrap.
+
+### 0.3 Google Workspace (tela de login OAuth)
+
+- [ ] Decidir, com quem administra o Google Workspace da empresa: a tela
+      de consentimento OAuth do Hub vai ser **Interna** (só contas do
+      Workspace, mais simples) ou **Externa** (qualquer conta Google,
+      publicada como "Em produção" — não exige revisão do Google porque
+      o Hub só pede escopos básicos: `openid`, `email`, `profile`,
+      nenhum sensível — ver seção 11).
+- [ ] Se for **Interna**: confirmar que quem vai configurar o OAuth
+      Client (seção 11) tem permissão pra isso no Workspace — às vezes é
+      uma permissão separada da de Owner do projeto Google Cloud.
+
+### 0.4 GitHub
+
+- [ ] Criar (ou autorizar a criação de) um **repositório novo**, sob
+      controle de quem vai hospedar o Hub — pode ser um fork ou cópia
+      direta deste repositório.
+- [ ] Garantir acesso de **administrador** nesse repositório pra essa
+      pessoa — vai precisar configurar Secrets (seção 8) e o Environment
+      `production` com required reviewers (seção 8.1).
+
+Não é necessário nenhum plano pago do GitHub além do que a organização
+já usa — Actions no plano gratuito já cobre o volume de uso esperado.
+
+### 0.5 Depois de tudo isso pronto
+
+A pessoa responsável segue este playbook a partir da seção 1, do início
+ao fim — autocontido a partir daqui, não precisa de mais nada do time de
+TI além do que já foi concedido acima (a menos que alguma restrição da
+seção 0.2 realmente exista, aí vira uma conversa pontual sobre aquela
+exceção específica). Depois que o Hub estiver no ar, liberar acesso de
+leitura a outros projetos Google Cloud é um processo **separado**,
+coberto em [`docs/onboarding-cliente.md`](../onboarding-cliente.md).
 
 ---
 
@@ -461,8 +553,8 @@ com `--environment prod` (mesmo `--project`).
 4. Se o e-mail usado foi o mesmo do `seed_admin.py` (passo 14), confirme
    que o link/ícone de administrador aparece e `/admin` abre.
 5. Digite um `project_id` no seletor — nesse ponto, nenhum projeto alvo
-   foi liberado ainda (isso é o outro playbook,
-   [`liberar-projeto-para-o-hub.md`](liberar-projeto-para-o-hub.md)), então
+   foi liberado ainda (isso é
+   [`docs/onboarding-cliente.md`](../onboarding-cliente.md)), então
    espera-se um erro `ProjectNotAuthorizedError`/`ProjectAccessDeniedError`
    — é o sinal de que a stack está de pé e o gate de ACL está funcionando.
 
@@ -494,7 +586,7 @@ Depois de validar dev:
 O Hub está de pé, mas ainda não observa nenhum dado — ele só enxerga
 projetos GCP explicitamente liberados. Para cada projeto que ele deve
 observar (incluindo, se quiser, o próprio `{PROJETO}` servindo de alvo
-dele mesmo), siga [`liberar-projeto-para-o-hub.md`](liberar-projeto-para-o-hub.md).
+dele mesmo), siga [`docs/onboarding-cliente.md`](../onboarding-cliente.md).
 
 ---
 
@@ -573,4 +665,8 @@ na migração pra topologia single-project (ADR-010):
 - [ADR-010 — Topologia single-project](../adr/ADR-010-single-project-topology.md)
 - [`infra/terraform/bootstrap/README.md`](../../infra/terraform/bootstrap/README.md)
 - [`docs/specs/admin.md`](../specs/admin.md) — bootstrap do primeiro admin, casos de borda do ACL
+- [`docs/onboarding-cliente.md`](../onboarding-cliente.md) — outro
+  documento, complementar: como liberar acesso de leitura a um projeto
+  GCP *que o Hub vai observar* (diferente deste, que é sobre onde o Hub
+  *em si* roda)
 - `CHANGELOG.md`, seção "Fase 1" — incidentes reais do bootstrap original

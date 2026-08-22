@@ -117,8 +117,12 @@ Nunca remova um sufixo de ambiente de um nome de recurso "pra simplificar" — s
 │       ├── dev/                  # Root module do ambiente dev, consome modules/
 │       └── prod/                 # Root module do ambiente prod, consome modules/
 ├── docs/adr/                     # Architecture Decision Records
-├── docs/playbooks/                # Roteiros operacionais de execução rápida (ex: liberar
-│                                   # um projeto GCP pro Hub, hospedar o Hub em projetos novos)
+├── docs/onboarding-cliente.md    # Como liberar acesso de leitura a um projeto GCP que o
+│                                 # Hub vai observar (APIs, IAM, audit logs) + registro vivo
+│                                 # de concessões já feitas
+├── docs/playbooks/                # Roteiros operacionais de execução rápida — hoje só
+│                                   # hospedar o Hub em projetos novos (clonar, ajustar
+│                                   # variáveis, bootstrap)
 ├── scripts/                      # Scripts de apoio (setup local, seed, etc.)
 ├── CLAUDE.md
 └── .gitignore
