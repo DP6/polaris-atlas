@@ -7,9 +7,11 @@ from observability_hub.core.config import settings
 from observability_hub.core.exceptions import LoggingAccessDeniedError
 from observability_hub.domains.storage import repository
 from observability_hub.domains.storage.schemas import (
+    BucketObjectsResponse,
     BucketsListResponse,
     BucketSummary,
     MinDaysUnused,
+    StorageObjectEntry,
     WasteCandidate,
     WasteCandidatesResponse,
 )
@@ -63,6 +65,33 @@ def list_buckets(client: storage.Client, project_id: str) -> BucketsListResponse
             )
             for bucket in buckets
         ]
+    )
+
+
+def browse_bucket(
+    client: storage.Client,
+    project_id: str,
+    bucket_name: str,
+    prefix: str | None,
+    page_token: str | None,
+) -> BucketObjectsResponse:
+    blobs, prefixes, next_page_token = repository.browse_bucket_objects(
+        client, project_id, bucket_name, prefix, page_token
+    )
+    return BucketObjectsResponse(
+        bucket_name=bucket_name,
+        prefix=prefix,
+        objects=[
+            StorageObjectEntry(
+                name=blob.name,
+                size_bytes=blob.size or 0,
+                updated=blob.updated,
+                storage_class=blob.storage_class or "",
+            )
+            for blob in blobs
+        ],
+        prefixes=prefixes,
+        next_page_token=next_page_token,
     )
 
 

@@ -7,7 +7,7 @@ extensão do lineage) completos, testados e confirmados em
 via PR #25 e deployada em `observability-hub-prod` no mesmo dia,
 infraestrutura (IAM, buckets mock, dados) promovida antes do merge (ver
 `docs/onboarding-cliente.md`)
-**Versão:** v1.1
+**Versão:** v1.2 (navegar dentro de um bucket)
 **Depende de:** `domains/lineage` (extensão, não substituição)
 
 ---
@@ -73,6 +73,49 @@ na mesma chamada de listagem — sem custo/chamada extra).
 (`storage.objects.list`), que pode ser uma chamada cara em bucket com
 muitos objetos. Mesmo padrão de cache TTL já usado em `core/bigquery.py`
 (5min) deve se aplicar aqui — `core/storage_client.py` novo, análogo.
+
+### 4.1 Navegar dentro de um bucket (v1.2)
+
+`GET /api/v1/storage/{project}/{bucket_name}/objects`
+
+Diferente da listagem cacheada da seção 4 (que carrega TUDO de uma vez,
+usada só pra agregação/scanner — inviável pra navegação de UI num bucket
+com muitos objetos), este endpoint pagina de verdade:
+`domains/storage/repository.py::browse_bucket_objects` chama
+`client.list_blobs(bucket_name, prefix=, delimiter="/", page_token=,
+max_results=100)` e devolve uma página por vez, sem cache — GCS não tem
+pastas reais, `delimiter="/"` é o que simula navegação hierárquica
+(`iterator.prefixes` vira a lista de "subpastas" do prefixo atual).
+
+**Query params (ambos opcionais):**
+- `prefix` — caminho navegado (ex: `dt=2026-01-01/`); ausente/vazio =
+  raiz do bucket.
+- `page_token` — token da próxima página (`next_page_token` da resposta
+  anterior).
+
+**Response 200:**
+```json
+{
+  "bucket_name": "landing",
+  "prefix": "dt=2026-01-01/",
+  "objects": [
+    {
+      "name": "dt=2026-01-01/part-0001.csv",
+      "size_bytes": 10485760,
+      "updated": "2026-01-01T03:00:00Z",
+      "storage_class": "STANDARD"
+    }
+  ],
+  "prefixes": ["dt=2026-01-01/hour=00/", "dt=2026-01-01/hour=01/"],
+  "next_page_token": null
+}
+```
+
+`name`/`prefixes` sempre vêm com o caminho completo (não só o último
+segmento) — igual `list_blobs` devolve nativamente; o frontend
+(`BucketBrowserPage.tsx`) corta o prefixo atual do início pra exibir só
+o nome relativo. Nenhuma IAM nova — `roles/storage.objectViewer`, já
+concedida (seção 8), cobre `storage.objects.list`/`.get`.
 
 ## 5. Freshness por bucket
 

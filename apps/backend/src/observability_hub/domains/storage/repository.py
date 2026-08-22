@@ -106,6 +106,38 @@ def get_buckets_sizes_and_counts(
         return {futures[future]: future.result() for future in as_completed(futures)}
 
 
+def browse_bucket_objects(
+    client: storage.Client,
+    project_id: str,
+    bucket_name: str,
+    prefix: str | None,
+    page_token: str | None,
+    page_size: int = 100,
+) -> tuple[list[storage.Blob], list[str], str | None]:
+    """Uma página de objetos do bucket, com navegação por "pasta"
+    simulada via delimiter="/" — GCS não tem pastas reais, mas prefixos
+    terminados em "/" simulam (mesma convenção de qualquer console/CLI
+    de GCS). Diferente de list_bucket_objects_cached (lista TUDO de uma
+    vez, usado só pra agregação/scanner) — um bucket pode ter milhões de
+    objetos, carregar tudo pra navegar a UI não escala. Retorna (blobs
+    desta página, prefixos/"pastas" filhas, próximo page_token ou None
+    se for a última página)."""
+    try:
+        iterator = client.list_blobs(
+            bucket_name,
+            prefix=prefix,
+            delimiter="/",
+            page_token=page_token,
+            max_results=page_size,
+        )
+        page = next(iterator.pages, None)
+        blobs = list(page) if page is not None else []
+        prefixes = sorted(iterator.prefixes)
+        return blobs, prefixes, iterator.next_page_token
+    except Forbidden as exc:
+        raise StorageAccessDeniedError(project_id) from exc
+
+
 def _parse_resource_name(resource_name: str | None) -> tuple[str, str] | None:
     """Extrai (bucket, object) de um resourceName no formato
     "projects/_/buckets/{bucket}/objects/{object}" — split no primeiro

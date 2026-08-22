@@ -22,6 +22,10 @@ def _days_ago(days):
     return _NOW - timedelta(days=days)
 
 
+def _blob_named(name, size=10, updated=None, storage_class="STANDARD"):
+    return SimpleNamespace(name=name, size=size, updated=updated, storage_class=storage_class)
+
+
 def _entry(payload):
     return SimpleNamespace(payload=payload)
 
@@ -143,6 +147,66 @@ def test_parse_resource_name_returns_none_for_bucket_only():
 def test_parse_resource_name_returns_none_for_empty():
     assert repository._parse_resource_name(None) is None
     assert repository._parse_resource_name("") is None
+
+
+def test_browse_bucket_objects_returns_blobs_prefixes_and_next_token():
+    client = MagicMock()
+    blob = _blob_named("dt=2026-01-01/file.csv")
+    iterator = MagicMock()
+    iterator.pages = iter([[blob]])
+    iterator.prefixes = {"dt=2026-01-02/", "dt=2026-01-01/"}
+    iterator.next_page_token = "token-2"
+    client.list_blobs.return_value = iterator
+
+    blobs, prefixes, next_token = repository.browse_bucket_objects(
+        client, _PROJECT_ID, "landing", prefix=None, page_token=None
+    )
+
+    assert blobs == [blob]
+    assert prefixes == ["dt=2026-01-01/", "dt=2026-01-02/"]
+    assert next_token == "token-2"
+    client.list_blobs.assert_called_once_with(
+        "landing", prefix=None, delimiter="/", page_token=None, max_results=100
+    )
+
+
+def test_browse_bucket_objects_returns_empty_when_no_more_pages():
+    client = MagicMock()
+    iterator = MagicMock()
+    iterator.pages = iter([])
+    iterator.prefixes = set()
+    iterator.next_page_token = None
+    client.list_blobs.return_value = iterator
+
+    blobs, prefixes, next_token = repository.browse_bucket_objects(
+        client, _PROJECT_ID, "landing", prefix=None, page_token=None
+    )
+
+    assert blobs == []
+    assert prefixes == []
+    assert next_token is None
+
+
+def test_browse_bucket_objects_raises_storage_access_denied_on_forbidden_at_call():
+    client = MagicMock()
+    client.list_blobs.side_effect = Forbidden("denied")
+
+    with pytest.raises(StorageAccessDeniedError):
+        repository.browse_bucket_objects(client, _PROJECT_ID, "landing", None, None)
+
+
+def test_browse_bucket_objects_raises_storage_access_denied_on_forbidden_during_iteration():
+    def _raise_on_iter():
+        raise Forbidden("denied")
+        yield  # pragma: no cover
+
+    client = MagicMock()
+    iterator = MagicMock()
+    iterator.pages = _raise_on_iter()
+    client.list_blobs.return_value = iterator
+
+    with pytest.raises(StorageAccessDeniedError):
+        repository.browse_bucket_objects(client, _PROJECT_ID, "landing", None, None)
 
 
 def test_list_read_object_keys_parses_object_get_events():

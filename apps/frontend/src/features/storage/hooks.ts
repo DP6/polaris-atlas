@@ -10,6 +10,20 @@ export function useBuckets(projectId: string | undefined) {
   })
 }
 
+export function useBucketObjects(
+  projectId: string | undefined,
+  bucketName: string | undefined,
+  prefix: string | undefined,
+  pageToken: string | undefined,
+) {
+  return useQuery({
+    queryKey: ['storage', 'bucket-objects', projectId, bucketName, prefix, pageToken],
+    queryFn: () =>
+      storageApi.browseBucket(projectId as string, bucketName as string, { prefix, pageToken }),
+    enabled: Boolean(projectId) && Boolean(bucketName),
+  })
+}
+
 export function useWasteCandidates(
   projectId: string | undefined,
   minDaysUnused: MinDaysUnused = 60,

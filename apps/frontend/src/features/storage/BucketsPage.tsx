@@ -1,4 +1,5 @@
 import { Search } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SortableTableHead } from '@/components/SortableTableHead'
@@ -142,7 +143,11 @@ export function BucketsPage() {
         <TableBody>
           {visibleBuckets.map((bucket) => (
             <TableRow key={bucket.name}>
-              <TableCell className="font-medium">{bucket.name}</TableCell>
+              <TableCell className="font-medium">
+                <Link to={`/storage/${bucket.name}`} className="hover:text-primary">
+                  {bucket.name}
+                </Link>
+              </TableCell>
               <TableCell>{bucket.location}</TableCell>
               <TableCell>
                 <Badge variant="secondary">{bucket.storage_class}</Badge>
