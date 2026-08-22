@@ -1,6 +1,7 @@
 import {
   ChevronDown,
   Clock,
+  Container,
   Database,
   DollarSign,
   HardDrive,
@@ -8,11 +9,14 @@ import {
   PiggyBank,
   Search,
   Star,
+  Timer,
   Unlink,
+  Workflow,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
+import { Badge } from '@/components/ui/badge'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
 import { useDatasets } from '@/features/catalog/hooks'
@@ -85,6 +89,22 @@ function SidebarServiceGroup({
   )
 }
 
+// Serviço ainda não implementado (Workflows, Scheduler, Cloud Run) — mesma
+// posição visual de SidebarServiceGroup, mas sem Collapsible (nada pra
+// expandir) e sem interação: opacity/cursor reaproveitados do padrão já
+// usado em AssetsTable.tsx/LineageGraph.tsx pra linha/nó desabilitado.
+function SidebarServiceGroupPlaceholder({ icon, label }: { icon: ReactNode; label: string }) {
+  return (
+    <div className="mb-2 flex cursor-not-allowed items-center gap-2 rounded-md px-2 py-1.5 text-muted-foreground text-sm opacity-50">
+      {icon}
+      <span className="flex-1 text-left font-bold">{label}</span>
+      <Badge variant="outline" className="text-[10px]">
+        Em breve
+      </Badge>
+    </div>
+  )
+}
+
 // Subseção dentro de um serviço (Governança, FinOps, Datasets
 // disponíveis, Favoritos, Recentes) — todas recolhidas por padrão
 // (`open` vem de fora, sempre iniciado em `false` no componente pai).
@@ -127,11 +147,10 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
     .filter((t) => t.project_id === projectId)
     .slice(0, MAX_RECENT_TABLES_SHOWN)
 
-  // BigQuery é o serviço com mais conteúdo hoje — abre por padrão (sidebar
-  // vazia no primeiro acesso seria má UX). Cloud Storage começa recolhido,
-  // mesmo padrão de subseção nova com pouco conteúdo ainda. Tudo que abre
-  // DENTRO de um serviço começa recolhido, sem exceção.
-  const [bigQueryOpen, setBigQueryOpen] = useState(true)
+  // Os dois serviços começam recolhidos por padrão — sidebar menos
+  // carregada no primeiro acesso, cada um expande sob demanda. Tudo que
+  // abre DENTRO de um serviço também começa recolhido, sem exceção.
+  const [bigQueryOpen, setBigQueryOpen] = useState(false)
   const [cloudStorageOpen, setCloudStorageOpen] = useState(false)
   const [governanceOpen, setGovernanceOpen] = useState(false)
   const [finopsOpen, setFinopsOpen] = useState(false)
@@ -381,6 +400,10 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
           </NavLink>
         </nav>
       </SidebarServiceGroup>
+
+      <SidebarServiceGroupPlaceholder icon={<Workflow size={16} />} label="Workflows" />
+      <SidebarServiceGroupPlaceholder icon={<Timer size={16} />} label="Scheduler" />
+      <SidebarServiceGroupPlaceholder icon={<Container size={16} />} label="Cloud Run" />
     </aside>
   )
 }
