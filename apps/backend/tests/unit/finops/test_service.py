@@ -102,6 +102,23 @@ def _event(
 # --- scan_unused_tables ----------------------------------------------------------
 
 
+def test_scan_unused_tables_passes_datasets_through_to_repository(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(service, "discover_regions", lambda project_id, client: ["US"])
+
+    def fake_list_all_table_refs(client, project_id, regions, datasets=None):
+        captured["datasets"] = datasets
+        return []
+
+    monkeypatch.setattr(service.repository, "list_all_table_refs", fake_list_all_table_refs)
+    monkeypatch.setattr(service, "get_tables_metadata", lambda client, refs: {})
+    monkeypatch.setattr(service.repository, "list_scan_events", lambda *a, **kw: [])
+
+    service.scan_unused_tables(_fake_client(), MagicMock(), "proj", datasets=["RAW"])
+
+    assert captured["datasets"] == ["RAW"]
+
+
 def test_scan_unused_tables_flags_table_never_accessed(monkeypatch):
     _stub_common(
         monkeypatch,
@@ -259,6 +276,23 @@ def _stub_partition_common(monkeypatch, all_tables, metadata, date_columns_by_ta
             (dataset_id, table_id), []
         ),
     )
+
+
+def test_scan_partition_candidates_passes_datasets_through_to_repository(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(service, "discover_regions", lambda project_id, client: ["US"])
+
+    def fake_list_all_table_refs(client, project_id, regions, datasets=None):
+        captured["datasets"] = datasets
+        return []
+
+    monkeypatch.setattr(service.repository, "list_all_table_refs", fake_list_all_table_refs)
+    monkeypatch.setattr(service, "get_tables_metadata", lambda client, refs: {})
+    monkeypatch.setattr(service.repository, "list_scan_events", lambda *a, **kw: [])
+
+    service.scan_partition_candidates(_fake_client(), MagicMock(), "proj", datasets=["RAW"])
+
+    assert captured["datasets"] == ["RAW"]
 
 
 def test_scan_partition_candidates_excludes_small_tables(monkeypatch):

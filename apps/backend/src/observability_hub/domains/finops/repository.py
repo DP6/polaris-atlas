@@ -156,12 +156,18 @@ def list_scan_events(
 
 
 def list_all_table_refs(
-    client: bigquery.Client, project_id: str, regions: list[str], max_workers: int = 8
+    client: bigquery.Client,
+    project_id: str,
+    regions: list[str],
+    max_workers: int = 8,
+    datasets: list[str] | None = None,
 ) -> list[tuple[str, str]]:
     """Todas as (dataset_id, table_id) do projeto, via INFORMATION_SCHEMA
     por região em paralelo — custo $0, mesma técnica de
     domains/lineage/repository.py::list_all_table_refs (duplicado, não
-    importado — domínios isolados)."""
+    importado — domínios isolados). datasets filtra pra um subconjunto
+    de dataset_id quando informado — escanear o projeto inteiro é a
+    exceção (script/teste), não o caminho do frontend."""
     if not regions:
         return []
 
@@ -170,7 +176,13 @@ def list_all_table_refs(
             SELECT table_schema AS dataset_id, table_name AS table_id
             FROM `{project_id}.region-{region}.INFORMATION_SCHEMA.TABLES`
         """
-        rows = client.query(sql).result()
+        job_config = None
+        if datasets:
+            sql += " WHERE table_schema IN UNNEST(@datasets)"
+            job_config = bigquery.QueryJobConfig(
+                query_parameters=[bigquery.ArrayQueryParameter("datasets", "STRING", datasets)]
+            )
+        rows = client.query(sql, job_config=job_config).result()
         return [(row.dataset_id, row.table_id) for row in rows]
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:

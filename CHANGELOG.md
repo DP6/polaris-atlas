@@ -5,6 +5,49 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Lineage v2.1 + FinOps waste-scanner v1.1: gate de escopo por dataset
+
+Pedido do usuário: 11 ajustes de UX/backend coletados de uso real,
+entregues em 7 PRs sequenciais (plano em modo de planejamento). Esta
+entrada cobre o maior PR do lote — 3 telas que escaneavam o projeto
+inteiro sem gate nem explicação da regra: tabelas sem consumidor
+(lineage), candidatas a particionamento e tabelas sem uso (finops).
+
+### O que foi feito
+Generalizado o padrão já existente em `ColumnTypeScopePicker.tsx` (que
+exige escolher tabelas antes de rodar column-type-suggestions) num
+componente novo `components/DatasetScopeGate.tsx` — granularidade de
+dataset (não tabela), com descrição da regra da tela + botão
+"Executar". As 3 telas passaram a exigir esse gate antes de disparar a
+query real; nenhuma delas tinha antes.
+
+Backend: `GET /orphans` ganhou `datasets` (repetido) + `lookback_days`
+(`LookbackDays` IntEnum: 30/60/90/365, era fixo em 30). `GET
+/unused-tables` e `GET /partition-candidates` ganharam `datasets`. Os
+três continuam funcionando sem o parâmetro (scan de projeto inteiro,
+capacidade preservada pra scripts/testes) — só o frontend passou a
+sempre mandar um escopo explícito. `list_all_table_refs` (duplicada em
+`lineage` e `finops`, domínios isolados por convenção do projeto)
+ganhou filtro `WHERE table_schema IN UNNEST(@datasets)` nas duas cópias.
+
+Também: coluna "Tipo atual" na tabela de sugestões de tipo de coluna
+(profiling) — o campo `current_type` já vinha no payload, só não era
+renderizado.
+
+### Erros cometidos e aprendizados
+- Testes existentes de `list_all_table_refs` (lineage e finops) mockavam
+  `client.query` com uma função que só aceitava `sql` — quebraram ao
+  `query()` passar a sempre receber `job_config` (mesmo que `None`).
+  Ajustado pra aceitar o kwarg opcional nos dois arquivos de teste.
+
+### Mudanças de arquitetura
+- Nenhuma — `DatasetScopeGate` é um componente novo em `components/`
+  (compartilhado entre domínios, diferente de `ColumnTypeScopePicker`
+  que é local a `features/finops/`), mas segue o mesmo racional já
+  estabelecido, não introduz um padrão novo.
+
+---
+
 ## Catalog v1.6: seletor de projeto lista os projetos que a SA alcança
 
 Pedido do usuário logo após reportar (e eu confirmar via logs) que a

@@ -137,13 +137,17 @@ def _parse_entry(entry: cloud_logging.LogEntry) -> JobEvent | None:
     )
 
 
-def list_job_events(client: cloud_logging.Client, project_id: str) -> list[JobEvent]:
+def list_job_events(
+    client: cloud_logging.Client, project_id: str, lookback_days: int = LOOKBACK_DAYS
+) -> list[JobEvent]:
     """Levanta LoggingAccessDeniedError se a SA de runtime não tiver
     roles/logging.viewer no projeto. Lista vazia (sem erro) é o resultado
     tanto de "nenhum job rodou na janela" quanto de "Data Access audit
     logs desabilitados" — os dois casos são indistinguíveis por aqui, ver
-    aviso estático em domains/lineage/service.py."""
-    cutoff = (datetime.now(UTC) - timedelta(days=LOOKBACK_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    aviso estático em domains/lineage/service.py. lookback_days ajustável
+    só usado por get_orphans — get_table_lineage/upstream/downstream
+    continuam no default do módulo (LOOKBACK_DAYS)."""
+    cutoff = (datetime.now(UTC) - timedelta(days=lookback_days)).strftime("%Y-%m-%dT%H:%M:%SZ")
     filter_ = (
         'resource.type="bigquery_resource" '
         'protoPayload.methodName="jobservice.jobcompleted" '
@@ -161,13 +165,19 @@ def list_job_events(client: cloud_logging.Client, project_id: str) -> list[JobEv
 
 
 def list_all_table_refs(
-    client: bigquery.Client, project_id: str, regions: list[str], max_workers: int = 8
+    client: bigquery.Client,
+    project_id: str,
+    regions: list[str],
+    max_workers: int = 8,
+    datasets: list[str] | None = None,
 ) -> list[tuple[str, str]]:
     """Todas as (dataset_id, table_id) do projeto, via INFORMATION_SCHEMA
     por região em paralelo — mesma técnica de
     domains/catalog/repository.py::search_tables. Duplicado em vez de
     importado de catalog porque nenhum domínio deste projeto importa de
-    outro (ver CLAUDE.md — domínios isolados)."""
+    outro (ver CLAUDE.md — domínios isolados). datasets filtra pra um
+    subconjunto de dataset_id quando informado — escanear o projeto
+    inteiro é a exceção (script/teste), não o caminho do frontend."""
     if not regions:
         return []
 
@@ -176,7 +186,13 @@ def list_all_table_refs(
             SELECT table_schema AS dataset_id, table_name AS table_id
             FROM `{project_id}.region-{region}.INFORMATION_SCHEMA.TABLES`
         """
-        rows = client.query(sql).result()
+        job_config = None
+        if datasets:
+            sql += " WHERE table_schema IN UNNEST(@datasets)"
+            job_config = bigquery.QueryJobConfig(
+                query_parameters=[bigquery.ArrayQueryParameter("datasets", "STRING", datasets)]
+            )
+        rows = client.query(sql, job_config=job_config).result()
         return [(row.dataset_id, row.table_id) for row in rows]
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:

@@ -465,6 +465,30 @@ def test_get_orphans_returns_tables_never_referenced(monkeypatch):
     assert result.warning is None
 
 
+def test_get_orphans_passes_datasets_and_lookback_days_through(monkeypatch):
+    client = MagicMock()
+    logging_client = MagicMock()
+    captured = {}
+    monkeypatch.setattr(service, "discover_regions", lambda project_id, client: ["US"])
+
+    def fake_list_all_table_refs(client, project_id, regions, datasets=None):
+        captured["datasets"] = datasets
+        return []
+
+    def fake_list_job_events(logging_client, project_id, lookback_days=30):
+        captured["lookback_days"] = lookback_days
+        return []
+
+    monkeypatch.setattr(service.repository, "list_all_table_refs", fake_list_all_table_refs)
+    monkeypatch.setattr(service.repository, "list_job_events", fake_list_job_events)
+
+    result = service.get_orphans(client, logging_client, "proj", datasets=["RAW"], lookback_days=90)
+
+    assert captured["datasets"] == ["RAW"]
+    assert captured["lookback_days"] == 90
+    assert result.lookback_days == 90
+
+
 def test_get_orphans_ignores_referenced_tables_from_other_projects(monkeypatch):
     client = MagicMock()
     logging_client = MagicMock()

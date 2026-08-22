@@ -400,6 +400,23 @@ def test_list_job_events_parses_valid_entries_and_skips_invalid_ones():
     assert 'resource.type="bigquery_resource"' in call_kwargs["filter_"]
 
 
+def test_list_job_events_uses_custom_lookback_days():
+    client = MagicMock()
+    client.list_entries.return_value = []
+
+    repository.list_job_events(client, "proj", lookback_days=90)
+    filter_90 = client.list_entries.call_args.kwargs["filter_"]
+
+    repository.list_job_events(client, "proj", lookback_days=30)
+    filter_30 = client.list_entries.call_args.kwargs["filter_"]
+
+    # Cutoff de 90 dias é uma data mais antiga (string menor, formato
+    # ISO ordena lexicograficamente) do que a de 30 dias — não precisa
+    # congelar o relógio pra confirmar que o parâmetro é respeitado.
+    assert filter_90 != filter_30
+    assert filter_90 < filter_30
+
+
 # --- list_all_table_refs -------------------------------------------------------
 
 
@@ -411,7 +428,7 @@ def test_list_all_table_refs_returns_empty_for_no_regions():
 def test_list_all_table_refs_merges_results_across_regions():
     client = MagicMock()
 
-    def _query(sql):
+    def _query(sql, job_config=None):
         result = MagicMock()
         if "region-US" in sql:
             result.result.return_value = [
@@ -428,3 +445,16 @@ def test_list_all_table_refs_merges_results_across_regions():
     refs = repository.list_all_table_refs(client, "proj", ["US", "EU"])
 
     assert set(refs) == {("RAW", "crm_leads"), ("RAW", "crm_accounts")}
+
+
+def test_list_all_table_refs_filters_by_dataset_when_provided():
+    client = MagicMock()
+    result = MagicMock()
+    result.result.return_value = [SimpleNamespace(dataset_id="RAW", table_id="crm_leads")]
+    client.query.return_value = result
+
+    repository.list_all_table_refs(client, "proj", ["US"], datasets=["RAW"])
+
+    called_sql, called_kwargs = client.query.call_args
+    assert "WHERE table_schema IN UNNEST(@datasets)" in called_sql[0]
+    assert called_kwargs["job_config"].query_parameters[0].values == ["RAW"]

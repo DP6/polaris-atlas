@@ -1,9 +1,9 @@
 # Spec — Domínio: FinOps — Scanner de desperdício
 
-**Versão:** 1.0
+**Versão:** 1.1 (escopo por dataset nos dois endpoints)
 **Status:** Aprovada
 **Fase:** 4 — FinOps (primeira frente: scanner de desperdício)
-**Última atualização:** 2026-08-15
+**Última atualização:** 2026-08-22
 
 ---
 
@@ -55,6 +55,11 @@ Tabelas sem leitura conhecida na janela pedida.
 
 **Parâmetros opcionais:**
 - `min_days_unused` (query, default `30`) — `30`, `60` ou `90`.
+- `datasets` (query, repetido, v1.1) — filtra a enumeração de tabelas
+  pra um subconjunto de `dataset_id`. Sem ele, escaneia o projeto
+  inteiro (comportamento anterior, ainda a capacidade padrão da API —
+  o frontend (`UnusedTablesTab`) sempre manda um escopo explícito via
+  `DatasetScopeGate`, escanear tudo sem gate era lento em produção).
 
 **Response 200:**
 ```json
@@ -87,6 +92,11 @@ pela mesma razão de sempre: a janela de audit logs é finita).
 ### GET /api/v1/finops/{project_id}/partition-candidates
 Tabelas grandes, não particionadas, com coluna candidata a chave de
 partição.
+
+**Parâmetros opcionais:**
+- `datasets` (query, repetido, v1.1) — mesmo racional do parâmetro
+  acima em `unused-tables`; o frontend (`PartitionCandidatesTab`)
+  sempre manda um escopo explícito via `DatasetScopeGate`.
 
 **Response 200:**
 ```json
