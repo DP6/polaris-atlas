@@ -15,10 +15,17 @@ export function useTableLineage(
   })
 }
 
-export function useOrphans(projectId: string | undefined) {
+// enabled: false até o usuário escolher o escopo (datasets) e clicar em
+// "Executar" no DatasetScopeGate — escanear o projeto inteiro sem gate é
+// o que essa tela deixou de fazer.
+export function useOrphans(
+  projectId: string | undefined,
+  options: { datasets?: string[]; lookbackDays?: number; enabled?: boolean } = {},
+) {
+  const { datasets, lookbackDays, enabled = true } = options
   return useQuery({
-    queryKey: ['orphans', projectId],
-    queryFn: () => lineageApi.getOrphans(projectId as string),
-    enabled: Boolean(projectId),
+    queryKey: ['orphans', projectId, datasets, lookbackDays],
+    queryFn: () => lineageApi.getOrphans(projectId as string, { datasets, lookbackDays }),
+    enabled: Boolean(projectId) && enabled,
   })
 }

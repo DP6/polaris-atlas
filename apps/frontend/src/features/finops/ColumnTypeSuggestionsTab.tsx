@@ -137,6 +137,7 @@ export function ColumnTypeSuggestionsTab({
                   <TableHeader>
                     <TableRow>
                       <TableHead>Coluna</TableHead>
+                      <TableHead>Tipo atual</TableHead>
                       <TableHead>Tipo sugerido</TableHead>
                       <TableHead className="text-right">Amostrados</TableHead>
                       <TableHead className="text-right">Bytes (atual → sugerido)</TableHead>
@@ -147,6 +148,7 @@ export function ColumnTypeSuggestionsTab({
                     {candidate.suggestions.map((s) => (
                       <TableRow key={s.column_name}>
                         <TableCell className="font-medium">{s.column_name}</TableCell>
+                        <TableCell className="text-muted-foreground">{s.current_type}</TableCell>
                         <TableCell>
                           <Badge variant="outline">{s.suggested_type}</Badge>
                         </TableCell>

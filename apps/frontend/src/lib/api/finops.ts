@@ -9,14 +9,26 @@ import type {
   UnusedTablesResponse,
 } from '@/types/finops'
 
-export const finopsApi = {
-  getUnusedTables: (projectId: string, minDaysUnused: MinDaysUnused = 30) =>
-    httpClient.get<UnusedTablesResponse>(
-      `/api/v1/finops/${projectId}/unused-tables?min_days_unused=${minDaysUnused}`,
-    ),
+function datasetsQueryString(datasets: string[] | undefined): string {
+  const params = new URLSearchParams()
+  for (const dataset of datasets ?? []) params.append('datasets', dataset)
+  return params.toString()
+}
 
-  getPartitionCandidates: (projectId: string) =>
-    httpClient.get<PartitionCandidatesResponse>(`/api/v1/finops/${projectId}/partition-candidates`),
+export const finopsApi = {
+  getUnusedTables: (projectId: string, minDaysUnused: MinDaysUnused = 30, datasets?: string[]) => {
+    const params = datasetsQueryString(datasets)
+    return httpClient.get<UnusedTablesResponse>(
+      `/api/v1/finops/${projectId}/unused-tables?min_days_unused=${minDaysUnused}${params ? `&${params}` : ''}`,
+    )
+  },
+
+  getPartitionCandidates: (projectId: string, datasets?: string[]) => {
+    const params = datasetsQueryString(datasets)
+    return httpClient.get<PartitionCandidatesResponse>(
+      `/api/v1/finops/${projectId}/partition-candidates${params ? `?${params}` : ''}`,
+    )
+  },
 
   getBudget: (projectId: string, groupBy: BudgetGroupBy = 'table', limit = 10) =>
     httpClient.get<BudgetResponse>(

@@ -271,10 +271,12 @@ def get_orphans(
     client: bigquery.Client,
     logging_client: cloud_logging.Client,
     project_id: str,
+    datasets: list[str] | None = None,
+    lookback_days: int = repository.LOOKBACK_DAYS,
 ) -> OrphansResponse:
     regions = discover_regions(project_id, client=client)
-    all_tables = repository.list_all_table_refs(client, project_id, regions)
-    events = repository.list_job_events(logging_client, project_id)
+    all_tables = repository.list_all_table_refs(client, project_id, regions, datasets=datasets)
+    events = repository.list_job_events(logging_client, project_id, lookback_days=lookback_days)
 
     consumed: set[tuple[str, str]] = set()
     for event in events:
@@ -287,6 +289,6 @@ def get_orphans(
     return OrphansResponse(
         project_id=project_id,
         orphans=[OrphanTable(dataset_id=d, table_id=t) for d, t in orphans],
-        lookback_days=repository.LOOKBACK_DAYS,
+        lookback_days=lookback_days,
         warning=_empty_result_warning(project_id) if not events else None,
     )

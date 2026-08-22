@@ -228,7 +228,7 @@ def test_list_all_table_refs_returns_empty_for_no_regions():
 def test_list_all_table_refs_merges_results_across_regions():
     client = MagicMock()
 
-    def _query(sql):
+    def _query(sql, job_config=None):
         result = MagicMock()
         if "region-US" in sql:
             result.result.return_value = [SimpleNamespace(dataset_id="RAW", table_id="crm_leads")]
@@ -243,6 +243,32 @@ def test_list_all_table_refs_merges_results_across_regions():
     refs = repository.list_all_table_refs(client, "proj", ["US", "EU"])
 
     assert set(refs) == {("RAW", "crm_leads"), ("RAW", "crm_accounts")}
+
+
+def test_list_all_table_refs_filters_by_dataset_when_provided():
+    client = MagicMock()
+    result = MagicMock()
+    result.result.return_value = [SimpleNamespace(dataset_id="RAW", table_id="crm_leads")]
+    client.query.return_value = result
+
+    repository.list_all_table_refs(client, "proj", ["US"], datasets=["RAW"])
+
+    called_sql, called_kwargs = client.query.call_args
+    assert "WHERE table_schema IN UNNEST(@datasets)" in called_sql[0]
+    assert called_kwargs["job_config"].query_parameters[0].values == ["RAW"]
+
+
+def test_list_all_table_refs_no_filter_when_datasets_not_provided():
+    client = MagicMock()
+    result = MagicMock()
+    result.result.return_value = []
+    client.query.return_value = result
+
+    repository.list_all_table_refs(client, "proj", ["US"])
+
+    called_sql, called_kwargs = client.query.call_args
+    assert "WHERE" not in called_sql[0]
+    assert called_kwargs["job_config"] is None
 
 
 # --- get_date_like_columns -------------------------------------------------------

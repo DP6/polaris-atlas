@@ -2,8 +2,10 @@ import { Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { DatasetScopeGate } from '@/components/DatasetScopeGate'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SortableTableHead } from '@/components/SortableTableHead'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -16,9 +18,11 @@ import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components
 import { useOrphans } from '@/features/lineage/hooks'
 import { useProjectContext } from '@/features/projects/ProjectContext'
 import { useTableFilterSort } from '@/hooks/useTableFilterSort'
+import { cn } from '@/lib/utils'
 import type { OrphanTable } from '@/types/lineage'
 
 const DATASET_FILTER_ALL = 'all'
+const LOOKBACK_OPTIONS = [30, 60, 90, 365] as const
 
 type SortKey = 'dataset_id' | 'table_id'
 
@@ -26,9 +30,44 @@ function compare(a: OrphanTable, b: OrphanTable, key: SortKey): number {
   return a[key].localeCompare(b[key])
 }
 
+function LookbackPicker({ value, onChange }: { value: number; onChange: (days: number) => void }) {
+  return (
+    <div>
+      <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
+        Período analisado (dias)
+      </span>
+      <div className="flex gap-2">
+        {LOOKBACK_OPTIONS.map((days) => (
+          <button
+            key={days}
+            type="button"
+            onClick={() => onChange(days)}
+            className={cn(
+              'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+              value === days
+                ? 'border-primary bg-primary/10 text-foreground'
+                : 'border-border text-muted-foreground hover:bg-muted',
+            )}
+          >
+            {days}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function OrphansPage() {
   const { projectId } = useProjectContext()
-  const orphansQuery = useOrphans(projectId)
+  const [hasRun, setHasRun] = useState(false)
+  const [scopeDatasets, setScopeDatasets] = useState<string[]>([])
+  const [lookbackDays, setLookbackDays] = useState<number>(30)
+
+  const orphansQuery = useOrphans(projectId, {
+    datasets: scopeDatasets,
+    lookbackDays,
+    enabled: hasRun,
+  })
   const data = orphansQuery.data
 
   const datasets = useMemo(
@@ -53,6 +92,27 @@ export function OrphansPage() {
       (datasetFilter === DATASET_FILTER_ALL || orphan.dataset_id === datasetFilter),
   })
 
+  if (!hasRun) {
+    return (
+      <DatasetScopeGate
+        projectId={projectId}
+        title="Tabelas sem consumidor"
+        description={
+          'Uma tabela é considerada "sem consumidor" quando não aparece como tabela lida em ' +
+          'nenhum job do BigQuery dentro do período analisado — mesmo que só tenha sido ' +
+          'escrita/carregada e nunca consultada. Escolha os datasets e o período antes de ' +
+          'rodar; escanear o projeto inteiro pode ser lento em produção.'
+        }
+        extraControls={<LookbackPicker value={lookbackDays} onChange={setLookbackDays} />}
+        onRun={(datasets) => {
+          setScopeDatasets(datasets)
+          setHasRun(true)
+        }}
+        isRunning={orphansQuery.isFetching}
+      />
+    )
+  }
+
   if (orphansQuery.isLoading) {
     return <p className="text-muted-foreground">Carregando…</p>
   }
@@ -73,10 +133,15 @@ export function OrphansPage() {
             dias
           </p>
         </div>
-        <RefreshButton
-          isRefreshing={orphansQuery.isFetching}
-          onRefresh={() => orphansQuery.refetch()}
-        />
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setHasRun(false)}>
+            Nova busca
+          </Button>
+          <RefreshButton
+            isRefreshing={orphansQuery.isFetching}
+            onRefresh={() => orphansQuery.refetch()}
+          />
+        </div>
       </div>
 
       {data.warning && (

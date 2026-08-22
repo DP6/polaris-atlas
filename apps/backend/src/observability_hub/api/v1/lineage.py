@@ -6,7 +6,11 @@ from observability_hub.core.auth import require_project_access
 from observability_hub.core.bigquery import get_client
 from observability_hub.core.logging_client import get_logging_client
 from observability_hub.domains.lineage import service
-from observability_hub.domains.lineage.schemas import LineageGraphResponse, OrphansResponse
+from observability_hub.domains.lineage.schemas import (
+    LineageGraphResponse,
+    LookbackDays,
+    OrphansResponse,
+)
 
 router = APIRouter(
     prefix="/api/v1/lineage", tags=["lineage"], dependencies=[Depends(require_project_access)]
@@ -16,10 +20,14 @@ router = APIRouter(
 @router.get("/{project_id}/orphans", response_model=OrphansResponse)
 def get_orphans(
     project_id: str,
+    datasets: list[str] | None = Query(default=None),
+    lookback_days: LookbackDays = Query(default=LookbackDays.THIRTY),
     client: bigquery.Client = Depends(get_client),
     logging_client: cloud_logging.Client = Depends(get_logging_client),
 ) -> OrphansResponse:
-    return service.get_orphans(client, logging_client, project_id)
+    return service.get_orphans(
+        client, logging_client, project_id, datasets=datasets, lookback_days=int(lookback_days)
+    )
 
 
 @router.get("/{project_id}/{dataset_id}/{table_id}", response_model=LineageGraphResponse)

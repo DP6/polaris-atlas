@@ -2,6 +2,7 @@ import { Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { DatasetScopeGate } from '@/components/DatasetScopeGate'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { Badge } from '@/components/ui/badge'
@@ -36,6 +37,7 @@ import { useProjectContext } from '@/features/projects/ProjectContext'
 import { useTableFilterSort } from '@/hooks/useTableFilterSort'
 import { formatBytes, formatDate, formatNumber } from '@/lib/format'
 import { ApiError } from '@/lib/http-client'
+import { cn } from '@/lib/utils'
 import type {
   ColumnTypeCandidate,
   MinDaysUnused,
@@ -120,7 +122,12 @@ function compareUnused(a: UnusedTable, b: UnusedTable, key: UnusedSortKey): numb
 
 function UnusedTablesTab({ projectId }: { projectId: string | undefined }) {
   const [minDaysUnused, setMinDaysUnused] = useState<MinDaysUnused>(30)
-  const query = useUnusedTables(projectId, minDaysUnused)
+  const [hasRun, setHasRun] = useState(false)
+  const [scopeDatasets, setScopeDatasets] = useState<string[]>([])
+  const query = useUnusedTables(projectId, minDaysUnused, {
+    datasets: scopeDatasets,
+    enabled: hasRun,
+  })
   const data = query.data
 
   const datasets = useMemo(
@@ -144,6 +151,51 @@ function UnusedTablesTab({ projectId }: { projectId: string | undefined }) {
       matchesSearch(table.dataset_id, table.table_id, term) &&
       (datasetFilter === DATASET_FILTER_ALL || table.dataset_id === datasetFilter),
   })
+
+  if (!hasRun) {
+    return (
+      <div className="mt-4">
+        <DatasetScopeGate
+          projectId={projectId}
+          title="Tabelas sem uso"
+          description={
+            'Lista tabelas sem nenhuma leitura registrada (via audit log de jobs do BigQuery) ' +
+            'há pelo menos o número de dias escolhido abaixo. Escolha os datasets antes de ' +
+            'rodar; escanear o projeto inteiro pode ser lento em produção.'
+          }
+          extraControls={
+            <div>
+              <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                Sem uso há pelo menos
+              </span>
+              <div className="flex gap-2">
+                {MIN_DAYS_OPTIONS.map((days) => (
+                  <button
+                    key={days}
+                    type="button"
+                    onClick={() => setMinDaysUnused(days)}
+                    className={cn(
+                      'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                      minDaysUnused === days
+                        ? 'border-primary bg-primary/10 text-foreground'
+                        : 'border-border text-muted-foreground hover:bg-muted',
+                    )}
+                  >
+                    {days} dias
+                  </button>
+                ))}
+              </div>
+            </div>
+          }
+          onRun={(scopedDatasets) => {
+            setScopeDatasets(scopedDatasets)
+            setHasRun(true)
+          }}
+          isRunning={query.isFetching}
+        />
+      </div>
+    )
+  }
 
   if (query.isLoading) {
     return <p className="mt-4 text-sm text-muted-foreground">Carregando…</p>
@@ -213,7 +265,10 @@ function UnusedTablesTab({ projectId }: { projectId: string | undefined }) {
         <span className="text-sm text-muted-foreground">
           {visibleTables.length} de {data.tables.length} tabela{data.tables.length === 1 ? '' : 's'}
         </span>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setHasRun(false)}>
+            Nova busca
+          </Button>
           <RefreshButton isRefreshing={query.isFetching} onRefresh={() => query.refetch()} />
         </div>
       </div>
@@ -314,7 +369,9 @@ function comparePartition(
 }
 
 function PartitionCandidatesTab({ projectId }: { projectId: string | undefined }) {
-  const query = usePartitionCandidates(projectId)
+  const [hasRun, setHasRun] = useState(false)
+  const [scopeDatasets, setScopeDatasets] = useState<string[]>([])
+  const query = usePartitionCandidates(projectId, { datasets: scopeDatasets, enabled: hasRun })
   const data = query.data
   const [estimateFilter, setEstimateFilter] = useState<EstimateFilter>(ESTIMATE_FILTER_ALL)
 
@@ -351,6 +408,29 @@ function PartitionCandidatesTab({ projectId }: { projectId: string | undefined }
     },
   })
 
+  if (!hasRun) {
+    return (
+      <div className="mt-4">
+        <DatasetScopeGate
+          projectId={projectId}
+          title="Candidatas a particionamento"
+          description={
+            'Sinaliza tabelas ainda não particionadas, com pelo menos 1GB, que têm ao menos ' +
+            'uma coluna DATE/DATETIME/TIMESTAMP candidata a chave de partição. A economia ' +
+            'estimada (quando exibida) usa o custo real observado nos últimos 30 dias de jobs ' +
+            'que referenciaram a tabela — sem atividade recente, a tabela ainda aparece como ' +
+            'candidata, só sem estimativa de economia. Escolha os datasets antes de rodar.'
+          }
+          onRun={(datasets) => {
+            setScopeDatasets(datasets)
+            setHasRun(true)
+          }}
+          isRunning={query.isFetching}
+        />
+      </div>
+    )
+  }
+
   if (query.isLoading) {
     return <p className="mt-4 text-sm text-muted-foreground">Carregando…</p>
   }
@@ -380,6 +460,9 @@ function PartitionCandidatesTab({ projectId }: { projectId: string | undefined }
             className="pl-8"
           />
         </div>
+        <Button variant="outline" size="sm" onClick={() => setHasRun(false)}>
+          Nova busca
+        </Button>
         <Select
           value={estimateFilter}
           onValueChange={(value) =>

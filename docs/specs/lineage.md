@@ -1,9 +1,9 @@
 # Spec — Domínio: Lineage e tabelas órfãs
 
-**Versão:** 2.0 (cadeia transitiva multi-hop, cross-project, diagrama)
+**Versão:** 2.1 (escopo por dataset + lookback ajustável em /orphans)
 **Status:** Aprovada
 **Fase:** 3 — Sprint 3.2 (lineage e órfãos)
-**Última atualização:** 2026-08-14
+**Última atualização:** 2026-08-22
 
 ---
 
@@ -136,11 +136,26 @@ derrubam a requisição — ver "Casos de borda".
 
 ---
 
-### GET /api/v1/lineage/{project_id}/orphans
-Inalterado da v1 — ver `OrphansResponse`/`OrphanTable` em
-`domains/lineage/schemas.py`. Continua 1-nível: uma tabela é órfã se
-nenhum job no projeto a referenciou como fonte na janela de 30 dias,
-independente de cadeias transitivas.
+### GET /api/v1/lineage/{project_id}/orphans (v2.1)
+Ver `OrphansResponse`/`OrphanTable` em `domains/lineage/schemas.py`.
+Continua 1-nível: uma tabela é órfã se nenhum job no projeto a
+referenciou como fonte na janela de lookback, independente de cadeias
+transitivas.
+
+Dois query params novos (v2.1), ambos opcionais — sem eles o
+comportamento é idêntico ao de antes (projeto inteiro, 30 dias):
+- `datasets` (repetido, ex: `?datasets=RAW&datasets=TRUSTED`) — filtra
+  `list_all_table_refs` pra um subconjunto de `dataset_id` via `WHERE
+  table_schema IN UNNEST(@datasets)`. O frontend (`OrphansPage.tsx`)
+  sempre manda um escopo explícito via `DatasetScopeGate` — escanear o
+  projeto inteiro sem gate era lento em produção com muitos datasets;
+  `None` continua existindo como capacidade da API (scripts/testes).
+- `lookback_days` (`LookbackDays` IntEnum: 30/60/90/365, default 30) —
+  propagado até `repository.list_job_events`, que aceita
+  `lookback_days` como parâmetro em vez do antigo `LOOKBACK_DAYS` fixo
+  do módulo (endpoints de lineage transitiva —
+  `get_table_lineage`/upstream/downstream — continuam no default do
+  módulo, não ganharam esse controle).
 
 ---
 

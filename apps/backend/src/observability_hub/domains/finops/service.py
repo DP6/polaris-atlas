@@ -133,9 +133,10 @@ def scan_unused_tables(
     logging_client: cloud_logging.Client,
     project_id: str,
     min_days_unused: MinDaysUnused = 30,
+    datasets: list[str] | None = None,
 ) -> UnusedTablesResponse:
     regions = discover_regions(project_id, client=client)
-    all_tables = repository.list_all_table_refs(client, project_id, regions)
+    all_tables = repository.list_all_table_refs(client, project_id, regions, datasets=datasets)
     events = repository.list_scan_events(logging_client, project_id, _UNUSED_TABLES_LOOKBACK_DAYS)
 
     last_access: dict[tuple[str, str], datetime] = {}
@@ -202,9 +203,10 @@ def scan_partition_candidates(
     client: bigquery.Client,
     logging_client: cloud_logging.Client,
     project_id: str,
+    datasets: list[str] | None = None,
 ) -> PartitionCandidatesResponse:
     regions = discover_regions(project_id, client=client)
-    all_tables = repository.list_all_table_refs(client, project_id, regions)
+    all_tables = repository.list_all_table_refs(client, project_id, regions, datasets=datasets)
     table_refs = [f"{project_id}.{d}.{t}" for d, t in all_tables]
     metadata = get_tables_metadata(client, table_refs)
 
