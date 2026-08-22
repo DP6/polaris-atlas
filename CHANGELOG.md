@@ -5,6 +5,34 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## FinOps Budget + Storage waste scanner: tela de pré-execução
+
+Parte 5/7 do plano combinado desta sessão. Diferente do PR anterior
+(que precisou de mudança de backend), este é só reordenação de
+frontend — os dois endpoints já suportavam os parâmetros necessários
+(`group_by`/`limit` no budget; `min_days_unused` no waste scanner de
+storage), só não havia gate nenhum antes de disparar a query.
+
+### O que foi feito
+- `BudgetPage.tsx`: ao entrar na tela, mostra descrição do que o budget
+  faz + os controles de agrupamento (tabela/usuário/dia/mês/ano, já
+  existiam, só apareciam depois do resultado) e um seletor de limite de
+  itens (5/10/20/50, não existia na UI antes, endpoint já suportava) +
+  botão "Executar". `useBudget` ganhou um parâmetro `enabled`.
+- `WastePage.tsx` (storage): mesmo padrão — descrição da regra (idade +
+  lifecycle rule, com nota sobre a checagem opcional via audit log) +
+  seletor de threshold (30/60/90 dias, já existia) + botão "Executar".
+  `useWasteCandidates` ganhou o mesmo parâmetro `enabled`.
+- As duas telas ganharam um botão "Nova busca" pra voltar à tela de
+  pré-execução sem perder o resultado anterior visível até clicar.
+
+### Mudanças de arquitetura
+- Nenhuma — sem `DatasetScopeGate` aqui (nem budget nem o waste scanner
+  de storage têm granularidade de dataset), gate construído inline em
+  cada página, mesmo padrão visual do componente compartilhado.
+
+---
+
 ## Lineage v2.1 + FinOps waste-scanner v1.1: gate de escopo por dataset
 
 Pedido do usuário: 11 ajustes de UX/backend coletados de uso real,
