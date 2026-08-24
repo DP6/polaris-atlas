@@ -32,7 +32,9 @@ import { useHistory } from '@/features/history/hooks'
 import { cn } from '@/lib/utils'
 import type { Favorite } from '@/types/favorites'
 
-const MAX_RECENT_TABLES_SHOWN = 5
+const QUANTITY_OPTIONS = [5, 10, 20] as const
+const QUANTITY_ALL = 'all'
+type QuantityLimit = (typeof QUANTITY_OPTIONS)[number] | typeof QUANTITY_ALL
 
 interface DatasetSidebarProps {
   projectId: string
@@ -106,8 +108,51 @@ function SidebarServiceGroupPlaceholder({ icon, label }: { icon: ReactNode; labe
   )
 }
 
-// Subseção dentro de um serviço (Governança, FinOps, Datasets
-// disponíveis, Favoritos, Recentes) — todas recolhidas por padrão
+// Seletor "quantos mostrar" pra Favoritos/Recentes — mesmo estilo pill
+// de LookbackPicker (lineage/OrphansPage.tsx). Estado local por seção,
+// não persiste entre sessões (decisão simples de propósito).
+function QuantityPicker({
+  value,
+  onChange,
+}: {
+  value: QuantityLimit
+  onChange: (next: QuantityLimit) => void
+}) {
+  return (
+    <div className="mb-2 flex flex-wrap gap-1 px-3">
+      {QUANTITY_OPTIONS.map((n) => (
+        <button
+          key={n}
+          type="button"
+          onClick={() => onChange(n)}
+          className={cn(
+            'rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors',
+            value === n
+              ? 'border-primary bg-primary/10 text-foreground'
+              : 'border-border text-muted-foreground hover:bg-muted',
+          )}
+        >
+          {n}
+        </button>
+      ))}
+      <button
+        type="button"
+        onClick={() => onChange(QUANTITY_ALL)}
+        className={cn(
+          'rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors',
+          value === QUANTITY_ALL
+            ? 'border-primary bg-primary/10 text-foreground'
+            : 'border-border text-muted-foreground hover:bg-muted',
+        )}
+      >
+        Todos
+      </button>
+    </div>
+  )
+}
+
+// Subseção dentro de um serviço (Governança, FinOps, Catálogo,
+// Favoritos, Análises de DQ, Recentes) — todas recolhidas por padrão
 // (`open` vem de fora, sempre iniciado em `false` no componente pai).
 function SidebarSection({
   label,
@@ -144,9 +189,7 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
   )
   const datasetFavorites = projectFavorites?.filter((f) => f.table_id === null)
   const historyQuery = useHistory()
-  const recentTables = historyQuery.data?.recent_tables
-    .filter((t) => t.project_id === projectId)
-    .slice(0, MAX_RECENT_TABLES_SHOWN)
+  const recentTablesAll = historyQuery.data?.recent_tables.filter((t) => t.project_id === projectId)
 
   // Os dois serviços começam recolhidos por padrão — sidebar menos
   // carregada no primeiro acesso, cada um expande sob demanda. Tudo que
@@ -154,12 +197,21 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
   const [bigQueryOpen, setBigQueryOpen] = useState(false)
   const [cloudStorageOpen, setCloudStorageOpen] = useState(false)
   const [governanceOpen, setGovernanceOpen] = useState(false)
-  const [profilingOpen, setProfilingOpen] = useState(false)
+  const [dqAnalysesOpen, setDqAnalysesOpen] = useState(false)
   const [finopsOpen, setFinopsOpen] = useState(false)
-  const [datasetsOpen, setDatasetsOpen] = useState(false)
+  const [catalogOpen, setCatalogOpen] = useState(false)
   const [favoritesOpen, setFavoritesOpen] = useState(false)
   const [recentOpen, setRecentOpen] = useState(false)
   const [datasetFilter, setDatasetFilter] = useState('')
+  const [favoritesLimit, setFavoritesLimit] = useState<QuantityLimit>(5)
+  const [recentLimit, setRecentLimit] = useState<QuantityLimit>(5)
+
+  const visibleTableFavorites =
+    favoritesLimit === QUANTITY_ALL ? tableFavorites : tableFavorites?.slice(0, favoritesLimit)
+  const visibleDatasetFavorites =
+    favoritesLimit === QUANTITY_ALL ? datasetFavorites : datasetFavorites?.slice(0, favoritesLimit)
+  const recentTables =
+    recentLimit === QUANTITY_ALL ? recentTablesAll : recentTablesAll?.slice(0, recentLimit)
   const visibleDatasets = datasetsQuery.data?.datasets.filter((dataset) =>
     dataset.dataset_id.toLowerCase().includes(datasetFilter.toLowerCase()),
   )
@@ -185,15 +237,6 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
           </nav>
         </SidebarSection>
 
-        <SidebarSection label="Profiling" open={profilingOpen} onOpenChange={setProfilingOpen}>
-          <nav className="flex flex-col gap-0.5">
-            <NavLink to="/quality/folders" className={NAV_LINK_CLASS}>
-              <FolderKanban size={16} />
-              Pastas de profiling
-            </NavLink>
-          </nav>
-        </SidebarSection>
-
         <SidebarSection label="FinOps" open={finopsOpen} onOpenChange={setFinopsOpen}>
           <nav className="flex flex-col gap-0.5">
             <NavLink to="/finops" end className={NAV_LINK_CLASS}>
@@ -207,11 +250,7 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
           </nav>
         </SidebarSection>
 
-        <SidebarSection
-          label="Datasets disponíveis"
-          open={datasetsOpen}
-          onOpenChange={setDatasetsOpen}
-        >
+        <SidebarSection label="Catálogo" open={catalogOpen} onOpenChange={setCatalogOpen}>
           <NavLink to="/search" className={NAV_LINK_CLASS}>
             <Search size={16} />
             Buscar tabelas
@@ -294,87 +333,108 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
           </nav>
         </SidebarSection>
 
-        {projectFavorites && projectFavorites.length > 0 && (
-          <SidebarSection label="Favoritos" open={favoritesOpen} onOpenChange={setFavoritesOpen}>
-            <div className="flex flex-col gap-3">
-              {tableFavorites && tableFavorites.length > 0 && (
-                <div>
-                  <p className="px-3 text-[11px] font-semibold tracking-wide text-muted-foreground/70 uppercase">
-                    Tabelas favoritas
-                  </p>
-                  <nav className="flex flex-col gap-0.5">
-                    {tableFavorites.map((favorite) => (
-                      <div
-                        key={`${favorite.dataset_id}.${favorite.table_id}`}
-                        className="group flex flex-col gap-0.5 rounded-md px-3 py-2 transition-colors hover:bg-muted"
-                      >
-                        <Link
-                          to={`/datasets/${favorite.dataset_id}`}
-                          state={{ highlightTable: favorite.table_id }}
-                          className="flex items-center gap-2 text-sm text-foreground"
-                        >
-                          <Star size={12} className="shrink-0 fill-primary text-primary" />
-                          <span className="truncate">
-                            {favorite.dataset_id}.{favorite.table_id}
-                          </span>
-                        </Link>
-                        <FavoriteNickname
-                          nickname={favorite.nickname}
-                          onSave={(nickname) =>
-                            updateNickname.mutate({
-                              projectId,
-                              datasetId: favorite.dataset_id,
-                              tableId: favorite.table_id,
-                              nickname,
-                            })
-                          }
-                        />
-                      </div>
-                    ))}
-                  </nav>
-                </div>
-              )}
+        <SidebarSection label="Favoritos" open={favoritesOpen} onOpenChange={setFavoritesOpen}>
+          <div className="flex flex-col gap-3">
+            {projectFavorites && projectFavorites.length > 0 ? (
+              <QuantityPicker value={favoritesLimit} onChange={setFavoritesLimit} />
+            ) : (
+              <p className="px-3 text-sm text-muted-foreground">
+                Nenhum favorito ainda — clique na estrela ao lado de um dataset ou tabela para
+                favoritar.
+              </p>
+            )}
 
-              {datasetFavorites && datasetFavorites.length > 0 && (
-                <div>
-                  <p className="px-3 text-[11px] font-semibold tracking-wide text-muted-foreground/70 uppercase">
-                    Datasets favoritos
-                  </p>
-                  <nav className="flex flex-col gap-0.5">
-                    {datasetFavorites.map((favorite) => (
-                      <div
-                        key={favorite.dataset_id}
-                        className="group flex flex-col gap-0.5 rounded-md px-3 py-2 transition-colors hover:bg-muted"
+            {visibleTableFavorites && visibleTableFavorites.length > 0 && (
+              <div>
+                <p className="px-3 text-[11px] font-semibold tracking-wide text-muted-foreground/70 uppercase">
+                  Tabelas favoritas
+                </p>
+                <nav className="flex flex-col gap-0.5">
+                  {visibleTableFavorites.map((favorite) => (
+                    <div
+                      key={`${favorite.dataset_id}.${favorite.table_id}`}
+                      className="group flex flex-col gap-0.5 rounded-md px-3 py-2 transition-colors hover:bg-muted"
+                    >
+                      <Link
+                        to={`/datasets/${favorite.dataset_id}`}
+                        state={{ highlightTable: favorite.table_id }}
+                        className="flex items-center gap-2 text-sm text-foreground"
                       >
-                        <Link
-                          to={`/datasets/${favorite.dataset_id}`}
-                          className="flex items-center gap-2 text-sm text-foreground"
-                        >
-                          <Star size={12} className="shrink-0 fill-primary text-primary" />
-                          <span className="truncate">{favorite.dataset_id}</span>
-                        </Link>
-                        <FavoriteNickname
-                          nickname={favorite.nickname}
-                          onSave={(nickname) =>
-                            updateNickname.mutate({
-                              projectId,
-                              datasetId: favorite.dataset_id,
-                              tableId: null,
-                              nickname,
-                            })
-                          }
-                        />
-                      </div>
-                    ))}
-                  </nav>
-                </div>
-              )}
-            </div>
-          </SidebarSection>
-        )}
+                        <Star size={12} className="shrink-0 fill-primary text-primary" />
+                        <span className="truncate">
+                          {favorite.dataset_id}.{favorite.table_id}
+                        </span>
+                      </Link>
+                      <FavoriteNickname
+                        nickname={favorite.nickname}
+                        onSave={(nickname) =>
+                          updateNickname.mutate({
+                            projectId,
+                            datasetId: favorite.dataset_id,
+                            tableId: favorite.table_id,
+                            nickname,
+                          })
+                        }
+                      />
+                    </div>
+                  ))}
+                </nav>
+              </div>
+            )}
+
+            {visibleDatasetFavorites && visibleDatasetFavorites.length > 0 && (
+              <div>
+                <p className="px-3 text-[11px] font-semibold tracking-wide text-muted-foreground/70 uppercase">
+                  Datasets favoritos
+                </p>
+                <nav className="flex flex-col gap-0.5">
+                  {visibleDatasetFavorites.map((favorite) => (
+                    <div
+                      key={favorite.dataset_id}
+                      className="group flex flex-col gap-0.5 rounded-md px-3 py-2 transition-colors hover:bg-muted"
+                    >
+                      <Link
+                        to={`/datasets/${favorite.dataset_id}`}
+                        className="flex items-center gap-2 text-sm text-foreground"
+                      >
+                        <Star size={12} className="shrink-0 fill-primary text-primary" />
+                        <span className="truncate">{favorite.dataset_id}</span>
+                      </Link>
+                      <FavoriteNickname
+                        nickname={favorite.nickname}
+                        onSave={(nickname) =>
+                          updateNickname.mutate({
+                            projectId,
+                            datasetId: favorite.dataset_id,
+                            tableId: null,
+                            nickname,
+                          })
+                        }
+                      />
+                    </div>
+                  ))}
+                </nav>
+              </div>
+            )}
+          </div>
+        </SidebarSection>
+
+        <SidebarSection
+          label="Análises de DQ"
+          open={dqAnalysesOpen}
+          onOpenChange={setDqAnalysesOpen}
+        >
+          <nav className="flex flex-col gap-0.5">
+            <NavLink to="/quality/folders" className={NAV_LINK_CLASS}>
+              <FolderKanban size={16} />
+              Pastas de profiling
+            </NavLink>
+          </nav>
+        </SidebarSection>
 
         {recentTables && recentTables.length > 0 && (
           <SidebarSection label="Recentes" open={recentOpen} onOpenChange={setRecentOpen}>
+            <QuantityPicker value={recentLimit} onChange={setRecentLimit} />
             <nav className="flex flex-col gap-0.5">
               {recentTables.map((view) => (
                 <Link
