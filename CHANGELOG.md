@@ -5,10 +5,49 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Docs: specs faltantes (auth/favorites/history) + práticas de rastreabilidade no CLAUDE.md
+
+Pedido do usuário, motivado por uma comparação com o framework
+spec-driven do onp-spec-driven (github.com/onovoprogramador/onp-spec-driven):
+avaliamos o que valia adotar sem migrar pro motor mecânico completo deles.
+
+### O que foi feito
+- `docs/specs/auth.md`, `docs/specs/favorites.md`, `docs/specs/history.md`
+  (novos) — os 3 domínios de plataforma que já estavam implementados sem
+  spec (gap real, não um domínio faltando implementação). Escritas
+  retroativamente, documentando o comportamento atual (endpoints, regras,
+  casos de borda) — não um plano futuro.
+- `CLAUDE.md` — formalizadas práticas novas na seção "Contexto: Spec e
+  documentação": critérios de aceite numerados (`AC-xxx`) em tabela
+  apontando o teste que prova (sem precisar de motor mecânico — só a
+  disciplina de nomear e referenciar), só quando a mudança toca
+  comportamento de domínio documentado numa spec; seções `## Suposições`
+  (`ASM-xxx`) e `## Perguntas em aberto` (`Q-xxx`) persistidas na spec,
+  em vez de decisões esclarecidas por pergunta direta ficarem só no
+  histórico do chat; regra de que "Erros cometidos e aprendizados" no
+  CHANGELOG só recebe entrada amarrada a uma falha real, não opinião
+  solta.
+- `CLAUDE.md` — nova seção "Colaboração" (perguntar mais/presumir menos,
+  sugerir funcionalidades quando fizer sentido) e regras novas em "Git e
+  Claude Code": nunca fazer deploy (push/merge/aprovação de gate de prod)
+  sem confirmação explícita a cada vez, com resumo breve dos commits; PRs
+  não levam mais o rodapé "Generated with Claude Code" (commits mantêm o
+  trailer `Co-Authored-By: Claude`).
+- As 3 specs novas já nascem no formato com AC-xxx, mapeando pra nomes
+  reais de teste já existentes em `tests/unit/{auth,favorites,history}/`
+  — sem retrofit de tags nos arquivos de teste em si (os domínios são
+  estáveis, não estão sendo modificados agora).
+
+### Mudanças de arquitetura
+- Nenhuma mudança de código — só documentação e convenção de processo.
+
+---
+
 ## Profiling v1.4: pastas de comparação de runs
 
 Parte 2/2 do pedido do usuário sobre histórico de profiling — parte 1 foi
-[[Profiling v1.3: parâmetros registrados no histórico]]. Aqui: curar runs
+a entrada anterior, "Profiling v1.3: parâmetros registrados no
+histórico". Aqui: curar runs
 específicos em pastas nomeadas (ex: "unicidade exata e 1 ano de consulta"
 vs. "amostragem total") e comparar os resultados salvos numa tela
 dedicada, em vez de depender só do histórico corrido de até 30 runs por
