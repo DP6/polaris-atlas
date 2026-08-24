@@ -1,9 +1,9 @@
 # Spec — Domínio: Profiling (quality)
 
-**Versão:** 1.2 (suporte a views, tipo lógico por tipo físico, schema preview)
+**Versão:** 1.3 (parâmetros registrados no histórico)
 **Status:** Aprovada
 **Fase:** 2 — MVP v1
-**Última atualização:** 2026-08-13
+**Última atualização:** 2026-08-24
 
 ---
 
@@ -168,6 +168,47 @@ Drill down: distribuição de nulos ao longo do tempo por coluna.
   ]
 }
 ```
+
+---
+
+### GET /api/v1/quality/history/{project_id}/{dataset_id}/{table_id}
+Histórico dos últimos até 30 runs de profiling da tabela (`domains/quality/history_repository.py`,
+subcoleção `profiling_history/{project}_{dataset}_{table}/runs`, mais
+antigos apagados a cada novo save — ver "trim-to-max" no repository).
+Coleção compartilhada entre usuários, não por quem rodou.
+
+**Response 200:**
+```json
+{
+  "project_id": "observability-hub-dev",
+  "dataset_id": "RAW",
+  "table_id": "crm_leads",
+  "runs": [
+    {
+      "executed_at": "2026-08-05T10:00:00Z",
+      "executed_by": "ana@dp6.com.br",
+      "overall_density": 100.0,
+      "estimated_duplicate_pct": 4.74,
+      "columns": [
+        { "column_name": "lead_status", "completeness_pct": 100.0, "quality_flag": "ok" }
+      ],
+      "parameters": {
+        "sample_percent": 10,
+        "uniqueness_method": "approx",
+        "date_column": "date",
+        "date_window_days": 365
+      }
+    }
+  ]
+}
+```
+
+`parameters` (v1.3) — os mesmos filtros do `/run` que geraram aquele run
+específico, pra diferenciar "resultado mudou porque o dado mudou" de
+"resultado mudou porque o parâmetro mudou" ao comparar runs. `null` em
+runs salvos antes desta versão (docs antigos do Firestore não têm o
+campo — `service.get_quality_history` usa `.get()`, não indexação
+direta, exatamente por isso).
 
 ---
 

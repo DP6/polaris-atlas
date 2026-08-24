@@ -52,6 +52,7 @@ def save_run(
     estimated_duplicate_pct: float,
     executed_by: str,
     columns: list[dict],
+    parameters: dict,
 ) -> None:
     collection = _runs_collection(client, project_id, dataset_id, table_id)
     collection.add(
@@ -64,6 +65,7 @@ def save_run(
             "overall_density": overall_density,
             "estimated_duplicate_pct": estimated_duplicate_pct,
             "columns": columns,
+            "parameters": parameters,
         }
     )
     _trim_to_max(collection)

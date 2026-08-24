@@ -38,6 +38,7 @@ def test_save_run_writes_then_trims():
         estimated_duplicate_pct=1.5,
         executed_by="a@dp6.com.br",
         columns=[{"column_name": "email", "completeness_pct": 91.3, "quality_flag": "ok"}],
+        parameters={"sample_percent": 100, "uniqueness_method": "approx"},
     )
 
     client.collection.assert_called_once_with("profiling_history")
@@ -55,6 +56,7 @@ def test_save_run_writes_then_trims():
     assert added["columns"] == [
         {"column_name": "email", "completeness_pct": 91.3, "quality_flag": "ok"}
     ]
+    assert added["parameters"] == {"sample_percent": 100, "uniqueness_method": "approx"}
     assert isinstance(added["executed_at"], datetime)
     assert added["executed_at"].tzinfo is UTC
 
@@ -79,6 +81,7 @@ def test_trim_to_max_deletes_only_overflow_docs():
         estimated_duplicate_pct=0.0,
         executed_by="a@dp6.com.br",
         columns=[],
+        parameters={"sample_percent": 100, "uniqueness_method": "approx"},
     )
 
     overflow_doc.reference.delete.assert_called_once()
