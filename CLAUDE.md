@@ -189,6 +189,13 @@ Diretrizes para os workflows quando forem criados:
 - **Sempre pedir aprovação explícita do usuário antes de qualquer `git push`** — commits locais não pedem aprovação, pushes sim.
 - Commits seguem [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`, `ci:`).
 - Branches: `feature/<descrição>`, `fix/<descrição>`, `chore/<descrição>`. Lembre-se: qualquer push nessas branches dispara deploy em dev — evitar pushes intermediários "quebrados" quando possível.
+- **Nunca fazer deploy (push, merge de PR pra `main`, ou aprovar o gate de prod) sem confirmação explícita do usuário a cada vez** — uma aprovação anterior não vale como aprovação permanente pras próximas, mesmo dentro da mesma sessão. Ao pedir essa confirmação, incluir um resumo breve dos commits envolvidos (título de cada um + 1 linha do que muda), sem alongar.
+- PRs abertos via `gh pr create` **não** levam o rodapé "🤖 Generated with Claude Code" no corpo — o PR sobe em nome do usuário (`gh` já autentica com a conta dele). Commits continuam normalmente com o trailer `Co-Authored-By: Claude`.
+
+## Colaboração
+
+- **Perguntar mais, presumir menos**: decisões de produto ambíguas (nome, escopo, comportamento, formato de dado) sempre passam por uma pergunta direta ao usuário antes de implementar — mesmo que pareçam pequenas ou óbvias. Melhor uma pergunta a mais do que implementar a coisa errada e ter que refazer.
+- **Sugerir funcionalidades quando fizer sentido**: ao identificar uma lacuna, melhoria ou efeito colateral relacionado ao que está sendo pedido, apontar a sugestão explicitamente na resposta — sem implementar por conta própria, só levantar a ideia pro usuário decidir.
 
 ## Guardrails
 
@@ -273,6 +280,7 @@ Antes de implementar qualquer domínio:
 Checklist de entrega:
 - [ ] Spec do domínio existe e foi seguida
 - [ ] Testes unitários em tests/unit/ cobrindo lógica principal
+- [ ] Critérios de aceite novos/alterados na spec têm teste referenciando o ID (ver "Contexto: Spec e documentação")
 - [ ] pytest passou sem erros
 - [ ] Nenhuma chamada GCP em tests/unit/ (usar mocks)
 - [ ] ruff check e ruff format sem erros
@@ -325,11 +333,29 @@ Ao criar uma spec de domínio (docs/specs/<domínio>.md), incluir obrigatoriamen
 - Fonte de dados (qual API/tabela BQ/log)
 - Endpoints da API (método, path, parâmetros, response schema)
 - Queries BigQuery planejadas com estimativa de custo
+- Critérios de aceite numerados (`AC-xxx`) pros comportamentos centrais —
+  não precisa ser Dado/Quando/Então rígido, só uma frase clara do
+  comportamento esperado, numa tabela apontando o teste que prova
+  (`test_nome_da_funcao`). Regra prática de quando isso vale: só pra
+  mudança que altera (ou passa a documentar) comportamento de um domínio
+  numa spec — ajuste cosmético/de configuração sem lógica nova não
+  precisa de AC.
+- Seções `## Suposições` (`ASM-xxx`) e `## Perguntas em aberto` (`Q-xxx`),
+  cada uma com status (`aberta`/`confirmada`/`invalidada` pra suposição;
+  `aberta`/`respondida` pra pergunta). Toda decisão de produto esclarecida
+  com o usuário via pergunta direta durante a implementação de algo que
+  uma spec já cobre (ou passa a cobrir) fica registrada aqui — não só no
+  histórico da conversa, que não sobrevive a um `/clear` nem a uma sessão
+  nova lendo a spec meses depois.
 - Casos de borda e comportamento esperado
 - O que está fora do escopo desta spec
 
 Ao atualizar o CHANGELOG.md:
 - Registrar o que foi feito, erros cometidos e aprendizados
+- "Erros cometidos e aprendizados" só recebe entrada amarrada a uma
+  falha real que ocorreu durante a implementação (algo quebrou, foi
+  corrigido, um teste pegou um caso errado) — não é espaço pra opinião
+  solta sobre o que "seria melhor".
 - Registrar qualquer mudança de arquitetura com justificativa
 - Atualizar o status das fases na tabela de próximas fases
 
