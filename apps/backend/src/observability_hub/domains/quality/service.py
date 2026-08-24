@@ -13,28 +13,44 @@ from google.cloud import bigquery, firestore
 from observability_hub.core.bigquery import discover_regions, resolve_dataset_region
 from observability_hub.core.config import settings
 from observability_hub.core.exceptions import (
+    FolderAccessDeniedError,
+    FolderNotFoundError,
     InvalidDateColumnError,
     InvalidSamplePercentError,
     ProfilingTimeoutError,
     TableNotFoundError,
 )
-from observability_hub.domains.quality import history_repository, repository, sql_builder
+from observability_hub.domains.admin import service as admin_service
+from observability_hub.domains.quality import (
+    folder_repository,
+    history_repository,
+    repository,
+    sql_builder,
+)
 from observability_hub.domains.quality.schemas import (
     ColumnProfile,
+    CreateProfilingFolderRequest,
     EstimateResponse,
     ExcludedColumn,
+    FolderVisibility,
     Granularity,
     HistoryColumnSnapshot,
     InferredLogicalType,
     NullDistributionPoint,
     NullDistributionResponse,
+    ProfilingFolder,
+    ProfilingFolderDetailResponse,
+    ProfilingFolderEntry,
+    ProfilingFoldersListResponse,
     ProfilingHistoryResponse,
     ProfilingHistoryRun,
     ProfilingRequest,
     ProfilingRunResponse,
     QualityFlag,
+    SaveRunToFolderRequest,
     TableProfilingSummary,
     TopValue,
+    UpdateProfilingFolderRequest,
 )
 
 _PROFILING_TIMEOUT_SECONDS = 60.0
@@ -487,3 +503,165 @@ def get_quality_history(
     return ProfilingHistoryResponse(
         project_id=project_id, dataset_id=dataset_id, table_id=table_id, runs=runs
     )
+
+
+# --- Pastas de comparação (v1.4) ----------------------------------------------------
+
+
+def _can_view_folder(folder: dict, user_email: str, is_admin: bool) -> bool:
+    if is_admin or folder["created_by"] == user_email:
+        return True
+    if folder["visibility"] == FolderVisibility.SHARED_ALL.value:
+        return True
+    if folder["visibility"] == FolderVisibility.SHARED_EMAILS.value:
+        return user_email in folder.get("shared_with", [])
+    return False
+
+
+def _can_manage_folder(folder: dict, user_email: str, is_admin: bool) -> bool:
+    """Só dono e admin — editar (nome/compartilhamento), apagar a pasta,
+    e adicionar/remover entries. Diferente de _can_view_folder: alguém
+    com quem a pasta foi compartilhada só vê/compara, não mexe."""
+    return is_admin or folder["created_by"] == user_email
+
+
+def _to_profiling_folder(raw: dict, entry_count: int) -> ProfilingFolder:
+    return ProfilingFolder(
+        folder_id=raw["folder_id"],
+        name=raw["name"],
+        created_by=raw["created_by"],
+        created_at=raw["created_at"],
+        updated_at=raw["updated_at"],
+        visibility=FolderVisibility(raw["visibility"]),
+        shared_with=raw.get("shared_with", []),
+        entry_count=entry_count,
+    )
+
+
+def _to_profiling_folder_entry(raw: dict) -> ProfilingFolderEntry:
+    return ProfilingFolderEntry(
+        entry_id=raw["entry_id"],
+        project_id=raw["project_id"],
+        dataset_id=raw["dataset_id"],
+        table_id=raw["table_id"],
+        saved_at=raw["saved_at"],
+        saved_by=raw["saved_by"],
+        executed_at=raw["executed_at"],
+        executed_by=raw["executed_by"],
+        parameters=ProfilingRequest(**raw["parameters"]),
+        overall_density=raw["overall_density"],
+        estimated_duplicate_pct=raw["estimated_duplicate_pct"],
+        columns=[HistoryColumnSnapshot(**c) for c in raw["columns"]],
+    )
+
+
+def _get_folder_or_raise(client: firestore.Client, folder_id: str) -> dict:
+    folder = folder_repository.get_folder(client, folder_id)
+    if folder is None:
+        raise FolderNotFoundError(folder_id)
+    return folder
+
+
+def create_folder(
+    client: firestore.Client, request: CreateProfilingFolderRequest, created_by: str
+) -> ProfilingFolder:
+    raw = folder_repository.create_folder(client, request.name, created_by)
+    return _to_profiling_folder(raw, entry_count=0)
+
+
+def list_folders_for_user(
+    client: firestore.Client, user_email: str, is_admin: bool
+) -> ProfilingFoldersListResponse:
+    raw_folders = folder_repository.list_folders(client)
+    visible = [f for f in raw_folders if _can_view_folder(f, user_email, is_admin)]
+    folders = [
+        _to_profiling_folder(f, folder_repository.count_entries(client, f["folder_id"]))
+        for f in visible
+    ]
+    folders.sort(key=lambda f: f.updated_at, reverse=True)
+    return ProfilingFoldersListResponse(folders=folders)
+
+
+def get_folder_detail(
+    client: firestore.Client, folder_id: str, user_email: str, is_admin: bool
+) -> ProfilingFolderDetailResponse:
+    raw = _get_folder_or_raise(client, folder_id)
+    if not _can_view_folder(raw, user_email, is_admin):
+        raise FolderAccessDeniedError(folder_id)
+    raw_entries = folder_repository.list_entries(client, folder_id)
+    entries = [_to_profiling_folder_entry(e) for e in raw_entries]
+    return ProfilingFolderDetailResponse(
+        folder=_to_profiling_folder(raw, len(entries)), entries=entries
+    )
+
+
+def update_folder(
+    client: firestore.Client,
+    folder_id: str,
+    request: UpdateProfilingFolderRequest,
+    user_email: str,
+    is_admin: bool,
+) -> ProfilingFolder:
+    raw = _get_folder_or_raise(client, folder_id)
+    if not _can_manage_folder(raw, user_email, is_admin):
+        raise FolderAccessDeniedError(folder_id)
+    updated = folder_repository.update_folder(
+        client,
+        folder_id,
+        name=request.name,
+        visibility=request.visibility.value,
+        shared_with=request.shared_with,
+    )
+    return _to_profiling_folder(updated, folder_repository.count_entries(client, folder_id))
+
+
+def delete_folder(
+    client: firestore.Client, folder_id: str, user_email: str, is_admin: bool
+) -> None:
+    raw = _get_folder_or_raise(client, folder_id)
+    if not _can_manage_folder(raw, user_email, is_admin):
+        raise FolderAccessDeniedError(folder_id)
+    folder_repository.delete_folder(client, folder_id)
+
+
+def save_run_to_folder(
+    client: firestore.Client,
+    folder_id: str,
+    request: SaveRunToFolderRequest,
+    saved_by: str,
+    is_admin: bool,
+) -> ProfilingFolderEntry:
+    raw = _get_folder_or_raise(client, folder_id)
+    if not _can_manage_folder(raw, saved_by, is_admin):
+        raise FolderAccessDeniedError(folder_id)
+    # Defesa em profundidade: confirma que quem está salvando também tem
+    # acesso ao projeto do run sendo salvo, não só à pasta.
+    if not admin_service.has_project_access(client, saved_by, request.project_id):
+        raise FolderAccessDeniedError(folder_id)
+
+    entry = folder_repository.add_entry(
+        client,
+        folder_id,
+        {
+            "project_id": request.project_id,
+            "dataset_id": request.dataset_id,
+            "table_id": request.table_id,
+            "saved_by": saved_by,
+            "executed_at": request.executed_at,
+            "executed_by": request.executed_by,
+            "parameters": request.parameters.model_dump(),
+            "overall_density": request.overall_density,
+            "estimated_duplicate_pct": request.estimated_duplicate_pct,
+            "columns": [c.model_dump() for c in request.columns],
+        },
+    )
+    return _to_profiling_folder_entry(entry)
+
+
+def delete_folder_entry(
+    client: firestore.Client, folder_id: str, entry_id: str, user_email: str, is_admin: bool
+) -> None:
+    raw = _get_folder_or_raise(client, folder_id)
+    if not _can_manage_folder(raw, user_email, is_admin):
+        raise FolderAccessDeniedError(folder_id)
+    folder_repository.delete_entry(client, folder_id, entry_id)

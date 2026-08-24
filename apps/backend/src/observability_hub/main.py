@@ -24,6 +24,8 @@ from observability_hub.core.exceptions import (
     AccessRequestNotFoundError,
     AdminAccessRequiredError,
     DatasetNotFoundError,
+    FolderAccessDeniedError,
+    FolderNotFoundError,
     InvalidDateColumnError,
     InvalidSamplePercentError,
     InvalidSessionError,
@@ -62,6 +64,7 @@ app.include_router(profiling.router)
 app.include_router(favorites.router)
 app.include_router(history.router)
 app.include_router(quality.router)
+app.include_router(quality.router_folders)
 app.include_router(lineage.router)
 app.include_router(pii.router)
 app.include_router(access.router)
@@ -293,4 +296,20 @@ def handle_access_request_not_found(
     return JSONResponse(
         status_code=404,
         content={"error": "access_request_not_found", "message": str(exc)},
+    )
+
+
+@app.exception_handler(FolderNotFoundError)
+def handle_folder_not_found(request: Request, exc: FolderNotFoundError) -> JSONResponse:
+    return JSONResponse(
+        status_code=404,
+        content={"error": "folder_not_found", "message": str(exc)},
+    )
+
+
+@app.exception_handler(FolderAccessDeniedError)
+def handle_folder_access_denied(request: Request, exc: FolderAccessDeniedError) -> JSONResponse:
+    return JSONResponse(
+        status_code=403,
+        content={"error": "folder_access_denied", "message": str(exc)},
     )

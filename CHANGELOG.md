@@ -5,6 +5,52 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Profiling v1.4: pastas de comparação de runs
+
+Parte 2/2 do pedido do usuário sobre histórico de profiling — parte 1 foi
+[[Profiling v1.3: parâmetros registrados no histórico]]. Aqui: curar runs
+específicos em pastas nomeadas (ex: "unicidade exata e 1 ano de consulta"
+vs. "amostragem total") e comparar os resultados salvos numa tela
+dedicada, em vez de depender só do histórico corrido de até 30 runs por
+tabela.
+
+### O que foi feito
+- Backend: novo domínio de pastas dentro de `domains/quality/` —
+  `folder_repository.py` (Firestore: `profiling_folders/{folder_id}` +
+  subcoleção `entries`), schemas novos (`ProfilingFolder`,
+  `ProfilingFolderEntry`, `FolderVisibility`, requests/responses), e 7
+  endpoints em `router_folders` (`/api/v1/quality/folders...`, sem
+  `project_id` no path — pastas juntam runs de tabelas/projetos
+  diferentes por decisão do usuário). Cada entry grava um snapshot
+  completo do run (não uma referência ao histórico, que trima a 30 por
+  tabela). Regra de acesso em 2 níveis: quem só *vê* (visibilidade
+  `shared_all`/`shared_emails`/dono/admin) vs. quem *gerencia* (só dono
+  ou admin do Hub — edita, apaga, adiciona/remove entries).
+- Frontend: `SaveRunToFolderDialog.tsx` (botão "Salvar em pasta" em
+  `ProfilingDialog.tsx`, some assim que um run termina),
+  `QualityFoldersPage.tsx` (lista de pastas visíveis) e
+  `QualityFolderComparisonPage.tsx` (detalhe da pasta — cards por entry
+  com parâmetros/métricas, edição de nome/compartilhamento pra quem
+  gerencia, e uma tabela de diff coluna a coluna automática quando ≥2
+  entries são da mesma tabela, destacando diferenças de completude acima
+  de 10pp). Nova subseção própria "Profiling" na sidebar (dentro do
+  grupo BigQuery, ao lado de Governança/FinOps), item único "Pastas de
+  profiling".
+- `docs/specs/profiling.md` bump pra v1.4, nova seção "Pastas de
+  comparação de profiling" documentando modelo de dados, regra de
+  acesso, os 7 endpoints e a lógica de comparação coluna a coluna.
+
+### Mudanças de arquitetura
+- Primeiro caso no Hub de uma pasta poder juntar dados de projetos GCP
+  diferentes no mesmo agrupamento lógico — decisão explícita do usuário
+  ("qualquer tabela") em vez de prender a pasta a uma tabela/projeto só.
+- Primeiro router de `quality` que não depende de `project_id` no path
+  (mesmo padrão já usado por `GET /api/v1/projects`) — `router` (existente,
+  histórico) e `router_folders` (novo) coexistem no mesmo módulo
+  `api/v1/quality.py`, registrados separadamente em `main.py`.
+
+---
+
 ## Profiling v1.3: parâmetros registrados no histórico
 
 Parte 1/2 de um pedido do usuário sobre histórico de profiling — parte 2
