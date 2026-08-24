@@ -5,6 +5,28 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Profiling v1.3: parâmetros registrados no histórico
+
+Parte 1/2 de um pedido do usuário sobre histórico de profiling — parte 2
+é o domínio de pastas de comparação (feature nova, PR separado).
+
+### O que foi feito
+`ProfilingHistoryRun` (histórico de até 30 runs por tabela, Firestore)
+ganhou `parameters` (amostragem, método de unicidade, coluna/janela de
+data) — antes só `overall_density`/`estimated_duplicate_pct`/`columns`
+eram salvos, sem registrar QUAIS filtros geraram aquele resultado.
+`None` em runs salvos antes desta versão (docs antigos do Firestore não
+têm o campo — `service.get_quality_history` usa `.get()`, não indexação
+direta). `HistoryTab.tsx` mostra os parâmetros na linha expandida de
+cada run.
+
+### Mudanças de arquitetura
+- Nenhuma — `parameters` já existia como conceito em `ProfilingRequest`/
+  `ProfilingRunResponse.parameters` (resposta do run ao vivo), só não
+  era persistido no histórico.
+
+---
+
 ## Frontend: modo claro (light/dark toggle)
 
 Pedido do usuário — `docs/skills/frontend.md` já previa isso como

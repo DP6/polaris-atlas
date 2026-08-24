@@ -1,4 +1,4 @@
-import type { QualityFlag } from '@/types/profiling'
+import type { ProfilingRequest, QualityFlag } from '@/types/profiling'
 
 export interface HistoryColumnSnapshot {
   column_name: string
@@ -12,6 +12,8 @@ export interface ProfilingHistoryRun {
   overall_density: number
   estimated_duplicate_pct: number
   columns: HistoryColumnSnapshot[]
+  // null só pra runs gravados antes deste campo existir.
+  parameters: ProfilingRequest | null
 }
 
 export interface ProfilingHistoryResponse {

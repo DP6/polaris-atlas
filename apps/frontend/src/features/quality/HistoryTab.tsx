@@ -20,13 +20,33 @@ import {
 import { useQualityHistory } from '@/features/quality/hooks'
 import { formatDate, formatPercent } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import type { QualityFlag } from '@/types/profiling'
+import type { QualityFlag, UniquenessMethod } from '@/types/profiling'
 import type { ProfilingHistoryRun } from '@/types/quality'
 
 const QUALITY_FLAG_LABELS: Record<QualityFlag, string> = {
   ok: 'OK',
   warning: 'Atenção',
   critical: 'Crítico',
+}
+
+// Mesmos rótulos de ProfilingDialog.tsx — duplicado porque não há um
+// lugar compartilhado só pra isso ainda (dois arquivos pequenos, não
+// vale a pena extrair um módulo só pra 2 linhas de mapeamento).
+const UNIQUENESS_METHOD_LABELS: Record<UniquenessMethod, string> = {
+  approx: 'Aproximado (HLL)',
+  exact: 'Exato',
+}
+
+function formatRunParameters(parameters: ProfilingHistoryRun['parameters']): string {
+  if (!parameters) return 'Parâmetros não registrados neste run.'
+  const parts = [
+    `Amostragem: ${parameters.sample_percent}%`,
+    `Unicidade: ${UNIQUENESS_METHOD_LABELS[parameters.uniqueness_method]}`,
+    parameters.date_column
+      ? `Data: ${parameters.date_column} (últimos ${parameters.date_window_days} dias)`
+      : 'Sem filtro de data',
+  ]
+  return parts.join(' · ')
 }
 
 const QUALITY_FLAG_COLOR: Record<QualityFlag, string> = {
@@ -158,6 +178,9 @@ function RunRow({
       {isExpanded && (
         <TableRow>
           <TableCell colSpan={5} className="bg-muted/30 p-0">
+            <p className="px-3 pt-3 text-muted-foreground text-xs">
+              {formatRunParameters(run.parameters)}
+            </p>
             <Table>
               <TableHeader>
                 <TableRow>

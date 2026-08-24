@@ -794,6 +794,7 @@ def test_run_profiling_saves_run_to_history(monkeypatch):
     assert kwargs["columns"] == [
         {"column_name": "email", "completeness_pct": 100.0, "quality_flag": "ok"}
     ]
+    assert kwargs["parameters"] == ProfilingRequest().model_dump()
 
 
 # --- get_quality_history -----------------------------------------------------
@@ -844,3 +845,39 @@ def test_get_quality_history_maps_raw_runs_to_response(monkeypatch):
     assert run.estimated_duplicate_pct == 1.5
     assert run.columns[0].column_name == "email"
     assert run.columns[0].quality_flag == QualityFlag.OK
+    # Doc antigo, sem "parameters" — não deve quebrar, só ficar None.
+    assert run.parameters is None
+
+
+def test_get_quality_history_includes_parameters_when_present(monkeypatch):
+    firestore_client = MagicMock()
+    monkeypatch.setattr(
+        service.history_repository,
+        "list_runs",
+        lambda *a, **kw: [
+            {
+                "executed_at": datetime(2026, 8, 10, tzinfo=UTC),
+                "executed_by": "a@dp6.com.br",
+                "overall_density": 91.3,
+                "estimated_duplicate_pct": 1.5,
+                "columns": [],
+                "parameters": {
+                    "sample_percent": 50,
+                    "uniqueness_method": "exact",
+                    "date_column": "signup_date",
+                    "date_window_days": 90,
+                },
+            }
+        ],
+    )
+
+    result = service.get_quality_history(
+        firestore_client, "observability-hub-dev", "RAW", "crm_leads"
+    )
+
+    parameters = result.runs[0].parameters
+    assert parameters is not None
+    assert parameters.sample_percent == 50
+    assert parameters.uniqueness_method == UniquenessMethod.EXACT
+    assert parameters.date_column == "signup_date"
+    assert parameters.date_window_days == 90

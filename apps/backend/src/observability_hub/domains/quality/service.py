@@ -388,6 +388,7 @@ def run_profiling(
             }
             for c in column_profiles
         ],
+        parameters=request.model_dump(),
     )
 
     return ProfilingRunResponse(
@@ -477,6 +478,9 @@ def get_quality_history(
             overall_density=raw["overall_density"],
             estimated_duplicate_pct=raw["estimated_duplicate_pct"],
             columns=[HistoryColumnSnapshot(**c) for c in raw["columns"]],
+            # .get, não indexação — runs gravados antes deste campo
+            # existir não têm "parameters" no doc.
+            parameters=ProfilingRequest(**raw["parameters"]) if raw.get("parameters") else None,
         )
         for raw in raw_runs
     ]

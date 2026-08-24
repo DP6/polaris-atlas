@@ -122,6 +122,9 @@ class ProfilingHistoryRun(BaseModel):
     overall_density: float
     estimated_duplicate_pct: float
     columns: list[HistoryColumnSnapshot]
+    # None só pra runs gravados antes deste campo existir — nunca
+    # retroagido nos docs antigos do Firestore.
+    parameters: ProfilingRequest | None = None
 
 
 class ProfilingHistoryResponse(BaseModel):
