@@ -1,6 +1,6 @@
 # Spec — Domínio: Profiling (quality)
 
-**Versão:** 1.3 (parâmetros registrados no histórico)
+**Versão:** 1.4 (pastas de comparação de profiling)
 **Status:** Aprovada
 **Fase:** 2 — MVP v1
 **Última atualização:** 2026-08-24
@@ -209,6 +209,94 @@ específico, pra diferenciar "resultado mudou porque o dado mudou" de
 runs salvos antes desta versão (docs antigos do Firestore não têm o
 campo — `service.get_quality_history` usa `.get()`, não indexação
 direta, exatamente por isso).
+
+---
+
+## Pastas de comparação de profiling (v1.4)
+
+O histórico (`GET .../quality/history/...`) guarda até 30 runs por
+tabela, sem curadoria — bom pra acompanhar uma tabela ao longo do tempo,
+ruim pra "separar de propósito o run com unicidade exata de 1 ano do run
+com amostragem total, e comparar os dois lado a lado depois". Pastas
+resolvem isso: o usuário salva um run específico (com snapshot completo
+dos parâmetros e resultados) numa pasta nomeada, e pastas com ≥2 entries
+da mesma tabela ganham uma comparação coluna a coluna automática.
+
+Uma pasta pode juntar runs de tabelas (e até projetos) diferentes — não é
+presa a uma tabela específica. A comparação coluna a coluna só é
+calculada entre entries que compartilham `project_id.dataset_id.table_id`
+dentro da mesma pasta.
+
+### Modelo de dados (Firestore)
+
+```
+profiling_folders/{folder_id}          (auto-id)
+  name: str
+  created_by: str
+  created_at, updated_at: datetime
+  visibility: "private" | "shared_all" | "shared_emails"
+  shared_with: list[str]               # só relevante se shared_emails
+
+profiling_folders/{folder_id}/entries/{entry_id}   (auto-id)
+  project_id, dataset_id, table_id: str
+  saved_at, saved_by: str
+  executed_at, executed_by: str        # do run original
+  parameters: dict                      # snapshot do ProfilingRequest
+  overall_density, estimated_duplicate_pct: float
+  columns: list[dict]                   # snapshot de HistoryColumnSnapshot
+```
+
+Cada entry grava um **snapshot completo** do run no momento de salvar, não
+uma referência ao doc de `profiling_history` — o frontend já tem o
+`ProfilingRunResponse` inteiro em memória logo após rodar o profile
+("Salvar em pasta" aparece assim que o run termina), então o snapshot vai
+direto no request, sem o backend precisar rebuscar nada. Isso também evita
+a entry ficar órfã se o run original for apagado pelo trim-to-30 de
+`history_repository.py`.
+
+### Regra de acesso
+
+- **Dono** (`created_by`) e **admin do Hub** (`admin_service.is_admin`):
+  veem, editam nome/compartilhamento, apagam a pasta e gerenciam entries
+  (salvar/remover).
+- **Visualização** (só ver + comparar, não gerenciar): qualquer usuário
+  se `visibility == "shared_all"`, ou se `visibility == "shared_emails"` e
+  o e-mail dele está em `shared_with`.
+- `visibility == "private"` (padrão ao criar): só dono + admin.
+- Salvar uma entry confirma `admin_service.has_project_access` pro
+  `project_id` do run — mesma defesa em profundidade de outros endpoints
+  de escrita do Hub (o usuário não pode "salvar" resultado de um projeto
+  que ele não teria acesso pra rodar o profile).
+
+### Endpoints
+
+Router próprio (`quality.router_folders`, prefixo `/api/v1/quality/folders`),
+sem `project_id` no path — pastas não são presas a um projeto, só usam
+`Depends(get_current_user)` (mesmo padrão de `GET /api/v1/projects`).
+
+| Método | Path | Descrição |
+|---|---|---|
+| POST | `/api/v1/quality/folders` | Cria pasta (`{"name": str}`), visibilidade inicial `private` |
+| GET | `/api/v1/quality/folders` | Lista pastas visíveis ao usuário (filtro de acesso aplicado no backend) |
+| GET | `/api/v1/quality/folders/{folder_id}` | Detalhe da pasta + entries, 403 se sem acesso de visualização |
+| PUT | `/api/v1/quality/folders/{folder_id}` | Atualiza nome/visibilidade/shared_with — só quem gerencia |
+| DELETE | `/api/v1/quality/folders/{folder_id}` | Apaga a pasta e todas as entries — só quem gerencia |
+| POST | `/api/v1/quality/folders/{folder_id}/entries` | Salva o snapshot de um run na pasta — só quem gerencia |
+| DELETE | `/api/v1/quality/folders/{folder_id}/entries/{entry_id}` | Remove uma entry — só quem gerencia |
+
+`FolderNotFoundError` → 404 (`folder_not_found`), `FolderAccessDeniedError`
+→ 403 (`folder_access_denied`) — mesmo padrão de exception handler dos
+outros domínios (`core/exceptions.py` + `@app.exception_handler` em
+`main.py`).
+
+### Comparação coluna a coluna (frontend)
+
+`QualityFolderComparisonPage.tsx`: entries da pasta são agrupadas por
+`project_id.dataset_id.table_id`; grupos com ≥2 entries ganham uma tabela
+de diff (uma coluna por entry, linhas = união de `column_name` entre as
+entries do grupo). Uma linha é destacada quando a diferença de
+`completeness_pct` entre as entries excede 10 pontos percentuais (mesmo
+limiar do alerta de degradação de `HistoryTab.tsx`).
 
 ---
 

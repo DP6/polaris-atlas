@@ -4,6 +4,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from observability_hub.core.exceptions import (
+    FolderAccessDeniedError,
+    FolderNotFoundError,
     InvalidDateColumnError,
     InvalidSamplePercentError,
     ProfilingTimeoutError,
@@ -11,11 +13,16 @@ from observability_hub.core.exceptions import (
 )
 from observability_hub.domains.quality import service
 from observability_hub.domains.quality.schemas import (
+    CreateProfilingFolderRequest,
+    FolderVisibility,
     Granularity,
+    HistoryColumnSnapshot,
     InferredLogicalType,
     ProfilingRequest,
     QualityFlag,
+    SaveRunToFolderRequest,
     UniquenessMethod,
+    UpdateProfilingFolderRequest,
 )
 
 
@@ -881,3 +888,287 @@ def test_get_quality_history_includes_parameters_when_present(monkeypatch):
     assert parameters.uniqueness_method == UniquenessMethod.EXACT
     assert parameters.date_column == "signup_date"
     assert parameters.date_window_days == 90
+
+
+# --- Pastas de comparação (v1.4) ----------------------------------------------------
+
+
+def _fake_folder(
+    folder_id="folder-1",
+    created_by="ana@dp6.com.br",
+    visibility="private",
+    shared_with=None,
+) -> dict:
+    return {
+        "folder_id": folder_id,
+        "name": "Comparação Q3",
+        "created_by": created_by,
+        "created_at": datetime(2026, 8, 1, tzinfo=UTC),
+        "updated_at": datetime(2026, 8, 1, tzinfo=UTC),
+        "visibility": visibility,
+        "shared_with": shared_with or [],
+    }
+
+
+def _fake_entry(entry_id="entry-1") -> dict:
+    return {
+        "entry_id": entry_id,
+        "project_id": "proj",
+        "dataset_id": "RAW",
+        "table_id": "crm_leads",
+        "saved_at": datetime(2026, 8, 2, tzinfo=UTC),
+        "saved_by": "ana@dp6.com.br",
+        "executed_at": datetime(2026, 8, 1, tzinfo=UTC),
+        "executed_by": "ana@dp6.com.br",
+        "parameters": ProfilingRequest().model_dump(),
+        "overall_density": 91.3,
+        "estimated_duplicate_pct": 1.5,
+        "columns": [{"column_name": "email", "completeness_pct": 91.3, "quality_flag": "ok"}],
+    }
+
+
+@pytest.mark.parametrize(
+    "visibility,shared_with,user_email,is_admin,expected",
+    [
+        ("private", [], "ana@dp6.com.br", False, True),  # dono
+        ("private", [], "bob@dp6.com.br", True, True),  # admin
+        ("private", [], "bob@dp6.com.br", False, False),  # nem dono nem admin
+        ("shared_all", [], "bob@dp6.com.br", False, True),
+        ("shared_emails", ["bob@dp6.com.br"], "bob@dp6.com.br", False, True),
+        ("shared_emails", ["carol@dp6.com.br"], "bob@dp6.com.br", False, False),
+    ],
+)
+def test_can_view_folder(visibility, shared_with, user_email, is_admin, expected):
+    folder = _fake_folder(visibility=visibility, shared_with=shared_with)
+    assert service._can_view_folder(folder, user_email, is_admin) is expected
+
+
+@pytest.mark.parametrize(
+    "user_email,is_admin,expected",
+    [
+        ("ana@dp6.com.br", False, True),  # dono
+        ("bob@dp6.com.br", True, True),  # admin
+        ("bob@dp6.com.br", False, False),  # visualizador comum, mesmo com shared_all
+    ],
+)
+def test_can_manage_folder(user_email, is_admin, expected):
+    folder = _fake_folder(visibility="shared_all")
+    assert service._can_manage_folder(folder, user_email, is_admin) is expected
+
+
+def test_create_folder_returns_folder_with_zero_entries(monkeypatch):
+    client = MagicMock()
+    monkeypatch.setattr(
+        service.folder_repository, "create_folder", lambda client, name, by: _fake_folder()
+    )
+
+    result = service.create_folder(
+        client, CreateProfilingFolderRequest(name="Comparação Q3"), "ana@dp6.com.br"
+    )
+
+    assert result.folder_id == "folder-1"
+    assert result.entry_count == 0
+
+
+def test_list_folders_for_user_filters_by_visibility(monkeypatch):
+    client = MagicMock()
+    visible = _fake_folder(folder_id="visible", visibility="shared_all")
+    hidden = _fake_folder(folder_id="hidden", created_by="other@dp6.com.br", visibility="private")
+    monkeypatch.setattr(service.folder_repository, "list_folders", lambda client: [visible, hidden])
+    monkeypatch.setattr(service.folder_repository, "count_entries", lambda client, fid: 0)
+
+    result = service.list_folders_for_user(client, "ana@dp6.com.br", is_admin=False)
+
+    assert [f.folder_id for f in result.folders] == ["visible"]
+
+
+def test_get_folder_detail_raises_not_found_when_missing(monkeypatch):
+    client = MagicMock()
+    monkeypatch.setattr(service.folder_repository, "get_folder", lambda client, fid: None)
+
+    with pytest.raises(FolderNotFoundError):
+        service.get_folder_detail(client, "ghost", "ana@dp6.com.br", is_admin=False)
+
+
+def test_get_folder_detail_raises_access_denied_when_private_and_not_owner(monkeypatch):
+    client = MagicMock()
+    monkeypatch.setattr(service.folder_repository, "get_folder", lambda client, fid: _fake_folder())
+
+    with pytest.raises(FolderAccessDeniedError):
+        service.get_folder_detail(client, "folder-1", "bob@dp6.com.br", is_admin=False)
+
+
+def test_get_folder_detail_returns_folder_and_entries_when_authorized(monkeypatch):
+    client = MagicMock()
+    monkeypatch.setattr(service.folder_repository, "get_folder", lambda client, fid: _fake_folder())
+    monkeypatch.setattr(
+        service.folder_repository, "list_entries", lambda client, fid: [_fake_entry()]
+    )
+
+    result = service.get_folder_detail(client, "folder-1", "ana@dp6.com.br", is_admin=False)
+
+    assert result.folder.folder_id == "folder-1"
+    assert len(result.entries) == 1
+    assert result.entries[0].entry_id == "entry-1"
+
+
+def test_update_folder_raises_access_denied_for_non_owner_non_admin(monkeypatch):
+    client = MagicMock()
+    monkeypatch.setattr(service.folder_repository, "get_folder", lambda client, fid: _fake_folder())
+
+    with pytest.raises(FolderAccessDeniedError):
+        service.update_folder(
+            client,
+            "folder-1",
+            UpdateProfilingFolderRequest(name="Novo", visibility=FolderVisibility.SHARED_ALL),
+            "bob@dp6.com.br",
+            is_admin=False,
+        )
+
+
+def test_update_folder_succeeds_for_owner(monkeypatch):
+    client = MagicMock()
+    monkeypatch.setattr(service.folder_repository, "get_folder", lambda client, fid: _fake_folder())
+    captured = {}
+
+    def fake_update(client, folder_id, name, visibility, shared_with):
+        captured.update(name=name, visibility=visibility, shared_with=shared_with)
+        return _fake_folder(visibility=visibility, shared_with=shared_with)
+
+    monkeypatch.setattr(service.folder_repository, "update_folder", fake_update)
+    monkeypatch.setattr(service.folder_repository, "count_entries", lambda client, fid: 0)
+
+    result = service.update_folder(
+        client,
+        "folder-1",
+        UpdateProfilingFolderRequest(
+            name="Novo", visibility=FolderVisibility.SHARED_EMAILS, shared_with=["bob@dp6.com.br"]
+        ),
+        "ana@dp6.com.br",
+        is_admin=False,
+    )
+
+    assert captured["visibility"] == "shared_emails"
+    assert captured["shared_with"] == ["bob@dp6.com.br"]
+    assert result.visibility == FolderVisibility.SHARED_EMAILS
+
+
+def test_delete_folder_raises_access_denied_for_non_owner_non_admin(monkeypatch):
+    client = MagicMock()
+    monkeypatch.setattr(service.folder_repository, "get_folder", lambda client, fid: _fake_folder())
+
+    with pytest.raises(FolderAccessDeniedError):
+        service.delete_folder(client, "folder-1", "bob@dp6.com.br", is_admin=False)
+
+
+def test_delete_folder_succeeds_for_admin(monkeypatch):
+    client = MagicMock()
+    monkeypatch.setattr(service.folder_repository, "get_folder", lambda client, fid: _fake_folder())
+    delete_calls = []
+    monkeypatch.setattr(
+        service.folder_repository, "delete_folder", lambda client, fid: delete_calls.append(fid)
+    )
+
+    service.delete_folder(client, "folder-1", "bob@dp6.com.br", is_admin=True)
+
+    assert delete_calls == ["folder-1"]
+
+
+def test_save_run_to_folder_raises_access_denied_when_not_manager(monkeypatch):
+    client = MagicMock()
+    monkeypatch.setattr(service.folder_repository, "get_folder", lambda client, fid: _fake_folder())
+    request = SaveRunToFolderRequest(
+        project_id="proj",
+        dataset_id="RAW",
+        table_id="crm_leads",
+        executed_at=datetime(2026, 8, 1, tzinfo=UTC),
+        executed_by="ana@dp6.com.br",
+        parameters=ProfilingRequest(),
+        overall_density=91.3,
+        estimated_duplicate_pct=1.5,
+        columns=[],
+    )
+
+    with pytest.raises(FolderAccessDeniedError):
+        service.save_run_to_folder(client, "folder-1", request, "bob@dp6.com.br", is_admin=False)
+
+
+def test_save_run_to_folder_raises_access_denied_without_project_access(monkeypatch):
+    client = MagicMock()
+    monkeypatch.setattr(service.folder_repository, "get_folder", lambda client, fid: _fake_folder())
+    monkeypatch.setattr(service.admin_service, "has_project_access", lambda *a, **kw: False)
+    request = SaveRunToFolderRequest(
+        project_id="proj",
+        dataset_id="RAW",
+        table_id="crm_leads",
+        executed_at=datetime(2026, 8, 1, tzinfo=UTC),
+        executed_by="ana@dp6.com.br",
+        parameters=ProfilingRequest(),
+        overall_density=91.3,
+        estimated_duplicate_pct=1.5,
+        columns=[],
+    )
+
+    with pytest.raises(FolderAccessDeniedError):
+        service.save_run_to_folder(client, "folder-1", request, "ana@dp6.com.br", is_admin=False)
+
+
+def test_save_run_to_folder_succeeds_and_snapshots_run(monkeypatch):
+    client = MagicMock()
+    monkeypatch.setattr(service.folder_repository, "get_folder", lambda client, fid: _fake_folder())
+    monkeypatch.setattr(service.admin_service, "has_project_access", lambda *a, **kw: True)
+    added = {}
+
+    def fake_add_entry(client, folder_id, entry):
+        added.update(entry)
+        return {**entry, "entry_id": "entry-new", "saved_at": datetime(2026, 8, 2, tzinfo=UTC)}
+
+    monkeypatch.setattr(service.folder_repository, "add_entry", fake_add_entry)
+
+    request = SaveRunToFolderRequest(
+        project_id="proj",
+        dataset_id="RAW",
+        table_id="crm_leads",
+        executed_at=datetime(2026, 8, 1, tzinfo=UTC),
+        executed_by="ana@dp6.com.br",
+        parameters=ProfilingRequest(sample_percent=50),
+        overall_density=91.3,
+        estimated_duplicate_pct=1.5,
+        columns=[
+            HistoryColumnSnapshot(column_name="email", completeness_pct=91.3, quality_flag="ok")
+        ],
+    )
+
+    result = service.save_run_to_folder(
+        client, "folder-1", request, "ana@dp6.com.br", is_admin=False
+    )
+
+    assert result.entry_id == "entry-new"
+    assert added["saved_by"] == "ana@dp6.com.br"
+    assert added["parameters"]["sample_percent"] == 50
+    assert added["columns"] == [
+        {"column_name": "email", "completeness_pct": 91.3, "quality_flag": "ok"}
+    ]
+
+
+def test_delete_folder_entry_raises_access_denied_for_non_owner_non_admin(monkeypatch):
+    client = MagicMock()
+    monkeypatch.setattr(service.folder_repository, "get_folder", lambda client, fid: _fake_folder())
+
+    with pytest.raises(FolderAccessDeniedError):
+        service.delete_folder_entry(client, "folder-1", "entry-1", "bob@dp6.com.br", is_admin=False)
+
+
+def test_delete_folder_entry_succeeds_for_owner(monkeypatch):
+    client = MagicMock()
+    monkeypatch.setattr(service.folder_repository, "get_folder", lambda client, fid: _fake_folder())
+    delete_calls = []
+    monkeypatch.setattr(
+        service.folder_repository,
+        "delete_entry",
+        lambda client, fid, eid: delete_calls.append((fid, eid)),
+    )
+
+    service.delete_folder_entry(client, "folder-1", "entry-1", "ana@dp6.com.br", is_admin=False)
+
+    assert delete_calls == [("folder-1", "entry-1")]

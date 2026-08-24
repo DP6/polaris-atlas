@@ -177,3 +177,23 @@ class LastAdminLockoutError(Exception):
             f"Não é possível remover o acesso de administrador de '{email}' — "
             "é o último administrador do Hub. Promova outro usuário antes."
         )
+
+
+class FolderNotFoundError(Exception):
+    """Levantada por domains/quality/service.py quando folder_id não
+    existe em profiling_folders (ou a entry_id não existe na subcoleção
+    entries de um folder que existe)."""
+
+    def __init__(self, folder_id: str) -> None:
+        self.folder_id = folder_id
+        super().__init__(f"Pasta de profiling '{folder_id}' não encontrada.")
+
+
+class FolderAccessDeniedError(Exception):
+    """Levantada por domains/quality/service.py — usuário autenticado,
+    mas sem acesso de visualização (pasta privada de outra pessoa) ou de
+    gestão (só dono/admin podem editar/apagar) à pasta."""
+
+    def __init__(self, folder_id: str) -> None:
+        self.folder_id = folder_id
+        super().__init__(f"Você não tem acesso à pasta de profiling '{folder_id}'.")

@@ -13,6 +13,8 @@ import { FinOpsPage } from '@/features/finops/FinOpsPage'
 import { DatasetFreshnessPage } from '@/features/freshness/DatasetFreshnessPage'
 import { FreshnessPage } from '@/features/freshness/FreshnessPage'
 import { OrphansPage } from '@/features/lineage/OrphansPage'
+import { QualityFolderComparisonPage } from '@/features/quality/QualityFolderComparisonPage'
+import { QualityFoldersPage } from '@/features/quality/QualityFoldersPage'
 import { BucketBrowserPage } from '@/features/storage/BucketBrowserPage'
 import { BucketsPage } from '@/features/storage/BucketsPage'
 import { WastePage } from '@/features/storage/WastePage'
@@ -29,6 +31,8 @@ export function AppRoutes() {
           <Route path="freshness" element={<FreshnessPage />} />
           <Route path="freshness/:datasetId" element={<DatasetFreshnessPage />} />
           <Route path="orphans" element={<OrphansPage />} />
+          <Route path="quality/folders" element={<QualityFoldersPage />} />
+          <Route path="quality/folders/:folderId" element={<QualityFolderComparisonPage />} />
           <Route path="finops" element={<FinOpsPage />} />
           <Route path="finops/budget" element={<BudgetPage />} />
           <Route path="search" element={<SearchPage />} />

@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class UniquenessMethod(str, Enum):
@@ -132,3 +132,76 @@ class ProfilingHistoryResponse(BaseModel):
     dataset_id: str
     table_id: str
     runs: list[ProfilingHistoryRun]
+
+
+# --- Pastas de comparação (v1.4) ----------------------------------------------------
+
+
+class FolderVisibility(str, Enum):
+    PRIVATE = "private"
+    SHARED_ALL = "shared_all"
+    SHARED_EMAILS = "shared_emails"
+
+
+class ProfilingFolder(BaseModel):
+    folder_id: str
+    name: str
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+    visibility: FolderVisibility
+    # Só relevante (e só populado) quando visibility=shared_emails.
+    shared_with: list[str] = Field(default_factory=list)
+    entry_count: int
+
+
+class ProfilingFolderEntry(BaseModel):
+    entry_id: str
+    project_id: str
+    dataset_id: str
+    table_id: str
+    saved_at: datetime
+    saved_by: str
+    # Snapshot do run original — não uma referência a profiling_history,
+    # que tem trim-to-30 e apagaria a origem por baixo do pé.
+    executed_at: datetime
+    executed_by: str
+    parameters: ProfilingRequest
+    overall_density: float
+    estimated_duplicate_pct: float
+    columns: list[HistoryColumnSnapshot]
+
+
+class ProfilingFoldersListResponse(BaseModel):
+    folders: list[ProfilingFolder]
+
+
+class ProfilingFolderDetailResponse(BaseModel):
+    folder: ProfilingFolder
+    entries: list[ProfilingFolderEntry]
+
+
+class CreateProfilingFolderRequest(BaseModel):
+    name: str
+
+
+class UpdateProfilingFolderRequest(BaseModel):
+    name: str
+    visibility: FolderVisibility
+    shared_with: list[str] = Field(default_factory=list)
+
+
+class SaveRunToFolderRequest(BaseModel):
+    """Carrega o snapshot inteiro do run — o frontend já tem o
+    ProfilingRunResponse completo em memória logo após rodar o profile,
+    então salvar numa pasta não exige o backend re-buscar nada."""
+
+    project_id: str
+    dataset_id: str
+    table_id: str
+    executed_at: datetime
+    executed_by: str
+    parameters: ProfilingRequest
+    overall_density: float
+    estimated_duplicate_pct: float
+    columns: list[HistoryColumnSnapshot]

@@ -4,6 +4,7 @@ import {
   Container,
   Database,
   DollarSign,
+  FolderKanban,
   HardDrive,
   History,
   PiggyBank,
@@ -153,6 +154,7 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
   const [bigQueryOpen, setBigQueryOpen] = useState(false)
   const [cloudStorageOpen, setCloudStorageOpen] = useState(false)
   const [governanceOpen, setGovernanceOpen] = useState(false)
+  const [profilingOpen, setProfilingOpen] = useState(false)
   const [finopsOpen, setFinopsOpen] = useState(false)
   const [datasetsOpen, setDatasetsOpen] = useState(false)
   const [favoritesOpen, setFavoritesOpen] = useState(false)
@@ -179,6 +181,15 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
             <NavLink to="/orphans" className={NAV_LINK_CLASS}>
               <Unlink size={16} />
               Tabelas sem consumidor
+            </NavLink>
+          </nav>
+        </SidebarSection>
+
+        <SidebarSection label="Profiling" open={profilingOpen} onOpenChange={setProfilingOpen}>
+          <nav className="flex flex-col gap-0.5">
+            <NavLink to="/quality/folders" className={NAV_LINK_CLASS}>
+              <FolderKanban size={16} />
+              Pastas de profiling
             </NavLink>
           </nav>
         </SidebarSection>
