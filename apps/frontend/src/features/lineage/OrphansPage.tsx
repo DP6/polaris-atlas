@@ -31,20 +31,26 @@ function compare(a: OrphanTable, b: OrphanTable, key: SortKey): number {
 }
 
 function LookbackPicker({ value, onChange }: { value: number; onChange: (days: number) => void }) {
+  const isPreset = (LOOKBACK_OPTIONS as readonly number[]).includes(value)
+  const [showCustom, setShowCustom] = useState(!isPreset)
+
   return (
     <div>
       <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
         Período analisado (dias)
       </span>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {LOOKBACK_OPTIONS.map((days) => (
           <button
             key={days}
             type="button"
-            onClick={() => onChange(days)}
+            onClick={() => {
+              onChange(days)
+              setShowCustom(false)
+            }}
             className={cn(
               'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-              value === days
+              value === days && !showCustom
                 ? 'border-primary bg-primary/10 text-foreground'
                 : 'border-border text-muted-foreground hover:bg-muted',
             )}
@@ -52,6 +58,27 @@ function LookbackPicker({ value, onChange }: { value: number; onChange: (days: n
             {days}
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => setShowCustom(true)}
+          className={cn(
+            'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+            showCustom
+              ? 'border-primary bg-primary/10 text-foreground'
+              : 'border-border text-muted-foreground hover:bg-muted',
+          )}
+        >
+          Outro
+        </button>
+        {showCustom && (
+          <Input
+            type="number"
+            min={1}
+            className="h-7 w-20 text-xs"
+            value={value}
+            onChange={(e) => onChange(Number(e.target.value))}
+          />
+        )}
       </div>
     </div>
   )

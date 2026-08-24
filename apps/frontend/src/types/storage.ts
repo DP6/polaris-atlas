@@ -30,8 +30,6 @@ export interface BucketObjectsResponse {
   next_page_token: string | null
 }
 
-export type MinDaysUnused = 30 | 60 | 90
-
 export type WasteConfidence = 'config_based' | 'usage_confirmed'
 
 export interface WasteCandidate {
@@ -48,7 +46,7 @@ export interface WasteCandidate {
 
 export interface WasteCandidatesResponse {
   project_id: string
-  min_days_unused: MinDaysUnused
+  min_days_unused: number
   candidates: WasteCandidate[]
   savings_disclaimer: string
   usage_check_warning: string | null

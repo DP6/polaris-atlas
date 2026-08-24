@@ -1,21 +1,9 @@
 from datetime import datetime
-from enum import IntEnum
 from typing import Literal
 
 from pydantic import BaseModel
 
 WasteConfidence = Literal["config_based", "usage_confirmed"]
-
-
-class MinDaysUnused(IntEnum):
-    """IntEnum, não Literal[int,...] — mesma correção já aplicada em
-    domains/finops/schemas.py (Literal não faz coerção de string pra int
-    em query param, causava 422). Duplicado aqui de propósito — domínios
-    não importam um do outro (CLAUDE.md)."""
-
-    THIRTY = 30
-    SIXTY = 60
-    NINETY = 90
 
 
 class BucketSummary(BaseModel):
@@ -80,7 +68,7 @@ class BucketObjectsResponse(BaseModel):
 
 class WasteCandidatesResponse(BaseModel):
     project_id: str
-    min_days_unused: MinDaysUnused
+    min_days_unused: int
     candidates: list[WasteCandidate]
     savings_disclaimer: str
     # None quando a checagem 6.2 rodou com sinal confiável (audit log com

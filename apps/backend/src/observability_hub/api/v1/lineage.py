@@ -8,7 +8,6 @@ from observability_hub.core.logging_client import get_logging_client
 from observability_hub.domains.lineage import service
 from observability_hub.domains.lineage.schemas import (
     LineageGraphResponse,
-    LookbackDays,
     OrphansResponse,
 )
 
@@ -21,12 +20,12 @@ router = APIRouter(
 def get_orphans(
     project_id: str,
     datasets: list[str] | None = Query(default=None),
-    lookback_days: LookbackDays = Query(default=LookbackDays.THIRTY),
+    lookback_days: int = Query(default=30, ge=1),
     client: bigquery.Client = Depends(get_client),
     logging_client: cloud_logging.Client = Depends(get_logging_client),
 ) -> OrphansResponse:
     return service.get_orphans(
-        client, logging_client, project_id, datasets=datasets, lookback_days=int(lookback_days)
+        client, logging_client, project_id, datasets=datasets, lookback_days=lookback_days
     )
 
 

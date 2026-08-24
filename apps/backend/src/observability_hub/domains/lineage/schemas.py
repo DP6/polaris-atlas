@@ -1,18 +1,6 @@
-from enum import IntEnum
 from typing import Literal
 
 from pydantic import BaseModel
-
-
-class LookbackDays(IntEnum):
-    """IntEnum (não Literal[int,...]) pelo mesmo motivo de
-    finops/schemas.py::MinDaysUnused — permite coerção de string em
-    query param sem 422."""
-
-    THIRTY = 30
-    SIXTY = 60
-    NINETY = 90
-    YEAR = 365
 
 
 class TableRef(BaseModel):

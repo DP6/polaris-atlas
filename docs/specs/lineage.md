@@ -150,10 +150,12 @@ comportamento é idêntico ao de antes (projeto inteiro, 30 dias):
   sempre manda um escopo explícito via `DatasetScopeGate` — escanear o
   projeto inteiro sem gate era lento em produção com muitos datasets;
   `None` continua existindo como capacidade da API (scripts/testes).
-- `lookback_days` (`LookbackDays` IntEnum: 30/60/90/365, default 30) —
-  propagado até `repository.list_job_events`, que aceita
-  `lookback_days` como parâmetro em vez do antigo `LOOKBACK_DAYS` fixo
-  do módulo (endpoints de lineage transitiva —
+- `lookback_days` (`int`, `Query(default=30, ge=1)`, v1.1 2026-08-24 —
+  era `LookbackDays` IntEnum restrito a 30/60/90/365; virou `int` livre
+  pra o frontend (`OrphansPage.tsx::LookbackPicker`) oferecer "Outro"
+  além dos atalhos) — propagado até `repository.list_job_events`, que
+  aceita `lookback_days` como parâmetro em vez do antigo `LOOKBACK_DAYS`
+  fixo do módulo (endpoints de lineage transitiva —
   `get_table_lineage`/upstream/downstream — continuam no default do
   módulo, não ganharam esse controle).
 
