@@ -2,6 +2,7 @@ import { ChevronDown, ChevronRight, TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
 import {
   CartesianGrid,
+  Legend,
   Line,
   LineChart,
   Tooltip as RechartsTooltip,
@@ -98,6 +99,7 @@ export function HistoryTab({ projectId, datasetId, tableId }: HistoryTabProps) {
   const chartData = [...runs].reverse().map((run) => ({
     date: shortDate(run.executed_at),
     density: run.overall_density,
+    duplicates: run.estimated_duplicate_pct,
   }))
 
   const [latest, previous] = runs
@@ -120,11 +122,21 @@ export function HistoryTab({ projectId, datasetId, tableId }: HistoryTabProps) {
             <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
             <XAxis dataKey="date" tick={{ fontSize: 11 }} />
             <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} width={36} />
-            <RechartsTooltip formatter={(value) => [`${Number(value).toFixed(1)}%`, 'Densidade']} />
+            <RechartsTooltip formatter={(value) => `${Number(value).toFixed(1)}%`} />
+            <Legend wrapperStyle={{ fontSize: 12 }} />
             <Line
               type="monotone"
               dataKey="density"
+              name="Densidade"
               stroke="var(--color-primary)"
+              strokeWidth={2}
+              dot={{ r: 3 }}
+            />
+            <Line
+              type="monotone"
+              dataKey="duplicates"
+              name="Duplicatas"
+              stroke="var(--color-accent-purple)"
               strokeWidth={2}
               dot={{ r: 3 }}
             />

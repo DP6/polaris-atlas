@@ -1,6 +1,16 @@
 import { Globe, Lock, Mail, Pencil, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { RefreshButton } from '@/components/RefreshButton'
 import { Badge } from '@/components/ui/badge'
@@ -69,6 +79,17 @@ const VISIBILITY_OPTIONS: { value: FolderVisibility; label: string }[] = [
 // destacada na tabela de diff — mesmo limiar (pontos percentuais) do
 // alerta de degradação em HistoryTab.tsx, por consistência.
 const DIFF_HIGHLIGHT_THRESHOLD_PP = 10
+
+// Cores cicladas por índice do entry no gráfico de barras — mesmos
+// accent tokens de docs/skills/frontend.md, sem limite de entries por
+// pasta (acima de 5 entries repete a cor, aceitável pra esse volume).
+const ENTRY_BAR_COLORS = [
+  'var(--color-primary)',
+  'var(--color-accent-blue)',
+  'var(--color-accent-purple)',
+  'var(--color-accent-green)',
+  'var(--color-accent-orange)',
+]
 
 function tableKey(entry: ProfilingFolderEntry): string {
   return `${entry.project_id}.${entry.dataset_id}.${entry.table_id}`
@@ -318,9 +339,47 @@ function ColumnDiffTable({
     ...new Set(entries.flatMap((e) => e.columns.map((c) => c.column_name))),
   ].sort()
 
+  const barData = columnNames.map((columnName) => {
+    const row: Record<string, string | number | null> = { column: columnName }
+    for (const entry of entries) {
+      row[entry.entry_id] =
+        entry.columns.find((c) => c.column_name === columnName)?.completeness_pct ?? null
+    }
+    return row
+  })
+
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-2">
       <span className="text-muted-foreground text-xs">{tableName}</span>
+
+      <div className="h-56 w-full shrink-0 rounded-lg border border-border bg-card p-4">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={barData}>
+            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+            <XAxis
+              dataKey="column"
+              tick={{ fontSize: 10 }}
+              interval={0}
+              angle={-30}
+              textAnchor="end"
+            />
+            <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} width={36} />
+            <RechartsTooltip
+              formatter={(value) => (value === null ? '—' : `${Number(value).toFixed(1)}%`)}
+            />
+            <Legend wrapperStyle={{ fontSize: 12 }} />
+            {entries.map((entry, index) => (
+              <Bar
+                key={entry.entry_id}
+                dataKey={entry.entry_id}
+                name={entryLabel(entry)}
+                fill={ENTRY_BAR_COLORS[index % ENTRY_BAR_COLORS.length]}
+              />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
       <Table>
         <TableHeader>
           <TableRow>
