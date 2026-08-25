@@ -39,8 +39,8 @@ module "backend_cloud_run" {
     # Conta do Workspace impersonada via domain-wide delegation pra ler
     # grupos reais (core/workspace_directory.py, domains/admin v1.5) —
     # indicada pela TI ao autorizar a delegação, ver
-    # docs/onboarding-cliente.md (2026-08-21).
-    OBSERVABILITY_HUB_WORKSPACE_IMPERSONATE_EMAIL = "matheus.fuzati@dp6.com.br"
+    # docs/onboarding-cliente.md (2026-08-25).
+    OBSERVABILITY_HUB_WORKSPACE_IMPERSONATE_EMAIL = "admin.victoria@dp6.com.br"
   }
 }
 
