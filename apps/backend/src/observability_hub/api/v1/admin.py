@@ -6,11 +6,14 @@ from observability_hub.core.firestore import get_firestore_client
 from observability_hub.domains.admin import analytics_service, service
 from observability_hub.domains.admin.analytics_schemas import (
     AccessRequestAnalyticsResponse,
+    DomainUsageRankingResponse,
     FavoritesAnalyticsResponse,
     LoginAnalyticsResponse,
     NavigationAnalyticsResponse,
     PiiScanActivityResponse,
     ProfilingActivityResponse,
+    RetentionFunnelResponse,
+    UsageHeatmapResponse,
 )
 from observability_hub.domains.admin.schemas import (
     AccessRequest,
@@ -198,3 +201,26 @@ def pii_scan_activity(
     client: firestore.Client = Depends(get_firestore_client),
 ) -> PiiScanActivityResponse:
     return analytics_service.get_pii_scan_activity(client, limit)
+
+
+@router.get("/analytics/domain-usage", response_model=DomainUsageRankingResponse)
+def domain_usage_ranking(
+    client: firestore.Client = Depends(get_firestore_client),
+) -> DomainUsageRankingResponse:
+    return analytics_service.get_domain_usage_ranking(client)
+
+
+@router.get("/analytics/usage-heatmap", response_model=UsageHeatmapResponse)
+def usage_heatmap(
+    lookback_days: int = Query(default=90, ge=1, le=365),
+    client: firestore.Client = Depends(get_firestore_client),
+) -> UsageHeatmapResponse:
+    return analytics_service.get_usage_heatmap(client, lookback_days)
+
+
+@router.get("/analytics/retention-funnel", response_model=RetentionFunnelResponse)
+def retention_funnel(
+    lookback_days: int = Query(default=90, ge=1, le=365),
+    client: firestore.Client = Depends(get_firestore_client),
+) -> RetentionFunnelResponse:
+    return analytics_service.get_retention_funnel(client, lookback_days)
