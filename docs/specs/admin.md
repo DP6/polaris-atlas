@@ -1,6 +1,6 @@
 # Spec — Domínio: Admin (controle de acesso por usuário × projeto)
 
-**Versão:** 1.7 (ranking de domínios, mapa de calor de horário, funil de retenção)
+**Versão:** 1.8 (remoção do ranking de domínios, funil de retenção em 4 estágios)
 **Status:** Aprovada
 **Fase:** Transversal (não faz parte do roadmap de observabilidade de `docs/prd.md`) — plataforma
 **Última atualização:** 2026-08-25
@@ -427,33 +427,23 @@ nenhum domínio usava esse nome.
 
 ---
 
-## Analytics de uso — visualizações (v1.7)
+## Analytics de uso — visualizações (v1.7, ranking removido na v1.8)
 
-Mais 3 leituras na aba "Uso do Hub", nenhuma com gravação nova — as 3
+Mais 2 leituras na aba "Uso do Hub", nenhuma com gravação nova — as 2
 combinam sinais já rastreados pelas seções anteriores (login, profiling,
 scan de PII, table view, busca).
 
-### Ranking de domínios mais usados (zero gravação nova)
+### Ranking de domínios mais usados — removido na v1.8
 
-`GET /api/v1/admin/analytics/domain-usage` reaproveita
-`repository.list_all_profiling_runs`/`list_all_pii_scans` (as mesmas
-funções que já alimentam `/analytics/profiling`/`/analytics/pii-scans`),
-agrupa por mês (`executed_at.strftime("%Y-%m")`, mesmo padrão de
-`get_access_request_analytics`) e devolve `{monthly: [{period,
-profiling_count, pii_scan_count}], total_profiling_runs,
-total_pii_scans}`. Frontend (`DomainUsageRankingSection.tsx`) mostra os
-totais em `KpiCards` + `BarChart` agrupado (uma barra por domínio, por
-mês, sem empilhar — diferente do padrão empilhado de
-`AccessRequestAnalyticsSection.tsx`, aqui o objetivo é comparar volume
-lado a lado).
-
-**Buckets do Storage ficam de fora de propósito** — `domains/storage/`
-não grava nenhum sinal de uso hoje (confirmado por grep: nenhuma chamada
-a `analytics_service`/`history_repository` em nenhum arquivo do
-domínio). Incluir navegação de buckets no ranking exigiria
-instrumentação nova (nova coleção Firestore + chamada em toda
-visualização de bucket) — decisão consciente de deixar fora desta
-rodada, não um esquecimento.
+Existiu entre v1.7 e v1.8. Comparava só profiling vs. PII scan (2 de 8
+domínios do produto — catalog/lineage/freshness/finops/storage sem
+tracking de uso, `access_requests` não estava integrado). Usuário
+decidiu remover em vez de completar a instrumentação dos domínios
+faltantes: "exclua essa seção por enquanto, não faz sentido ter ela".
+Endpoint (`GET /api/v1/admin/analytics/domain-usage`), service
+(`get_domain_usage_ranking`), schemas (`DomainUsageMonthBucket`/
+`DomainUsageRankingResponse`) e componente (`DomainUsageRankingSection.tsx`)
+removidos por completo, não comentados.
 
 ### Mapa de calor de horário de uso (zero gravação nova)
 
@@ -473,24 +463,26 @@ CSS customizada (7 linhas × 24 colunas), sem recharts, com intensidade
 de cor por opacity sobre `--color-primary` (relativo à célula de maior
 contagem) e tooltip nativo (`title`) por célula.
 
-### Funil de retenção (zero gravação nova)
+### Funil de retenção (zero gravação nova, 4 estágios na v1.8)
 
-`GET /api/v1/admin/analytics/retention-funnel?lookback_days=90` — 3
+`GET /api/v1/admin/analytics/retention-funnel?lookback_days=90` — 4
 estágios sobre os mesmos 5 sinais do heatmap (login + as 4 fontes de
 ação): `users_with_login` (e-mails distintos em `login_events` na
 janela), `users_with_action` (desses, quantos tiveram ≥1 evento de
 profiling/PII scan/table view/busca na mesma janela),
-`users_with_repeat_action` (≥2 eventos, qualquer combinação dos 4
-tipos).
+`users_with_5plus_actions` (≥5 eventos), `users_with_10plus_actions`
+(≥10 eventos, qualquer combinação dos 4 tipos).
 
 **Decisão de design**: "ação" não precisa vir depois do login
 temporalmente, só estar na mesma janela de `lookback_days` — evita
 lógica frágil de "qual foi o primeiro login de cada usuário" só pra um
 funil que já cumpre o propósito (leitura aproximada de engajamento) sem
-essa precisão. Frontend (`RetentionFunnelSection.tsx`) mostra as 3
+essa precisão. Frontend (`RetentionFunnelSection.tsx`) mostra as 4
 contagens como `BarChart` horizontal (`layout="vertical"`, mesmo padrão
-de `NavigationAnalyticsSection.tsx`) + percentual de cada estágio
-relativo ao anterior.
+de `NavigationAnalyticsSection.tsx`), rotuladas "Acesso"/"Ação"/"+4
+Ações"/"+9 Ações" (os dois últimos rótulos são relativos ao 1º estágio
+de ação, não ao literal do campo — o valor real é ≥5 e ≥10), +
+percentual de cada estágio relativo ao anterior.
 
 ---
 
@@ -625,10 +617,9 @@ Ver "Analytics de uso (v1.2)" acima.
 ### GET /api/v1/admin/analytics/pii-scans?limit=200
 Ver "Analytics de uso (v1.3)" acima.
 
-### GET /api/v1/admin/analytics/domain-usage
 ### GET /api/v1/admin/analytics/usage-heatmap?lookback_days=90
 ### GET /api/v1/admin/analytics/retention-funnel?lookback_days=90
-Ver "Analytics de uso — visualizações (v1.7)" acima.
+Ver "Analytics de uso — visualizações (v1.7, ranking removido na v1.8)" acima.
 
 ---
 

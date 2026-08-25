@@ -6,7 +6,6 @@ from observability_hub.core.firestore import get_firestore_client
 from observability_hub.domains.admin import analytics_service, service
 from observability_hub.domains.admin.analytics_schemas import (
     AccessRequestAnalyticsResponse,
-    DomainUsageRankingResponse,
     FavoritesAnalyticsResponse,
     LoginAnalyticsResponse,
     NavigationAnalyticsResponse,
@@ -201,13 +200,6 @@ def pii_scan_activity(
     client: firestore.Client = Depends(get_firestore_client),
 ) -> PiiScanActivityResponse:
     return analytics_service.get_pii_scan_activity(client, limit)
-
-
-@router.get("/analytics/domain-usage", response_model=DomainUsageRankingResponse)
-def domain_usage_ranking(
-    client: firestore.Client = Depends(get_firestore_client),
-) -> DomainUsageRankingResponse:
-    return analytics_service.get_domain_usage_ranking(client)
 
 
 @router.get("/analytics/usage-heatmap", response_model=UsageHeatmapResponse)

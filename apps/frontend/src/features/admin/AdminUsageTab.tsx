@@ -1,5 +1,4 @@
 import { AccessRequestAnalyticsSection } from '@/features/admin/AccessRequestAnalyticsSection'
-import { DomainUsageRankingSection } from '@/features/admin/DomainUsageRankingSection'
 import { FavoritesAnalyticsSection } from '@/features/admin/FavoritesAnalyticsSection'
 import { LoginAnalyticsSection } from '@/features/admin/LoginAnalyticsSection'
 import { NavigationAnalyticsSection } from '@/features/admin/NavigationAnalyticsSection'
@@ -16,7 +15,6 @@ export function AdminUsageTab() {
       <UsageHeatmapSection />
       <FavoritesAnalyticsSection />
       <ProfilingActivitySection />
-      <DomainUsageRankingSection />
       <AccessRequestAnalyticsSection />
       <NavigationAnalyticsSection />
       <PiiScanActivitySection />
