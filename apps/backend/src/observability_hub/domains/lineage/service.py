@@ -5,13 +5,15 @@ docs/specs/lineage.md) e a lista de órfãs de um projeto. api/v1 só chama
 estas funções — CLAUDE.md proíbe lógica de negócio em api/.
 """
 
+from datetime import UTC, datetime
 from typing import Literal
 
 from google.cloud import bigquery
 from google.cloud import logging as cloud_logging
 
-from observability_hub.core.bigquery import discover_regions
+from observability_hub.core.bigquery import discover_regions, get_tables_metadata
 from observability_hub.core.exceptions import LoggingAccessDeniedError
+from observability_hub.core.pricing import estimate_bigquery_storage_cost_usd
 from observability_hub.domains.lineage import repository
 from observability_hub.domains.lineage.repository import JobEvent, TableRefTuple
 from observability_hub.domains.lineage.schemas import (
@@ -286,9 +288,30 @@ def get_orphans(
 
     orphans = sorted(t for t in all_tables if t not in consumed)
 
+    # Metadata só das órfãs (não de all_tables) — menor, e é só isso que
+    # a response precisa pro custo estimado de storage.
+    table_refs = [f"{project_id}.{d}.{t}" for d, t in orphans]
+    metadata = get_tables_metadata(client, table_refs)
+    now = datetime.now(UTC)
+
+    orphan_tables: list[OrphanTable] = []
+    for dataset_id, table_id in orphans:
+        bq_table = metadata.get(f"{project_id}.{dataset_id}.{table_id}")
+        size_bytes = bq_table.num_bytes or 0 if bq_table is not None else 0
+        orphan_tables.append(
+            OrphanTable(
+                dataset_id=dataset_id,
+                table_id=table_id,
+                size_bytes=size_bytes,
+                estimated_monthly_storage_cost_usd=estimate_bigquery_storage_cost_usd(
+                    size_bytes, bq_table.modified if bq_table is not None else None, now
+                ),
+            )
+        )
+
     return OrphansResponse(
         project_id=project_id,
-        orphans=[OrphanTable(dataset_id=d, table_id=t) for d, t in orphans],
+        orphans=orphan_tables,
         lookback_days=lookback_days,
         warning=_empty_result_warning(project_id) if not events else None,
     )

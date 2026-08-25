@@ -24,6 +24,12 @@ export function LineageTab({ projectId, datasetId, tableId }: LineageTabProps) {
 
   return (
     <div className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground">
+        Reconstrói de onde os dados desta tabela vêm e para onde vão, a partir dos jobs de
+        LOAD/QUERY/EXTRACT do BigQuery — útil para avaliar o impacto de mudar o schema ou
+        descontinuar a tabela antes de fazer isso.
+      </p>
+
       {data.warning && (
         <div className="rounded-lg border border-status-warn/30 bg-status-warn/10 p-3 text-sm text-status-warn">
           {data.warning}

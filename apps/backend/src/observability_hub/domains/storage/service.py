@@ -10,7 +10,6 @@ from observability_hub.domains.storage.schemas import (
     BucketObjectsResponse,
     BucketsListResponse,
     BucketSummary,
-    MinDaysUnused,
     StorageObjectEntry,
     WasteCandidate,
     WasteCandidatesResponse,
@@ -99,7 +98,7 @@ def get_waste_candidates(
     client: storage.Client,
     logging_client: cloud_logging.Client,
     project_id: str,
-    min_days_unused: MinDaysUnused,
+    min_days_unused: int,
 ) -> WasteCandidatesResponse:
     now = datetime.now(UTC)
     buckets = [
@@ -110,7 +109,7 @@ def get_waste_candidates(
 
     eligible_by_bucket = {
         bucket.name: repository.get_eligible_waste_objects(
-            client, project_id, bucket.name, int(min_days_unused), now
+            client, project_id, bucket.name, min_days_unused, now
         )
         for bucket in buckets
     }

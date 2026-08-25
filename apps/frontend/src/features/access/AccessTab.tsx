@@ -39,6 +39,11 @@ export function AccessTab({ projectId, datasetId, tableId }: AccessTabProps) {
 
   return (
     <div className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground">
+        Mostra quem leu ou escreveu nesta tabela recentemente, via audit logs — útil para confirmar
+        se ela ainda tem consumidor antes de arquivar, apagar ou mudar o schema.
+      </p>
+
       {data.warning && (
         <div className="rounded-lg border border-status-warn/30 bg-status-warn/10 p-3 text-sm text-status-warn">
           {data.warning}

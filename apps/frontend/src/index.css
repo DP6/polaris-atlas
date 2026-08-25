@@ -72,11 +72,11 @@
    pra manter a mesma relação de profundidade que --card/--sidebar têm
    sobre --background no dark, sem virar branco puro chapado. */
 :root {
-  --background: #ffffff;
+  --background: #fafaf8;
   --foreground: #1d1d1b;
-  --card: #f4f4f2;
+  --card: #f0efec;
   --card-foreground: #1d1d1b;
-  --popover: #f4f4f2;
+  --popover: #f0efec;
   --popover-foreground: #1d1d1b;
   --primary: #ffb302;
   --primary-foreground: #1d1d1b;
@@ -99,7 +99,7 @@
   --accent-purple: #6b46c1;
   --accent-green: #059669;
   --accent-orange: #f97316;
-  --sidebar: #f4f4f2;
+  --sidebar: #f0efec;
   --sidebar-foreground: #1d1d1b;
   --sidebar-primary: #ffb302;
   --sidebar-primary-foreground: #1d1d1b;

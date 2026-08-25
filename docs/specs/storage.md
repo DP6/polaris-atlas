@@ -164,6 +164,13 @@ diferenciar da checagem 6.2.
 infraestrutura do item 1 (`list_bucket_objects_cached`, `has_lifecycle_
 rule`) — nenhuma chamada nova à API do GCS.
 
+**v1.1 (2026-08-24)**: `min_days_unused` virou `int` livre
+(`Query(default=60, ge=1)`) em vez de `IntEnum` restrito a 30/60/90 — o
+frontend (`WastePage.tsx`) ganhou a opção "Outro" pra digitar qualquer
+valor, além dos atalhos 30/60/90. A validação de string→int não depende
+mais do IntEnum (o motivo original do `IntEnum` era só coerção de query
+param, resolvido igual com `int` + `Query`).
+
 ### 6.2 Regra por uso real (objeto nunca lido) — depende de Data Access audit logs do GCS
 
 **Habilitado em dev em 2026-08-18** (`DATA_READ` pra

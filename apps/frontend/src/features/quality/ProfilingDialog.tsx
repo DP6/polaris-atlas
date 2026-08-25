@@ -208,6 +208,12 @@ export function ProfilingDialog({
             </TabsContent>
 
             <TabsContent value={ANALYSIS_TAB} className="flex min-h-0 flex-1 flex-col gap-4">
+              <p className="shrink-0 text-sm text-muted-foreground">
+                Amostra a tabela coluna a coluna (completude, unicidade, duplicatas) com o método e
+                a amostragem escolhidos abaixo. Estime o custo antes de rodar — o resultado de cada
+                execução fica salvo no histórico (aba "Histórico") e pode ser guardado numa pasta de
+                comparação.
+              </p>
               <div className="flex shrink-0 flex-wrap items-end gap-4">
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="sample-percent">Amostragem (%)</Label>

@@ -18,33 +18,47 @@ import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components
 import { useOrphans } from '@/features/lineage/hooks'
 import { useProjectContext } from '@/features/projects/ProjectContext'
 import { useTableFilterSort } from '@/hooks/useTableFilterSort'
+import { formatBytes } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { OrphanTable } from '@/types/lineage'
 
 const DATASET_FILTER_ALL = 'all'
 const LOOKBACK_OPTIONS = [30, 60, 90, 365] as const
 
-type SortKey = 'dataset_id' | 'table_id'
+type SortKey = 'dataset_id' | 'table_id' | 'size_bytes' | 'estimated_monthly_storage_cost_usd'
+
+function formatUsd(value: number): string {
+  return `US$ ${value.toFixed(value < 0.01 ? 6 : 2)}`
+}
 
 function compare(a: OrphanTable, b: OrphanTable, key: SortKey): number {
+  if (key === 'size_bytes' || key === 'estimated_monthly_storage_cost_usd') {
+    return a[key] - b[key]
+  }
   return a[key].localeCompare(b[key])
 }
 
 function LookbackPicker({ value, onChange }: { value: number; onChange: (days: number) => void }) {
+  const isPreset = (LOOKBACK_OPTIONS as readonly number[]).includes(value)
+  const [showCustom, setShowCustom] = useState(!isPreset)
+
   return (
     <div>
       <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
         Período analisado (dias)
       </span>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {LOOKBACK_OPTIONS.map((days) => (
           <button
             key={days}
             type="button"
-            onClick={() => onChange(days)}
+            onClick={() => {
+              onChange(days)
+              setShowCustom(false)
+            }}
             className={cn(
               'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-              value === days
+              value === days && !showCustom
                 ? 'border-primary bg-primary/10 text-foreground'
                 : 'border-border text-muted-foreground hover:bg-muted',
             )}
@@ -52,6 +66,27 @@ function LookbackPicker({ value, onChange }: { value: number; onChange: (days: n
             {days}
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => setShowCustom(true)}
+          className={cn(
+            'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+            showCustom
+              ? 'border-primary bg-primary/10 text-foreground'
+              : 'border-border text-muted-foreground hover:bg-muted',
+          )}
+        >
+          Outro
+        </button>
+        {showCustom && (
+          <Input
+            type="number"
+            min={1}
+            className="h-7 w-20 text-xs"
+            value={value}
+            onChange={(e) => onChange(Number(e.target.value))}
+          />
+        )}
       </div>
     </div>
   )
@@ -100,8 +135,9 @@ export function OrphansPage() {
         description={
           'Uma tabela é considerada "sem consumidor" quando não aparece como tabela lida em ' +
           'nenhum job do BigQuery dentro do período analisado — mesmo que só tenha sido ' +
-          'escrita/carregada e nunca consultada. Escolha os datasets e o período antes de ' +
-          'rodar; escanear o projeto inteiro pode ser lento em produção.'
+          'escrita/carregada e nunca consultada, com o custo de storage estimado de cada uma. ' +
+          'Escolha os datasets e o período antes de rodar; escanear o projeto inteiro pode ser ' +
+          'lento em produção.'
         }
         extraControls={<LookbackPicker value={lookbackDays} onChange={setLookbackDays} />}
         onRun={(datasets) => {
@@ -198,6 +234,20 @@ export function OrphansPage() {
               direction={sortDir}
               onClick={() => toggleSort('table_id')}
             />
+            <SortableTableHead
+              label="Tamanho"
+              active={sortKey === 'size_bytes'}
+              direction={sortDir}
+              onClick={() => toggleSort('size_bytes')}
+              align="right"
+            />
+            <SortableTableHead
+              label="Custo de storage estimado/mês"
+              active={sortKey === 'estimated_monthly_storage_cost_usd'}
+              direction={sortDir}
+              onClick={() => toggleSort('estimated_monthly_storage_cost_usd')}
+              align="right"
+            />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -209,11 +259,17 @@ export function OrphansPage() {
                 </Link>
               </TableCell>
               <TableCell className="font-medium">{orphan.table_id}</TableCell>
+              <TableCell className="text-right text-muted-foreground">
+                {formatBytes(orphan.size_bytes)}
+              </TableCell>
+              <TableCell className="text-right font-medium">
+                {formatUsd(orphan.estimated_monthly_storage_cost_usd)}
+              </TableCell>
             </TableRow>
           ))}
           {visibleOrphans.length === 0 && (
             <TableRow>
-              <TableCell colSpan={2} className="text-center text-muted-foreground">
+              <TableCell colSpan={4} className="text-center text-muted-foreground">
                 {data.orphans.length === 0
                   ? 'Nenhuma tabela sem consumidor encontrada.'
                   : 'Nenhuma tabela encontrada com esse filtro.'}

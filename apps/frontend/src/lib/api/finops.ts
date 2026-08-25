@@ -4,27 +4,19 @@ import type {
   BudgetResponse,
   ColumnTypeEstimateResponse,
   ColumnTypeSuggestionsResponse,
-  MinDaysUnused,
   PartitionCandidatesResponse,
-  UnusedTablesResponse,
 } from '@/types/finops'
 
-function datasetsQueryString(datasets: string[] | undefined): string {
+function scopeQueryString(datasets: string[] | undefined, tables: string[] | undefined): string {
   const params = new URLSearchParams()
   for (const dataset of datasets ?? []) params.append('datasets', dataset)
+  for (const table of tables ?? []) params.append('tables', table)
   return params.toString()
 }
 
 export const finopsApi = {
-  getUnusedTables: (projectId: string, minDaysUnused: MinDaysUnused = 30, datasets?: string[]) => {
-    const params = datasetsQueryString(datasets)
-    return httpClient.get<UnusedTablesResponse>(
-      `/api/v1/finops/${projectId}/unused-tables?min_days_unused=${minDaysUnused}${params ? `&${params}` : ''}`,
-    )
-  },
-
-  getPartitionCandidates: (projectId: string, datasets?: string[]) => {
-    const params = datasetsQueryString(datasets)
+  getPartitionCandidates: (projectId: string, datasets?: string[], tables?: string[]) => {
+    const params = scopeQueryString(datasets, tables)
     return httpClient.get<PartitionCandidatesResponse>(
       `/api/v1/finops/${projectId}/partition-candidates${params ? `?${params}` : ''}`,
     )

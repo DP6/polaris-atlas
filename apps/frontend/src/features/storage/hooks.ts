@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
 import { storageApi } from '@/lib/api/storage'
-import type { MinDaysUnused } from '@/types/storage'
 
 export function useBuckets(projectId: string | undefined) {
   return useQuery({
@@ -26,7 +25,7 @@ export function useBucketObjects(
 
 export function useWasteCandidates(
   projectId: string | undefined,
-  minDaysUnused: MinDaysUnused = 60,
+  minDaysUnused = 60,
   enabled = true,
 ) {
   return useQuery({

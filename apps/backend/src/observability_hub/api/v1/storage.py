@@ -9,7 +9,6 @@ from observability_hub.domains.storage import service
 from observability_hub.domains.storage.schemas import (
     BucketObjectsResponse,
     BucketsListResponse,
-    MinDaysUnused,
     WasteCandidatesResponse,
 )
 
@@ -39,7 +38,7 @@ def browse_bucket_objects(
 @router.get("/{project_id}/waste-candidates", response_model=WasteCandidatesResponse)
 def get_waste_candidates(
     project_id: str,
-    min_days_unused: MinDaysUnused = Query(default=MinDaysUnused.SIXTY),
+    min_days_unused: int = Query(default=60, ge=1),
     client: storage.Client = Depends(get_storage_client),
     logging_client: cloud_logging.Client = Depends(get_logging_client),
 ) -> WasteCandidatesResponse:

@@ -68,6 +68,12 @@ export function ColumnTypeSuggestionsTab({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <p className="shrink-0 text-sm text-muted-foreground">
+        Sugere tipos de coluna mais compactos (ex: uma STRING que só guarda números vira INT64) a
+        partir de uma amostra real dos dados, reduzindo custo de storage — só orienta a decisão, não
+        altera o schema. Diferente das outras abas, este scan tem custo real de BigQuery
+        (TABLESAMPLE); estime antes de escanear.
+      </p>
       <div className="flex shrink-0 flex-wrap items-end gap-4">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="column-type-tab-sample-percent">Amostragem (%)</Label>

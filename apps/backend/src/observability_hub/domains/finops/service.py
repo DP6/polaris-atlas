@@ -35,17 +35,12 @@ from observability_hub.domains.finops.schemas import (
     CostGroup,
     CostlyQuery,
     CostProjection,
-    MinDaysUnused,
     PartitionCandidate,
     PartitionCandidatesResponse,
     SuggestedColumnType,
-    UnusedTable,
-    UnusedTablesResponse,
 )
 
-_UNUSED_TABLES_LOOKBACK_DAYS = 90
 _PARTITION_CANDIDATE_LOOKBACK_DAYS = 30
-_LONG_TERM_STORAGE_THRESHOLD_DAYS = 90
 _MIN_TABLE_SIZE_BYTES_FOR_PARTITION_CANDIDATE = 1_073_741_824  # 1 GB
 _CONSERVATIVE_REDUCTION = 0.30
 _OPTIMISTIC_REDUCTION = 0.70
@@ -63,15 +58,6 @@ _EMPTY_RESULT_WARNING = (
     "ou (c) que a service account do Hub tem roles/logging.viewer mas não "
     "roles/logging.privateLogViewer no projeto. Verifique auditConfigs com: "
     "gcloud projects get-iam-policy {project_id} --format=json."
-)
-
-_RETENTION_CAVEAT = (
-    "Data Access audit logs no Cloud Logging têm retenção padrão de 30 "
-    "dias, salvo bucket/sink customizado configurado no projeto. Se esse "
-    "for o caso aqui, tabelas realmente acessadas há mais de 30 dias (mas "
-    "dentro da janela de {min_days_unused} dias pedida) podem aparecer "
-    'como "sem uso" só porque o log correspondente já expirou — não '
-    "necessariamente porque a tabela não foi acessada de verdade."
 )
 
 _SAVINGS_DISCLAIMER = (
@@ -115,98 +101,18 @@ def _month_start(now: datetime) -> datetime:
     return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
 
-def _estimate_storage_cost_usd(size_bytes: int, modified: datetime | None, now: datetime) -> float:
-    is_long_term = (
-        modified is not None and (now - modified).days >= _LONG_TERM_STORAGE_THRESHOLD_DAYS
-    )
-    price_per_gb = (
-        settings.bigquery_storage_price_usd_per_gb_month_long_term
-        if is_long_term
-        else settings.bigquery_storage_price_usd_per_gb_month_active
-    )
-    gb = size_bytes / (1024**3)
-    return round(gb * price_per_gb, 4)
-
-
-def scan_unused_tables(
-    client: bigquery.Client,
-    logging_client: cloud_logging.Client,
-    project_id: str,
-    min_days_unused: MinDaysUnused = 30,
-    datasets: list[str] | None = None,
-) -> UnusedTablesResponse:
-    regions = discover_regions(project_id, client=client)
-    all_tables = repository.list_all_table_refs(client, project_id, regions, datasets=datasets)
-    events = repository.list_scan_events(logging_client, project_id, _UNUSED_TABLES_LOOKBACK_DAYS)
-
-    last_access: dict[tuple[str, str], datetime] = {}
-    for event in events:
-        if event.timestamp is None:
-            continue
-        for ref in event.referenced_tables:
-            if ref[0] != project_id:
-                continue
-            key = ref[1:]
-            if key not in last_access or event.timestamp > last_access[key]:
-                last_access[key] = event.timestamp
-
-    table_refs = [f"{project_id}.{d}.{t}" for d, t in all_tables]
-    metadata = get_tables_metadata(client, table_refs)
-
-    now = datetime.now(UTC)
-    unused: list[UnusedTable] = []
-    for dataset_id, table_id in all_tables:
-        last_at = last_access.get((dataset_id, table_id))
-        days_since = (now - last_at).days if last_at else None
-        if days_since is not None and days_since < min_days_unused:
-            continue  # acessada dentro da janela pedida, não é "sem uso"
-
-        bq_table = metadata.get(f"{project_id}.{dataset_id}.{table_id}")
-        if bq_table is None:
-            continue  # sumiu entre a listagem e o fetch (race)
-
-        size_bytes = bq_table.num_bytes or 0
-        unused.append(
-            UnusedTable(
-                dataset_id=dataset_id,
-                table_id=table_id,
-                size_bytes=size_bytes,
-                size_human=_human_bytes(size_bytes),
-                last_accessed_at=last_at,
-                days_since_last_access=days_since,
-                estimated_monthly_storage_cost_usd=_estimate_storage_cost_usd(
-                    size_bytes, bq_table.modified, now
-                ),
-            )
-        )
-
-    unused.sort(key=lambda t: t.size_bytes, reverse=True)
-
-    warning = None
-    if not events:
-        warning = _EMPTY_RESULT_WARNING.format(
-            days=_UNUSED_TABLES_LOOKBACK_DAYS, project_id=project_id
-        )
-    elif min_days_unused > 30:
-        warning = _RETENTION_CAVEAT.format(min_days_unused=min_days_unused)
-
-    return UnusedTablesResponse(
-        project_id=project_id,
-        min_days_unused=min_days_unused,
-        lookback_days=_UNUSED_TABLES_LOOKBACK_DAYS,
-        tables=unused,
-        warning=warning,
-    )
-
-
 def scan_partition_candidates(
     client: bigquery.Client,
     logging_client: cloud_logging.Client,
     project_id: str,
     datasets: list[str] | None = None,
+    tables: list[str] | None = None,
 ) -> PartitionCandidatesResponse:
     regions = discover_regions(project_id, client=client)
     all_tables = repository.list_all_table_refs(client, project_id, regions, datasets=datasets)
+    if tables:
+        requested = set(_parse_scoped_tables(tables))
+        all_tables = [t for t in all_tables if t in requested]
     table_refs = [f"{project_id}.{d}.{t}" for d, t in all_tables]
     metadata = get_tables_metadata(client, table_refs)
 
