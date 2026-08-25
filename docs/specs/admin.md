@@ -1,9 +1,9 @@
 # Spec — Domínio: Admin (controle de acesso por usuário × projeto)
 
-**Versão:** 1.6
+**Versão:** 1.7 (ranking de domínios, mapa de calor de horário, funil de retenção)
 **Status:** Aprovada
 **Fase:** Transversal (não faz parte do roadmap de observabilidade de `docs/prd.md`) — plataforma
-**Última atualização:** 2026-08-21
+**Última atualização:** 2026-08-25
 
 ---
 
@@ -427,6 +427,73 @@ nenhum domínio usava esse nome.
 
 ---
 
+## Analytics de uso — visualizações (v1.7)
+
+Mais 3 leituras na aba "Uso do Hub", nenhuma com gravação nova — as 3
+combinam sinais já rastreados pelas seções anteriores (login, profiling,
+scan de PII, table view, busca).
+
+### Ranking de domínios mais usados (zero gravação nova)
+
+`GET /api/v1/admin/analytics/domain-usage` reaproveita
+`repository.list_all_profiling_runs`/`list_all_pii_scans` (as mesmas
+funções que já alimentam `/analytics/profiling`/`/analytics/pii-scans`),
+agrupa por mês (`executed_at.strftime("%Y-%m")`, mesmo padrão de
+`get_access_request_analytics`) e devolve `{monthly: [{period,
+profiling_count, pii_scan_count}], total_profiling_runs,
+total_pii_scans}`. Frontend (`DomainUsageRankingSection.tsx`) mostra os
+totais em `KpiCards` + `BarChart` agrupado (uma barra por domínio, por
+mês, sem empilhar — diferente do padrão empilhado de
+`AccessRequestAnalyticsSection.tsx`, aqui o objetivo é comparar volume
+lado a lado).
+
+**Buckets do Storage ficam de fora de propósito** — `domains/storage/`
+não grava nenhum sinal de uso hoje (confirmado por grep: nenhuma chamada
+a `analytics_service`/`history_repository` em nenhum arquivo do
+domínio). Incluir navegação de buckets no ranking exigiria
+instrumentação nova (nova coleção Firestore + chamada em toda
+visualização de bucket) — decisão consciente de deixar fora desta
+rodada, não um esquecimento.
+
+### Mapa de calor de horário de uso (zero gravação nova)
+
+`GET /api/v1/admin/analytics/usage-heatmap?lookback_days=90` combina os
+5 sinais de timestamp já existentes — `login_events`, `profiling_history`,
+`pii_scan_history`, `history_table_views`, `history_searches` — num
+bucket só `(weekday, hour) -> count` (`weekday` = `datetime.weekday()`,
+0=segunda...6=domingo). Só `list_login_events` tem filtro de data nativo
+(`since=...`); os outros 4 não têm parâmetro de data — filtro por
+`lookback_days` é feito em Python dentro de
+`analytics_service.get_usage_heatmap`, comparando o timestamp de cada
+evento contra o cutoff.
+
+**Sem heatmap nativo no recharts** (confirmado — só `LineChart`/`BarChart`
+são usados em todo o frontend hoje) — `UsageHeatmapGrid.tsx` é uma grade
+CSS customizada (7 linhas × 24 colunas), sem recharts, com intensidade
+de cor por opacity sobre `--color-primary` (relativo à célula de maior
+contagem) e tooltip nativo (`title`) por célula.
+
+### Funil de retenção (zero gravação nova)
+
+`GET /api/v1/admin/analytics/retention-funnel?lookback_days=90` — 3
+estágios sobre os mesmos 5 sinais do heatmap (login + as 4 fontes de
+ação): `users_with_login` (e-mails distintos em `login_events` na
+janela), `users_with_action` (desses, quantos tiveram ≥1 evento de
+profiling/PII scan/table view/busca na mesma janela),
+`users_with_repeat_action` (≥2 eventos, qualquer combinação dos 4
+tipos).
+
+**Decisão de design**: "ação" não precisa vir depois do login
+temporalmente, só estar na mesma janela de `lookback_days` — evita
+lógica frágil de "qual foi o primeiro login de cada usuário" só pra um
+funil que já cumpre o propósito (leitura aproximada de engajamento) sem
+essa precisão. Frontend (`RetentionFunnelSection.tsx`) mostra as 3
+contagens como `BarChart` horizontal (`layout="vertical"`, mesmo padrão
+de `NavigationAnalyticsSection.tsx`) + percentual de cada estágio
+relativo ao anterior.
+
+---
+
 ## Duas dependencies novas em `core/auth.py`
 
 ```python
@@ -552,6 +619,11 @@ Ver "Analytics de uso (v1.2)" acima.
 ### GET /api/v1/admin/analytics/navigation
 ### GET /api/v1/admin/analytics/pii-scans?limit=200
 Ver "Analytics de uso (v1.3)" acima.
+
+### GET /api/v1/admin/analytics/domain-usage
+### GET /api/v1/admin/analytics/usage-heatmap?lookback_days=90
+### GET /api/v1/admin/analytics/retention-funnel?lookback_days=90
+Ver "Analytics de uso — visualizações (v1.7)" acima.
 
 ---
 

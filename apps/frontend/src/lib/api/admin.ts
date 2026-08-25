@@ -4,6 +4,7 @@ import type {
   AccessRequestAnalyticsResponse,
   AccessRequestStatus,
   AccessRequestsListResponse,
+  DomainUsageRankingResponse,
   FavoritesAnalyticsResponse,
   HubGroup,
   HubGroupsListResponse,
@@ -16,9 +17,11 @@ import type {
   PiiScanActivityResponse,
   ProfilingActivityResponse,
   ProjectUsersResponse,
+  RetentionFunnelResponse,
   UpsertHubGroupRequest,
   UpsertHubProjectRequest,
   UpsertHubUserRequest,
+  UsageHeatmapResponse,
   WorkspaceGroupsListResponse,
 } from '@/types/admin'
 
@@ -99,5 +102,18 @@ export const adminApi = {
   getPiiScanActivity: (limit?: number) =>
     httpClient.get<PiiScanActivityResponse>(
       `/api/v1/admin/analytics/pii-scans${limit ? `?limit=${limit}` : ''}`,
+    ),
+
+  getDomainUsageRanking: () =>
+    httpClient.get<DomainUsageRankingResponse>('/api/v1/admin/analytics/domain-usage'),
+
+  getUsageHeatmap: (lookbackDays?: number) =>
+    httpClient.get<UsageHeatmapResponse>(
+      `/api/v1/admin/analytics/usage-heatmap${lookbackDays ? `?lookback_days=${lookbackDays}` : ''}`,
+    ),
+
+  getRetentionFunnel: (lookbackDays?: number) =>
+    httpClient.get<RetentionFunnelResponse>(
+      `/api/v1/admin/analytics/retention-funnel${lookbackDays ? `?lookback_days=${lookbackDays}` : ''}`,
     ),
 }

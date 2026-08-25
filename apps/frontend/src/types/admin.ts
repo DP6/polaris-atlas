@@ -205,3 +205,32 @@ export interface PiiScanEntry {
 export interface PiiScanActivityResponse {
   scans: PiiScanEntry[]
 }
+
+export interface DomainUsageMonthBucket {
+  period: string
+  profiling_count: number
+  pii_scan_count: number
+}
+
+export interface DomainUsageRankingResponse {
+  monthly: DomainUsageMonthBucket[]
+  total_profiling_runs: number
+  total_pii_scans: number
+}
+
+export interface HeatmapCell {
+  // 0=segunda ... 6=domingo (Python datetime.weekday()).
+  weekday: number
+  hour: number
+  count: number
+}
+
+export interface UsageHeatmapResponse {
+  cells: HeatmapCell[]
+}
+
+export interface RetentionFunnelResponse {
+  users_with_login: number
+  users_with_action: number
+  users_with_repeat_action: number
+}

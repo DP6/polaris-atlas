@@ -227,3 +227,24 @@ export function usePiiScanActivity(limit?: number) {
     queryFn: () => adminApi.getPiiScanActivity(limit),
   })
 }
+
+export function useDomainUsageRanking() {
+  return useQuery({
+    queryKey: ['admin-domain-usage-ranking'],
+    queryFn: adminApi.getDomainUsageRanking,
+  })
+}
+
+export function useUsageHeatmap(lookbackDays?: number) {
+  return useQuery({
+    queryKey: ['admin-usage-heatmap', lookbackDays],
+    queryFn: () => adminApi.getUsageHeatmap(lookbackDays),
+  })
+}
+
+export function useRetentionFunnel(lookbackDays?: number) {
+  return useQuery({
+    queryKey: ['admin-retention-funnel', lookbackDays],
+    queryFn: () => adminApi.getRetentionFunnel(lookbackDays),
+  })
+}

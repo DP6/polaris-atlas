@@ -15,8 +15,11 @@ from observability_hub.domains.admin import repository as acl_repository
 from observability_hub.domains.admin.analytics_schemas import (
     AccessRequestAnalyticsResponse,
     AccessRequestMonthBucket,
+    DomainUsageMonthBucket,
+    DomainUsageRankingResponse,
     FavoriteEntry,
     FavoritesAnalyticsResponse,
+    HeatmapCell,
     LoginAnalyticsResponse,
     LoginCountBucket,
     LoginEvent,
@@ -26,8 +29,10 @@ from observability_hub.domains.admin.analytics_schemas import (
     ProfilingActivityResponse,
     ProfilingRunEntry,
     ProjectRequestCount,
+    RetentionFunnelResponse,
     SearchEntry,
     TableViewEntry,
+    UsageHeatmapResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -155,3 +160,109 @@ def get_pii_scan_activity(client: firestore.Client, limit: int = 200) -> PiiScan
     raw = repository.list_all_pii_scans(client)
     raw.sort(key=lambda r: r["executed_at"], reverse=True)
     return PiiScanActivityResponse(scans=[PiiScanEntry(**r) for r in raw[:limit]])
+
+
+def get_domain_usage_ranking(client: firestore.Client) -> DomainUsageRankingResponse:
+    """Ranking simples de profiling vs. PII scan por mês — "buckets
+    navegados" fica de fora de propósito, domains/storage/ não grava
+    nenhum sinal de uso hoje (ver docs/specs/admin.md)."""
+    profiling_runs = repository.list_all_profiling_runs(client)
+    pii_scans = repository.list_all_pii_scans(client)
+
+    monthly: dict[str, dict[str, int]] = defaultdict(
+        lambda: {"profiling_count": 0, "pii_scan_count": 0}
+    )
+    for run in profiling_runs:
+        period = run["executed_at"].strftime("%Y-%m")
+        monthly[period]["profiling_count"] += 1
+    for scan in pii_scans:
+        period = scan["executed_at"].strftime("%Y-%m")
+        monthly[period]["pii_scan_count"] += 1
+
+    monthly_buckets = [
+        DomainUsageMonthBucket(period=period, **counts)
+        for period, counts in sorted(monthly.items())
+    ]
+
+    return DomainUsageRankingResponse(
+        monthly=monthly_buckets,
+        total_profiling_runs=len(profiling_runs),
+        total_pii_scans=len(pii_scans),
+    )
+
+
+def get_usage_heatmap(client: firestore.Client, lookback_days: int = 90) -> UsageHeatmapResponse:
+    """Combina os 5 sinais de timestamp já rastreados (login, profiling,
+    PII scan, table view, busca) num bucket (dia da semana, hora) só —
+    "quando o Hub é usado", não "quem usa o quê" (isso já é o ranking de
+    domínios/atividade separado). Só login_events tem filtro de data
+    nativo (list_login_events(since=...)); os outros 4 não têm parâmetro
+    de data, filtro é feito aqui em Python."""
+    since = datetime.now(UTC) - timedelta(days=lookback_days)
+    login_events = repository.list_login_events(client, since)
+    profiling_runs = repository.list_all_profiling_runs(client)
+    pii_scans = repository.list_all_pii_scans(client)
+    table_views = repository.list_all_table_views(client)
+    searches = repository.list_all_searches(client)
+
+    counts: dict[tuple[int, int], int] = defaultdict(int)
+
+    def _add(events: list[dict], ts_field: str) -> None:
+        for event in events:
+            ts = event.get(ts_field)
+            if ts is None or ts < since:
+                continue
+            counts[(ts.weekday(), ts.hour)] += 1
+
+    _add(login_events, "logged_in_at")
+    _add(profiling_runs, "executed_at")
+    _add(pii_scans, "executed_at")
+    _add(table_views, "viewed_at")
+    _add(searches, "searched_at")
+
+    cells = [
+        HeatmapCell(weekday=weekday, hour=hour, count=count)
+        for (weekday, hour), count in counts.items()
+    ]
+    return UsageHeatmapResponse(cells=cells)
+
+
+def get_retention_funnel(
+    client: firestore.Client, lookback_days: int = 90
+) -> RetentionFunnelResponse:
+    """3 estágios simples: logou -> logou e teve >=1 ação -> logou e
+    teve >=2 ações (qualquer combinação de profiling/PII scan/table
+    view/busca) no período. "Ação" não precisa vir depois do login (só
+    dentro da mesma janela) — evita lógica frágil de ordenação temporal
+    por usuário pra um funil que só precisa ser uma leitura aproximada
+    de engajamento."""
+    since = datetime.now(UTC) - timedelta(days=lookback_days)
+    login_events = repository.list_login_events(client, since)
+    profiling_runs = repository.list_all_profiling_runs(client)
+    pii_scans = repository.list_all_pii_scans(client)
+    table_views = repository.list_all_table_views(client)
+    searches = repository.list_all_searches(client)
+
+    logged_in_emails = {e["email"] for e in login_events}
+    action_counts: dict[str, int] = defaultdict(int)
+
+    def _count(events: list[dict], email_field: str, ts_field: str) -> None:
+        for event in events:
+            ts = event.get(ts_field)
+            if ts is None or ts < since:
+                continue
+            email = event.get(email_field)
+            if email is None:
+                continue
+            action_counts[email] += 1
+
+    _count(profiling_runs, "executed_by", "executed_at")
+    _count(pii_scans, "executed_by", "executed_at")
+    _count(table_views, "owner_email", "viewed_at")
+    _count(searches, "owner_email", "searched_at")
+
+    return RetentionFunnelResponse(
+        users_with_login=len(logged_in_emails),
+        users_with_action=sum(1 for e in logged_in_emails if action_counts.get(e, 0) >= 1),
+        users_with_repeat_action=sum(1 for e in logged_in_emails if action_counts.get(e, 0) >= 2),
+    )

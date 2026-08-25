@@ -5,6 +5,44 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Visualizações do brainstorm (Uso do Hub + telas existentes, 2 PRs)
+
+Continuação da série de ajustes de UX — usuário pediu pra implementar o
+brainstorm de gráficos antes de voltar pra documentação de telas. A
+pesquisa mostrou que o admin "Uso do Hub" já tinha 6 seções (3 com
+gráfico recharts) e que profiling/PII scan já eram rastreados — só
+faltava virar gráfico. Recalibrado com o usuário: "buckets navegados"
+(sem tracking hoje) e sparkline de Freshness (exigiria o primeiro job
+agendado da história do app) ficaram fora desta rodada.
+
+### O que foi feito
+- **PR A** (3 gráficos triviais, zero mudança de backend): segunda
+  linha de duplicatas% no histórico de profiling; custo acumulado vs.
+  projeção no Budget quando agrupado por Dia; `BarChart` agrupado no
+  diff coluna a coluna das pastas de comparação de profiling.
+- **PR B** (3 seções novas em "Uso do Hub", backend + frontend):
+  - Ranking de domínios mais usados (profiling vs. PII scan, por mês) —
+    reaproveita as mesmas leituras que já alimentam
+    `/analytics/profiling`/`/analytics/pii-scans`, zero gravação nova.
+  - Mapa de calor de horário de uso (dia da semana × hora) — combina
+    login + profiling + PII scan + table view + busca; sem heatmap
+    nativo no recharts, grade CSS customizada
+    (`UsageHeatmapGrid.tsx`) em vez de forçar um gráfico que a lib não
+    cobre.
+  - Funil de retenção (login → ≥1 ação → ação repetida) — "ação" não
+    precisa vir depois do login temporalmente, só na mesma janela de
+    90 dias (evita lógica frágil de ordenação pra um funil que só
+    precisa ser uma leitura aproximada de engajamento).
+  - `docs/specs/admin.md` bump pra v1.7.
+
+### Mudanças de arquitetura
+- Nenhuma — as 3 seções novas reaproveitam 100% das leituras Firestore
+  já existentes (`list_all_profiling_runs`, `list_all_pii_scans`,
+  `list_login_events`, `list_all_table_views`, `list_all_searches`),
+  só agregação nova em Python.
+
+---
+
 ## UX: 12 ajustes identificados durante a documentação de telas (6 PRs)
 
 Usuário começou a tirar prints pra montar a documentação de telas do

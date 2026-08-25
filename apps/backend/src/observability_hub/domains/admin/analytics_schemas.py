@@ -110,3 +110,32 @@ class PiiScanEntry(BaseModel):
 
 class PiiScanActivityResponse(BaseModel):
     scans: list[PiiScanEntry]
+
+
+class DomainUsageMonthBucket(BaseModel):
+    period: str  # "2026-08"
+    profiling_count: int
+    pii_scan_count: int
+
+
+class DomainUsageRankingResponse(BaseModel):
+    monthly: list[DomainUsageMonthBucket]
+    total_profiling_runs: int
+    total_pii_scans: int
+
+
+class HeatmapCell(BaseModel):
+    # weekday: 0=segunda ... 6=domingo (datetime.weekday()).
+    weekday: int
+    hour: int
+    count: int
+
+
+class UsageHeatmapResponse(BaseModel):
+    cells: list[HeatmapCell]
+
+
+class RetentionFunnelResponse(BaseModel):
+    users_with_login: int
+    users_with_action: int
+    users_with_repeat_action: int
