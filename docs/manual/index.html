@@ -9,11 +9,12 @@
 
   :root {
     --color-primary: #FFB302;
-    --color-bg-dark: #1D1D1B;
-    --color-bg-surface: #2A2A28;
-    --color-bg-muted: #3A3A38;
-    --color-text-primary: #FFFFFF;
-    --color-text-muted: #8F96A1;
+    --color-bg-page: #FFFFFF;
+    --color-bg-surface: #F7F7F5;
+    --color-bg-muted: #ECECE9;
+    --color-border: #E2E2DE;
+    --color-text-primary: #1D1D1B;
+    --color-text-muted: #5B626C;
     --color-text-inverse: #1D1D1B;
     --font-sans: 'Ubuntu', 'Verdana', system-ui, sans-serif;
   }
@@ -24,17 +25,108 @@
     margin: 0;
     padding: 0;
     height: 100%;
-    background: var(--color-bg-dark);
+    background: var(--color-bg-page);
     color: var(--color-text-primary);
     font-family: var(--font-sans);
     overflow: hidden;
   }
 
-  .deck {
-    position: relative;
+  .app {
+    display: flex;
+    height: 100vh;
+  }
+
+  /* --- Sidebar de navegação (scroll vertical) --------------------------- */
+
+  .sidebar {
+    width: 280px;
+    flex: 0 0 auto;
+    height: 100vh;
+    overflow-y: auto;
+    background: var(--color-bg-surface);
+    border-right: 1px solid var(--color-border);
+    padding-bottom: 24px;
+  }
+
+  .sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 56px;
+    padding: 0 16px;
+    font-weight: 700;
+    border-bottom: 2px solid var(--color-primary);
+    position: sticky;
+    top: 0;
+    background: var(--color-bg-surface);
+    z-index: 1;
+  }
+
+  .sidebar-brand .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    flex: 0 0 auto;
+  }
+
+  .sidebar-group-label {
+    padding: 16px 16px 4px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-text-muted);
+  }
+
+  .sidebar-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    appearance: none;
+    border: none;
+    background: none;
+    cursor: pointer;
+    padding: 7px 16px 7px 18px;
+    font-size: 0.8125rem;
+    line-height: 1.3;
+    color: var(--color-text-muted);
+    border-left: 3px solid transparent;
+    font-family: inherit;
+  }
+
+  .sidebar-item:hover {
+    background: var(--color-bg-muted);
+    color: var(--color-text-primary);
+  }
+
+  .sidebar-item.active {
+    background: var(--color-bg-muted);
+    border-left-color: var(--color-primary);
+    color: var(--color-text-primary);
+    font-weight: 700;
+  }
+
+  .sidebar-item.divider-item {
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.75rem;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    color: var(--color-text-primary);
+    border-left: 3px solid var(--color-primary);
+  }
+
+  /* --- Área principal ----------------------------------------------------- */
+
+  .main {
+    flex: 1 1 auto;
     height: 100vh;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
   }
 
   header.deck-header {
@@ -42,26 +134,9 @@
     flex: 0 0 auto;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     padding: 0 24px;
-    background: var(--color-bg-dark);
-    border-bottom: 2px solid var(--color-primary);
-  }
-
-  .deck-brand {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-weight: 700;
-    font-size: 1rem;
-    letter-spacing: 0.02em;
-  }
-
-  .deck-brand .dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: var(--color-primary);
+    border-bottom: 1px solid var(--color-border);
   }
 
   .deck-counter {
@@ -81,10 +156,8 @@
     inset: 0;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 24px;
-    padding: 32px 48px 64px;
+    gap: 12px;
+    padding: 28px 40px 24px;
     opacity: 0;
     transform: translateX(24px);
     transition: opacity 0.25s ease, transform 0.25s ease;
@@ -101,12 +174,43 @@
     transform: translateX(-24px);
   }
 
+  .slide-caption {
+    flex: 0 0 auto;
+    max-width: 900px;
+  }
+
+  .slide-caption .domain-tag {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-text-inverse);
+    background: var(--color-primary);
+    border-radius: 999px;
+    padding: 2px 10px;
+    margin-bottom: 8px;
+  }
+
+  .slide-caption h2 {
+    margin: 0 0 4px;
+    font-size: 1.375rem;
+    font-weight: 700;
+  }
+
+  .slide-caption p {
+    margin: 0;
+    font-size: 0.9375rem;
+    line-height: 1.45;
+    color: var(--color-text-muted);
+  }
+
   .slide-figure {
     flex: 1 1 auto;
     min-height: 0;
     width: 100%;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
   }
 
@@ -115,84 +219,16 @@
     max-height: 100%;
     object-fit: contain;
     border-radius: 8px;
-    box-shadow: 0 0 0 1px var(--color-bg-muted), 0 24px 64px rgba(0, 0, 0, 0.5);
+    border: 1px solid var(--color-border);
+    box-shadow: 0 16px 40px rgba(29, 29, 27, 0.14);
     cursor: zoom-in;
   }
 
-  .lightbox {
-    display: none;
-    position: fixed;
-    inset: 0;
-    z-index: 100;
-    background: rgba(0, 0, 0, 0.92);
+  /* Slide de capa/encerramento — sem screenshot, texto centralizado */
+  .slide.title-slide {
     align-items: center;
     justify-content: center;
-    padding: 32px;
-    cursor: zoom-out;
-  }
-
-  .lightbox.open {
-    display: flex;
-  }
-
-  .lightbox img {
-    max-width: 95vw;
-    max-height: 95vh;
-    object-fit: contain;
-    border-radius: 4px;
-    box-shadow: 0 0 0 1px var(--color-bg-muted);
-  }
-
-  .lightbox-close {
-    position: fixed;
-    top: 20px;
-    right: 24px;
-    appearance: none;
-    border: none;
-    background: var(--color-bg-surface);
-    color: var(--color-text-primary);
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    font-size: 1.25rem;
-    cursor: pointer;
-  }
-
-  .slide-caption {
-    flex: 0 0 auto;
-    max-width: 780px;
     text-align: center;
-  }
-
-  .slide-caption .domain-tag {
-    display: inline-block;
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--color-text-inverse);
-    background: var(--color-primary);
-    border-radius: 999px;
-    padding: 3px 12px;
-    margin-bottom: 12px;
-  }
-
-  .slide-caption h2 {
-    margin: 0 0 8px;
-    font-size: 1.5rem;
-    font-weight: 700;
-  }
-
-  .slide-caption p {
-    margin: 0;
-    font-size: 1rem;
-    line-height: 1.5;
-    color: var(--color-text-muted);
-  }
-
-  /* Slide de título/divisor — sem screenshot, texto centralizado */
-  .slide.title-slide .slide-figure {
-    display: none;
   }
 
   .slide.title-slide .slide-caption {
@@ -200,11 +236,40 @@
   }
 
   .slide.title-slide h2 {
-    font-size: 2.25rem;
+    font-size: 2.5rem;
   }
 
   .slide.title-slide p {
     font-size: 1.125rem;
+  }
+
+  /* Slide divisor de seção ("contracapa") */
+  .slide.divider-slide {
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    background: var(--color-primary);
+    margin: 0;
+  }
+
+  .slide.divider-slide .slide-caption {
+    max-width: 640px;
+  }
+
+  .slide.divider-slide .domain-tag {
+    background: var(--color-text-inverse);
+    color: var(--color-primary);
+  }
+
+  .slide.divider-slide h2 {
+    font-size: 3rem;
+    color: var(--color-text-inverse);
+  }
+
+  .slide.divider-slide p {
+    font-size: 1.125rem;
+    color: var(--color-text-inverse);
+    opacity: 0.85;
   }
 
   nav.deck-nav {
@@ -213,7 +278,8 @@
     align-items: center;
     justify-content: center;
     gap: 16px;
-    padding: 16px 24px 24px;
+    padding: 12px 24px 20px;
+    border-top: 1px solid var(--color-border);
   }
 
   .nav-btn {
@@ -221,8 +287,8 @@
     border: none;
     background: var(--color-bg-surface);
     color: var(--color-text-primary);
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
     font-size: 1.125rem;
     cursor: pointer;
@@ -241,55 +307,75 @@
     cursor: default;
   }
 
-  .dots {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    align-content: center;
-    gap: 6px;
-    max-width: min(90vw, 760px);
-    padding: 4px;
+  .nav-hint {
+    font-size: 0.8125rem;
+    color: var(--color-text-muted);
   }
 
-  .dot-btn {
+  /* --- Lightbox ------------------------------------------------------------ */
+
+  .lightbox {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: rgba(15, 15, 14, 0.92);
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+    cursor: zoom-out;
+  }
+
+  .lightbox.open {
+    display: flex;
+  }
+
+  .lightbox img {
+    max-width: 95vw;
+    max-height: 95vh;
+    object-fit: contain;
+    border-radius: 4px;
+  }
+
+  .lightbox-close {
+    position: fixed;
+    top: 20px;
+    right: 24px;
     appearance: none;
     border: none;
-    background: var(--color-bg-muted);
-    width: 8px;
-    height: 8px;
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
+    font-size: 1.25rem;
     cursor: pointer;
-    flex: 0 0 auto;
-    padding: 0;
-    transition: background 0.15s ease, transform 0.15s ease;
   }
 
-  .dot-btn.active {
-    background: var(--color-primary);
-    transform: scale(1.3);
-  }
-
-  @media (max-width: 640px) {
-    .slide { padding: 16px 20px 48px; }
-    .slide-caption h2 { font-size: 1.25rem; }
-    .dots { display: none; }
+  @media (max-width: 900px) {
+    .sidebar { display: none; }
+    .slide { padding: 20px 20px 20px; }
+    .slide-caption h2 { font-size: 1.125rem; }
   }
 </style>
 </head>
 <body>
-  <div class="deck">
-    <header class="deck-header">
-      <div class="deck-brand"><span class="dot"></span> Observability Hub</div>
-      <div class="deck-counter"><span id="current-index">1</span> / <span id="total-slides">1</span></div>
-    </header>
+  <div class="app">
+    <nav class="sidebar" id="sidebar"></nav>
 
-    <main class="slides" id="slides"></main>
+    <div class="main">
+      <header class="deck-header">
+        <div class="deck-counter"><span id="current-index">1</span> / <span id="total-slides">1</span></div>
+      </header>
 
-    <nav class="deck-nav">
-      <button class="nav-btn" id="prev-btn" aria-label="Slide anterior">‹</button>
-      <div class="dots" id="dots"></div>
-      <button class="nav-btn" id="next-btn" aria-label="Próximo slide">›</button>
-    </nav>
+      <main class="slides" id="slides"></main>
+
+      <nav class="deck-nav">
+        <button class="nav-btn" id="prev-btn" aria-label="Slide anterior">‹</button>
+        <span class="nav-hint">Navegue pela lista à esquerda, pelas setas ou pelo teclado</span>
+        <button class="nav-btn" id="next-btn" aria-label="Próximo slide">›</button>
+      </nav>
+    </div>
   </div>
 
   <div class="lightbox" id="lightbox">
@@ -298,8 +384,10 @@
   </div>
 
   <script>
-    // Cada slide: { title, description, image (opcional — ausente = slide de
-    // título/divisor), domain (opcional — tag exibida acima do título) }.
+    // Cada slide: { title, description, image (opcional), domain (opcional,
+    // vira badge acima do título), type ('divider' = contracapa de seção,
+    // ausente + sem image = capa/encerramento, ausente + com image = tela
+    // normal do produto) }.
     const slides = [
       {
         title: "Observability Hub",
@@ -309,6 +397,11 @@
         title: "Login",
         description: "Acesso via conta Google (OAuth) — sem senha própria, sem cadastro manual. Quem pode entrar é controlado por uma allowlist de domínio.",
         image: "01-login.png",
+      },
+      {
+        type: "divider",
+        title: "BigQuery",
+        description: "Catálogo, qualidade, lineage, PII, governança e FinOps — tudo que o Hub observa em datasets e tabelas do BigQuery.",
       },
       {
         title: "Catálogo — dataset",
@@ -425,6 +518,11 @@
         image: "18-finops-budget-resultado.png",
       },
       {
+        type: "divider",
+        title: "Cloud Storage",
+        description: "Catálogo de buckets, navegação de objetos e scanner de desperdício — a mesma governança do BigQuery, agora pra dados em bucket.",
+      },
+      {
         title: "Cloud Storage — buckets",
         domain: "Cloud Storage",
         description: "Catálogo de buckets do projeto — storage class, tamanho, quantidade de objetos e regras de lifecycle já configuradas.",
@@ -453,6 +551,11 @@
         domain: "Cloud Storage",
         description: "Economia estimada por bucket, com nível de confiança — 'leitura confirmada' quando o audit log de acesso a objeto está habilitado, 'baseado em configuração' quando não.",
         image: "24-storage-scanner-resultado.png",
+      },
+      {
+        type: "divider",
+        title: "Administração",
+        description: "Solicitação e liberação de acesso, usuários, grupos do Workspace e uso do próprio Hub — quem pode ver o quê, e quem está usando.",
       },
       {
         title: "Solicitar acesso a um projeto",
@@ -532,10 +635,14 @@
         description: "Tabelas mais vistas e buscas mais frequentes — o que as pessoas mais procuram no catálogo, sem precisar perguntar.",
         image: "38-admin-uso-hub-navegacao.png",
       },
+      {
+        title: "Obrigado",
+        description: "Esse foi um resumo das principais telas do Observability Hub. Dúvidas ou sugestões? Fale com o time responsável pelo Hub na DP6.",
+      },
     ];
 
     const slidesEl = document.getElementById('slides');
-    const dotsEl = document.getElementById('dots');
+    const sidebarEl = document.getElementById('sidebar');
     const prevBtn = document.getElementById('prev-btn');
     const nextBtn = document.getElementById('next-btn');
     const currentIndexEl = document.getElementById('current-index');
@@ -543,25 +650,23 @@
 
     let current = 0;
 
+    function slideClass(slide) {
+      if (slide.type === 'divider') return 'slide divider-slide';
+      if (!slide.image) return 'slide title-slide';
+      return 'slide';
+    }
+
     function renderSlides() {
       slidesEl.innerHTML = '';
-      dotsEl.innerHTML = '';
+      sidebarEl.innerHTML = '<div class="sidebar-brand"><span class="dot"></span> Observability Hub</div>';
+
+      let lastGroupLabel = null;
 
       slides.forEach((slide, i) => {
+        // --- slide em si ---
         const section = document.createElement('section');
-        section.className = 'slide' + (slide.image ? '' : ' title-slide');
+        section.className = slideClass(slide);
         section.dataset.index = i;
-
-        const figure = document.createElement('div');
-        figure.className = 'slide-figure';
-        if (slide.image) {
-          const img = document.createElement('img');
-          img.src = 'images/' + slide.image;
-          img.alt = slide.title;
-          img.addEventListener('click', () => openLightbox(img.src, img.alt));
-          figure.appendChild(img);
-        }
-        section.appendChild(figure);
 
         const caption = document.createElement('div');
         caption.className = 'slide-caption';
@@ -570,13 +675,45 @@
           `<h2>${slide.title}</h2><p>${slide.description}</p>`;
         section.appendChild(caption);
 
+        if (slide.image) {
+          const figure = document.createElement('div');
+          figure.className = 'slide-figure';
+          const img = document.createElement('img');
+          img.src = 'images/' + slide.image;
+          img.alt = slide.title;
+          img.addEventListener('click', () => openLightbox(img.src, img.alt));
+          figure.appendChild(img);
+          section.appendChild(figure);
+        }
+
         slidesEl.appendChild(section);
 
-        const dot = document.createElement('button');
-        dot.className = 'dot-btn';
-        dot.setAttribute('aria-label', `Ir para slide ${i + 1}`);
-        dot.addEventListener('click', () => goTo(i));
-        dotsEl.appendChild(dot);
+        // --- item da sidebar ---
+        if (slide.type === 'divider') {
+          const item = document.createElement('button');
+          item.className = 'sidebar-item divider-item';
+          item.textContent = slide.title;
+          item.addEventListener('click', () => goTo(i));
+          sidebarEl.appendChild(item);
+          lastGroupLabel = null;
+        } else {
+          const groupLabel = slide.domain || null;
+          if (groupLabel && groupLabel !== lastGroupLabel) {
+            const label = document.createElement('div');
+            label.className = 'sidebar-group-label';
+            label.textContent = groupLabel;
+            sidebarEl.appendChild(label);
+            lastGroupLabel = groupLabel;
+          }
+          if (!groupLabel) lastGroupLabel = null;
+
+          const item = document.createElement('button');
+          item.className = 'sidebar-item';
+          item.textContent = slide.title;
+          item.dataset.index = i;
+          item.addEventListener('click', () => goTo(i));
+          sidebarEl.appendChild(item);
+        }
       });
 
       totalSlidesEl.textContent = slides.length;
@@ -585,12 +722,18 @@
 
     function update() {
       const sections = slidesEl.querySelectorAll('.slide');
-      const dots = dotsEl.querySelectorAll('.dot-btn');
       sections.forEach((s, i) => {
         s.classList.toggle('active', i === current);
         s.classList.toggle('leaving', i < current);
       });
-      dots.forEach((d, i) => d.classList.toggle('active', i === current));
+
+      const items = sidebarEl.querySelectorAll('.sidebar-item[data-index]');
+      items.forEach((item) => {
+        const isActive = Number(item.dataset.index) === current;
+        item.classList.toggle('active', isActive);
+        if (isActive) item.scrollIntoView({ block: 'nearest' });
+      });
+
       currentIndexEl.textContent = current + 1;
       prevBtn.disabled = current === 0;
       nextBtn.disabled = current === slides.length - 1;
