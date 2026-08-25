@@ -123,6 +123,10 @@ Nunca remova um sufixo de ambiente de um nome de recurso "pra simplificar" — s
 ├── docs/playbooks/                # Roteiros operacionais de execução rápida — hoje só
 │                                   # hospedar o Hub em projetos novos (clonar, ajustar
 │                                   # variáveis, bootstrap)
+├── docs/manual/                   # Descritivo de produto/portfólio — slide deck HTML
+│                                   # autocontido (prints + descrição, tela a tela),
+│                                   # publicado via GitHub Pages (workflow
+│                                   # pages-manual.yml, só este subdiretório de docs/)
 ├── scripts/                      # Scripts de apoio (setup local, seed, etc.)
 ├── CLAUDE.md
 └── .gitignore

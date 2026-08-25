@@ -1,0 +1,579 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Observability Hub — descritivo do produto</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Ubuntu:wght@300;400;700&display=swap');
+
+  :root {
+    --color-primary: #FFB302;
+    --color-bg-dark: #1D1D1B;
+    --color-bg-surface: #2A2A28;
+    --color-bg-muted: #3A3A38;
+    --color-text-primary: #FFFFFF;
+    --color-text-muted: #8F96A1;
+    --color-text-inverse: #1D1D1B;
+    --font-sans: 'Ubuntu', 'Verdana', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--color-bg-dark);
+    color: var(--color-text-primary);
+    font-family: var(--font-sans);
+    overflow: hidden;
+  }
+
+  .deck {
+    position: relative;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header.deck-header {
+    height: 56px;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    background: var(--color-bg-dark);
+    border-bottom: 2px solid var(--color-primary);
+  }
+
+  .deck-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 1rem;
+    letter-spacing: 0.02em;
+  }
+
+  .deck-brand .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--color-primary);
+  }
+
+  .deck-counter {
+    font-size: 0.875rem;
+    color: var(--color-text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  main.slides {
+    position: relative;
+    flex: 1 1 auto;
+    overflow: hidden;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    padding: 32px 48px 64px;
+    opacity: 0;
+    transform: translateX(24px);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    pointer-events: none;
+  }
+
+  .slide.active {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: auto;
+  }
+
+  .slide.leaving {
+    transform: translateX(-24px);
+  }
+
+  .slide-figure {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .slide-figure img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: 8px;
+    box-shadow: 0 0 0 1px var(--color-bg-muted), 0 24px 64px rgba(0, 0, 0, 0.5);
+  }
+
+  .slide-caption {
+    flex: 0 0 auto;
+    max-width: 780px;
+    text-align: center;
+  }
+
+  .slide-caption .domain-tag {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-text-inverse);
+    background: var(--color-primary);
+    border-radius: 999px;
+    padding: 3px 12px;
+    margin-bottom: 12px;
+  }
+
+  .slide-caption h2 {
+    margin: 0 0 8px;
+    font-size: 1.5rem;
+    font-weight: 700;
+  }
+
+  .slide-caption p {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.5;
+    color: var(--color-text-muted);
+  }
+
+  /* Slide de título/divisor — sem screenshot, texto centralizado */
+  .slide.title-slide .slide-figure {
+    display: none;
+  }
+
+  .slide.title-slide .slide-caption {
+    max-width: 640px;
+  }
+
+  .slide.title-slide h2 {
+    font-size: 2.25rem;
+  }
+
+  .slide.title-slide p {
+    font-size: 1.125rem;
+  }
+
+  nav.deck-nav {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 16px 24px 24px;
+  }
+
+  .nav-btn {
+    appearance: none;
+    border: none;
+    background: var(--color-bg-surface);
+    color: var(--color-text-primary);
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    font-size: 1.125rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease;
+  }
+
+  .nav-btn:hover:not(:disabled) {
+    background: var(--color-bg-muted);
+  }
+
+  .nav-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  .dots {
+    display: flex;
+    gap: 6px;
+    max-width: 420px;
+    overflow-x: auto;
+    padding: 4px;
+  }
+
+  .dot-btn {
+    appearance: none;
+    border: none;
+    background: var(--color-bg-muted);
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    cursor: pointer;
+    flex: 0 0 auto;
+    padding: 0;
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+
+  .dot-btn.active {
+    background: var(--color-primary);
+    transform: scale(1.3);
+  }
+
+  @media (max-width: 640px) {
+    .slide { padding: 16px 20px 48px; }
+    .slide-caption h2 { font-size: 1.25rem; }
+    .dots { display: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="deck">
+    <header class="deck-header">
+      <div class="deck-brand"><span class="dot"></span> Observability Hub</div>
+      <div class="deck-counter"><span id="current-index">1</span> / <span id="total-slides">1</span></div>
+    </header>
+
+    <main class="slides" id="slides"></main>
+
+    <nav class="deck-nav">
+      <button class="nav-btn" id="prev-btn" aria-label="Slide anterior">‹</button>
+      <div class="dots" id="dots"></div>
+      <button class="nav-btn" id="next-btn" aria-label="Próximo slide">›</button>
+    </nav>
+  </div>
+
+  <script>
+    // Cada slide: { title, description, image (opcional — ausente = slide de
+    // título/divisor), domain (opcional — tag exibida acima do título) }.
+    const slides = [
+      {
+        title: "Observability Hub",
+        description: "Plataforma de observabilidade de dados no GCP — catálogo, qualidade, lineage, PII, acesso, freshness, FinOps e Cloud Storage em um só lugar.",
+      },
+      {
+        title: "Login",
+        description: "Acesso via conta Google (OAuth) — sem senha própria, sem cadastro manual. Quem pode entrar é controlado por uma allowlist de domínio.",
+        image: "01-login.png",
+      },
+      {
+        title: "Catálogo — dataset",
+        domain: "Catálogo",
+        description: "Inventário navegável de todas as tabelas de um dataset, com tamanho, linhas, tipo e data de atualização — visão de raio-X do BigQuery sem escrever uma query.",
+        image: "02-catalogo-dataset-raw.png",
+      },
+      {
+        title: "Partições de uma tabela",
+        domain: "Catálogo",
+        description: "Detalha as partições de uma tabela particionada — quantidade de linhas por partição, sem precisar rodar SQL manualmente.",
+        image: "03-catalogo-particoes.png",
+      },
+      {
+        title: "Busca de tabelas",
+        domain: "Catálogo",
+        description: "Encontra em quais datasets uma tabela ou partição existe (ou não existe) dentro do projeto — útil pra confirmar cobertura de um pipeline.",
+        image: "19-catalogo-buscar-tabelas.png",
+      },
+      {
+        title: "Qualidade — schema",
+        domain: "Qualidade",
+        description: "Schema completo de uma tabela — nome, tipo e nullability de cada coluna, direto do INFORMATION_SCHEMA.",
+        image: "04-qualidade-schema.png",
+      },
+      {
+        title: "Qualidade — configurar análise",
+        domain: "Qualidade",
+        description: "Antes de rodar o profiling, o Hub mostra o SQL gerado e estima o custo em bytes/US$ — nunca surpresa na fatura do BigQuery.",
+        image: "05-qualidade-analise-config.png",
+      },
+      {
+        title: "Qualidade — resultado do profiling",
+        domain: "Qualidade",
+        description: "Completude, unicidade e duplicatas coluna a coluna, com tipo lógico detectado automaticamente (id, e-mail, categórico, data...) e flag de qualidade.",
+        image: "06-qualidade-analise-resultado.png",
+      },
+      {
+        title: "Qualidade — histórico",
+        domain: "Qualidade",
+        description: "Cada execução de profiling fica salva — dá pra acompanhar densidade e duplicatas ao longo do tempo e pegar regressão de qualidade cedo.",
+        image: "07-qualidade-historico.png",
+      },
+      {
+        title: "Lineage",
+        domain: "Qualidade",
+        description: "Reconstrói de onde os dados de uma tabela vêm e pra onde vão, a partir dos jobs de LOAD/QUERY/EXTRACT do BigQuery — inclusive buckets do GCS como nó.",
+        image: "08-qualidade-lineage.png",
+      },
+      {
+        title: "Fingerprinting de PII",
+        domain: "Qualidade",
+        description: "Escaneia colunas por heurística de nome + amostra de dado real, sinalizando quais têm alta confiança de conter informação pessoal (e-mail, CPF, telefone...).",
+        image: "09-qualidade-pii.png",
+      },
+      {
+        title: "Mapa de acesso",
+        domain: "Qualidade",
+        description: "Quem leu ou escreveu numa tabela recentemente, via audit logs — confirma se ela ainda tem consumidor antes de arquivar ou mudar o schema.",
+        image: "10-qualidade-acesso.png",
+      },
+      {
+        title: "Pastas de profiling",
+        domain: "Qualidade",
+        description: "Resultados de profiling podem ser salvos em pastas nomeadas pra comparar execuções lado a lado — útil antes/depois de uma mudança de pipeline.",
+        image: "40-qualidade-pastas-profiling.png",
+      },
+      {
+        title: "Freshness",
+        domain: "Governança",
+        description: "Monitora se as tabelas estão sendo atualizadas dentro do esperado, com faixas de SLA (12h, 24h, 48h, 7 dias, 1 mês) por dataset.",
+        image: "11-governanca-freshness.png",
+      },
+      {
+        title: "Tabelas sem consumidor",
+        domain: "Governança",
+        description: "Sinaliza tabelas que não aparecem como lidas em nenhum job dentro do período analisado — mesmo que só tenham sido escritas e nunca consultadas.",
+        image: "12-governanca-tabelas-sem-consumidor-config.png",
+      },
+      {
+        title: "Tabelas sem consumidor — diagnóstico",
+        domain: "Governança",
+        description: "Quando o resultado vem vazio, o Hub explica as causas prováveis (audit log desabilitado, role faltando) com o comando gcloud pronto pra investigar.",
+        image: "13-governanca-tabelas-sem-consumidor-resultado.png",
+      },
+      {
+        title: "FinOps — candidatas a particionamento",
+        domain: "FinOps",
+        description: "Sinaliza tabelas grandes ainda não particionadas com coluna de data candidata — com economia estimada a partir do custo real observado nos últimos 30 dias.",
+        image: "14-finops-scanner-particionamento.png",
+      },
+      {
+        title: "FinOps — sugestão de tipo de coluna",
+        domain: "FinOps",
+        description: "Amostra dados reais via TABLESAMPLE pra sugerir tipos de coluna mais baratos (ex: STRING → FLOAT64) — com estimativa de custo antes de rodar.",
+        image: "15-finops-scanner-tipos-coluna-config.png",
+      },
+      {
+        title: "FinOps — resultado de tipos de coluna",
+        domain: "FinOps",
+        description: "Tipo atual vs. sugerido por coluna, com a economia mensal estimada de cada troca.",
+        image: "16-finops-scanner-tipos-coluna-resultado.png",
+      },
+      {
+        title: "FinOps — budget de custo",
+        domain: "FinOps",
+        description: "Estima o custo do mês corrente via audit logs de jobs do BigQuery (bytes cobrados) + preço público on-demand — sem depender do Cloud Billing Export.",
+        image: "17-finops-budget-config.png",
+      },
+      {
+        title: "FinOps — custo por agrupamento",
+        domain: "FinOps",
+        description: "Custo até agora, média diária e projeção do mês, quebrados por dataset, tabela, usuário, dia, mês ou ano.",
+        image: "18-finops-budget-resultado.png",
+      },
+      {
+        title: "Cloud Storage — buckets",
+        domain: "Cloud Storage",
+        description: "Catálogo de buckets do projeto — storage class, tamanho, quantidade de objetos e regras de lifecycle já configuradas.",
+        image: "20-storage-buckets.png",
+      },
+      {
+        title: "Cloud Storage — navegação de bucket",
+        domain: "Cloud Storage",
+        description: "Explora o conteúdo de um bucket pasta a pasta, com tamanho e storage class de cada objeto.",
+        image: "21-storage-bucket-detalhe.png",
+      },
+      {
+        title: "Cloud Storage — arquivos",
+        domain: "Cloud Storage",
+        description: "Detalhe de uma pasta dentro do bucket — nome, tamanho e data de modificação de cada arquivo.",
+        image: "22-storage-bucket-pasta.png",
+      },
+      {
+        title: "Cloud Storage — scanner de desperdício",
+        domain: "Cloud Storage",
+        description: "Sinaliza objetos em storage class STANDARD parados há muito tempo, candidatos a mudar pra uma classe mais barata (Nearline/Coldline/Archive).",
+        image: "23-storage-scanner-config.png",
+      },
+      {
+        title: "Cloud Storage — resultado do scanner",
+        domain: "Cloud Storage",
+        description: "Economia estimada por bucket, com nível de confiança — 'leitura confirmada' quando o audit log de acesso a objeto está habilitado, 'baseado em configuração' quando não.",
+        image: "24-storage-scanner-resultado.png",
+      },
+      {
+        title: "Solicitar acesso a um projeto",
+        domain: "Acesso",
+        description: "Qualquer usuário pode pedir acesso a um ou mais projetos direto pela interface — um admin do Hub revisa e libera (ou nega) cada um.",
+        image: "25-acesso-solicitar-projeto.png",
+      },
+      {
+        title: "Solicitação enviada",
+        domain: "Acesso",
+        description: "Confirmação imediata — o pedido entra na fila de aprovação do admin, sem precisar de e-mail ou ticket à parte.",
+        image: "26-acesso-solicitacao-confirmada.png",
+      },
+      {
+        title: "Admin — usuários",
+        domain: "Administração",
+        description: "Controla quem é administrador do Hub e a quais projetos GCP cada usuário tem acesso, num só lugar.",
+        image: "27-admin-por-usuario.png",
+      },
+      {
+        title: "Admin — por projeto",
+        domain: "Administração",
+        description: "Mesma informação, organizada por projeto — inclui a opção de liberar um projeto pra todo mundo de uma vez.",
+        image: "28-admin-por-projeto.png",
+      },
+      {
+        title: "Admin — grupos",
+        domain: "Administração",
+        description: "Grupos do Google Workspace integrados via domain-wide delegation — os membros são puxados automaticamente, sem manter lista manual duplicada.",
+        image: "29-admin-grupos.png",
+      },
+      {
+        title: "Admin — solicitações de acesso",
+        domain: "Administração",
+        description: "Fila de pedidos de acesso a projeto, com quem pediu, status e quem resolveu.",
+        image: "30-admin-solicitacoes.png",
+      },
+      {
+        title: "Uso do Hub — acessos",
+        domain: "Administração",
+        description: "Quantos acessos e usuários únicos o Hub teve hoje, na semana e no mês — visibilidade de adoção sem sair da própria ferramenta.",
+        image: "31-admin-uso-hub-acessos.png",
+      },
+      {
+        title: "Uso do Hub — acessos recentes",
+        domain: "Administração",
+        description: "Log dos últimos logins, com quem e quando — paginado pra não sobrecarregar a tela.",
+        image: "32-admin-uso-hub-acessos-recentes.png",
+      },
+      {
+        title: "Uso do Hub — funil de retenção e horário",
+        domain: "Administração",
+        description: "Quantos usuários só logam vs. de fato usam alguma funcionalidade, e em que dia/horário o uso se concentra — sinal de quando é seguro fazer manutenção.",
+        image: "33-admin-uso-hub-funil-horario.png",
+      },
+      {
+        title: "Uso do Hub — favoritos",
+        domain: "Administração",
+        description: "Quais bases e tabelas mais viram favorito entre os usuários — sinal do que é mais consultado no dia a dia.",
+        image: "34-admin-uso-hub-favoritos.png",
+      },
+      {
+        title: "Uso do Hub — atividade de profiling",
+        domain: "Administração",
+        description: "Toda execução de profiling registrada — quem rodou, quando, e o resultado de densidade/duplicatas.",
+        image: "35-admin-uso-hub-profiling.png",
+      },
+      {
+        title: "Uso do Hub — ranking de domínios",
+        domain: "Administração",
+        description: "Compara volume de profiling rodado com scans de PII, mês a mês — onde o esforço de manutenção do produto compensa mais.",
+        image: "36-admin-uso-hub-ranking-dominios.png",
+      },
+      {
+        title: "Uso do Hub — solicitações de acesso",
+        domain: "Administração",
+        description: "Total de pedidos de acesso, taxa de aprovação e quais projetos são mais pedidos — visibilidade de demanda por dado.",
+        image: "37-admin-uso-hub-solicitacoes-analytics.png",
+      },
+      {
+        title: "Uso do Hub — navegação",
+        domain: "Administração",
+        description: "Tabelas mais vistas e buscas mais frequentes — o que as pessoas mais procuram no catálogo, sem precisar perguntar.",
+        image: "38-admin-uso-hub-navegacao.png",
+      },
+      {
+        title: "Uso do Hub — scans de PII",
+        domain: "Administração",
+        description: "Todo scan de PII registrado — quem rodou, quando, e quantas colunas foram sinalizadas.",
+        image: "39-admin-uso-hub-scans-pii.png",
+      },
+    ];
+
+    const slidesEl = document.getElementById('slides');
+    const dotsEl = document.getElementById('dots');
+    const prevBtn = document.getElementById('prev-btn');
+    const nextBtn = document.getElementById('next-btn');
+    const currentIndexEl = document.getElementById('current-index');
+    const totalSlidesEl = document.getElementById('total-slides');
+
+    let current = 0;
+
+    function renderSlides() {
+      slidesEl.innerHTML = '';
+      dotsEl.innerHTML = '';
+
+      slides.forEach((slide, i) => {
+        const section = document.createElement('section');
+        section.className = 'slide' + (slide.image ? '' : ' title-slide');
+        section.dataset.index = i;
+
+        const figure = document.createElement('div');
+        figure.className = 'slide-figure';
+        if (slide.image) {
+          const img = document.createElement('img');
+          img.src = 'images/' + slide.image;
+          img.alt = slide.title;
+          figure.appendChild(img);
+        }
+        section.appendChild(figure);
+
+        const caption = document.createElement('div');
+        caption.className = 'slide-caption';
+        caption.innerHTML =
+          (slide.domain ? `<span class="domain-tag">${slide.domain}</span>` : '') +
+          `<h2>${slide.title}</h2><p>${slide.description}</p>`;
+        section.appendChild(caption);
+
+        slidesEl.appendChild(section);
+
+        const dot = document.createElement('button');
+        dot.className = 'dot-btn';
+        dot.setAttribute('aria-label', `Ir para slide ${i + 1}`);
+        dot.addEventListener('click', () => goTo(i));
+        dotsEl.appendChild(dot);
+      });
+
+      totalSlidesEl.textContent = slides.length;
+      update();
+    }
+
+    function update() {
+      const sections = slidesEl.querySelectorAll('.slide');
+      const dots = dotsEl.querySelectorAll('.dot-btn');
+      sections.forEach((s, i) => {
+        s.classList.toggle('active', i === current);
+        s.classList.toggle('leaving', i < current);
+      });
+      dots.forEach((d, i) => d.classList.toggle('active', i === current));
+      currentIndexEl.textContent = current + 1;
+      prevBtn.disabled = current === 0;
+      nextBtn.disabled = current === slides.length - 1;
+    }
+
+    function goTo(i) {
+      current = Math.max(0, Math.min(slides.length - 1, i));
+      update();
+    }
+
+    prevBtn.addEventListener('click', () => goTo(current - 1));
+    nextBtn.addEventListener('click', () => goTo(current + 1));
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ') goTo(current + 1);
+      if (e.key === 'ArrowLeft') goTo(current - 1);
+    });
+
+    renderSlides();
+  </script>
+</body>
+</html>
