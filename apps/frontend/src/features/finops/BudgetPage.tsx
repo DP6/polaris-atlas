@@ -2,10 +2,11 @@ import { ChevronDown, ChevronUp } from 'lucide-react'
 import { Fragment, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
+  Bar,
   CartesianGrid,
+  ComposedChart,
   Legend,
   Line,
-  LineChart,
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
   XAxis,
@@ -282,7 +283,7 @@ function CostByGroupTab({
   // ordenável direto como string. Só dias com atividade aparecem na
   // resposta (API não zera dias sem custo); sem preenchimento de gap,
   // mantém simples — o acumulado sobe em degraus nos dias com dado.
-  let cumulativeChartData: { date: string; acumulado: number; projecao: number }[] = []
+  let cumulativeChartData: { date: string; dia: number; acumulado: number; projecao: number }[] = []
   if (groupBy === 'day') {
     let running = 0
     cumulativeChartData = [...groups]
@@ -291,6 +292,7 @@ function CostByGroupTab({
         running += group.cost_usd
         return {
           date: group.key.slice(5), // "MM-DD", ano é sempre o mês corrente
+          dia: group.cost_usd,
           acumulado: running,
           projecao: projection.daily_average_usd * (index + 1),
         }
@@ -320,13 +322,33 @@ function CostByGroupTab({
       {groupBy === 'day' && cumulativeChartData.length > 0 && (
         <div className="h-56 w-full shrink-0 rounded-lg border border-border bg-card p-4">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={cumulativeChartData}>
+            <ComposedChart data={cumulativeChartData}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
               <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} width={48} tickFormatter={(v) => formatUsd(v)} />
+              <YAxis
+                yAxisId="daily"
+                tick={{ fontSize: 11 }}
+                width={48}
+                tickFormatter={(v) => formatUsd(v)}
+              />
+              <YAxis
+                yAxisId="cumulative"
+                orientation="right"
+                tick={{ fontSize: 11 }}
+                width={48}
+                tickFormatter={(v) => formatUsd(v)}
+              />
               <RechartsTooltip formatter={(value) => formatUsd(Number(value))} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Bar
+                yAxisId="daily"
+                dataKey="dia"
+                name="Custo do dia"
+                fill="var(--color-accent-blue)"
+                barSize={16}
+              />
               <Line
+                yAxisId="cumulative"
                 type="monotone"
                 dataKey="acumulado"
                 name="Custo acumulado"
@@ -335,6 +357,7 @@ function CostByGroupTab({
                 dot={{ r: 3 }}
               />
               <Line
+                yAxisId="cumulative"
                 type="monotone"
                 dataKey="projecao"
                 name="Projeção"
@@ -343,7 +366,7 @@ function CostByGroupTab({
                 strokeDasharray="4 4"
                 dot={false}
               />
-            </LineChart>
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
       )}
