@@ -58,6 +58,7 @@ resource "google_cloud_run_v2_service" "service" {
 
   template {
     service_account = google_service_account.runtime.email
+    timeout         = "${var.timeout_seconds}s"
 
     scaling {
       min_instance_count = var.min_instance_count

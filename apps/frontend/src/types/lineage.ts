@@ -35,6 +35,9 @@ export interface LineageGraphResponse {
   max_hops: number
   truncated: boolean
   warning: string | null
+  // null = dado veio ao vivo nesta chamada (cache miss); preenchido = veio
+  // do cache pré-computado (job diário ou fallback de outra requisição).
+  cache_updated_at: string | null
 }
 
 export interface OrphanTable {
@@ -49,4 +52,5 @@ export interface OrphansResponse {
   orphans: OrphanTable[]
   lookback_days: number
   warning: string | null
+  cache_updated_at: string | null
 }

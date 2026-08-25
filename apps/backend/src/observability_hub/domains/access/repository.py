@@ -14,16 +14,21 @@ Mesmo formato de payload validado em domains/lineage/repository.py
 jobChange).
 """
 
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from google.api_core.exceptions import Forbidden
+from google.cloud import firestore, storage
 from google.cloud import logging as cloud_logging
 
+from observability_hub.core import event_cache
+from observability_hub.core.config import settings
 from observability_hub.core.exceptions import LoggingAccessDeniedError
 
 LOOKBACK_DAYS = 30
 _PAGE_SIZE = 1000
+_CACHE_KIND = "access"
 
 TableRefTuple = tuple[str, str, str]  # (project_id, dataset_id, table_id)
 
@@ -122,3 +127,85 @@ def list_access_events(client: cloud_logging.Client, project_id: str) -> list[Ac
         return [event for entry in entries if (event := _parse_entry(entry)) is not None]
     except Forbidden as exc:
         raise LoggingAccessDeniedError(project_id) from exc
+
+
+# --- Cache de audit log (job periódico + fallback do request path) ---------
+
+
+def serialize_access_events(events: list[AccessEvent]) -> bytes:
+    payload = [
+        {
+            "job_id": e.job_id,
+            "principal_email": e.principal_email,
+            "timestamp": e.timestamp.isoformat() if e.timestamp else None,
+            "referenced_tables": [list(t) for t in e.referenced_tables],
+            "destination_table": list(e.destination_table) if e.destination_table else None,
+        }
+        for e in events
+    ]
+    return json.dumps(payload).encode("utf-8")
+
+
+def deserialize_access_events(data: bytes) -> list[AccessEvent]:
+    raw = json.loads(data.decode("utf-8"))
+    return [
+        AccessEvent(
+            job_id=r["job_id"],
+            principal_email=r["principal_email"],
+            timestamp=datetime.fromisoformat(r["timestamp"]) if r["timestamp"] else None,
+            referenced_tables=[tuple(t) for t in r["referenced_tables"]],
+            destination_table=tuple(r["destination_table"]) if r["destination_table"] else None,
+        )
+        for r in raw
+    ]
+
+
+def _cache_blob_path(project_id: str) -> str:
+    return f"{_CACHE_KIND}/{project_id}.json"
+
+
+def read_access_events_cache(
+    storage_client: storage.Client, firestore_client: firestore.Client, project_id: str
+) -> tuple[list[AccessEvent], datetime | None] | None:
+    data = event_cache.read_cache_bytes(
+        storage_client, settings.event_cache_bucket_name, _cache_blob_path(project_id)
+    )
+    if data is None:
+        return None
+    metadata = event_cache.get_cache_metadata(firestore_client, _CACHE_KIND, project_id)
+    cached_at = metadata["cached_at"] if metadata else None
+    return deserialize_access_events(data), cached_at
+
+
+def write_access_events_cache(
+    storage_client: storage.Client,
+    firestore_client: firestore.Client,
+    project_id: str,
+    events: list[AccessEvent],
+) -> None:
+    event_cache.write_cache_bytes(
+        storage_client,
+        settings.event_cache_bucket_name,
+        _cache_blob_path(project_id),
+        serialize_access_events(events),
+    )
+    event_cache.set_cache_metadata(firestore_client, _CACHE_KIND, project_id, len(events))
+
+
+def get_access_events_cached(
+    client: cloud_logging.Client,
+    storage_client: storage.Client,
+    firestore_client: firestore.Client,
+    project_id: str,
+) -> tuple[list[AccessEvent], datetime | None]:
+    """Endpoint de access não tem lookback_days variável (sempre
+    LOOKBACK_DAYS) — cache sempre elegível, diferente de lineage/orphans.
+    cached_at None significa que o dado veio ao vivo nesta chamada."""
+    cached = read_access_events_cache(storage_client, firestore_client, project_id)
+    if cached is not None:
+        return cached
+
+    events = list_access_events(client, project_id)
+    write_access_events_cache(storage_client, firestore_client, project_id, events)
+    event_cache.record_project_seen(firestore_client, project_id)
+    return events, None

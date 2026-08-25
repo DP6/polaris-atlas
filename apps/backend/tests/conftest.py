@@ -11,6 +11,8 @@ os.environ.setdefault(
     "OBSERVABILITY_HUB_RUNTIME_SA_EMAIL",
     "backend-dev-run@test-project.iam.gserviceaccount.com",
 )
+os.environ.setdefault("OBSERVABILITY_HUB_REGION", "us-central1")
+os.environ.setdefault("OBSERVABILITY_HUB_EVENT_CACHE_BUCKET_NAME", "test-project-hub-cache-dev")
 
 import pytest
 

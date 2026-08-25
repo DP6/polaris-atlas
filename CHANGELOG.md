@@ -5,6 +5,75 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Cache pré-computado de audit log — resolve "Failed to fetch" em Lineage/Acesso/Órfãs
+
+Usuário relatou "failed to fetch" recorrente nas telas de Lineage, Mapa
+de Acesso e Tabelas sem consumidor. Diagnóstico: `list_job_events`/
+`list_access_events` escaneavam todo o audit log do Cloud Logging (até
+30 dias, sem limite de resultados) **a cada requisição**, sem cache —
+em projetos com volume real, isso estourava o timeout do Cloud Run
+(300s, sem override até agora) ou a memória do container, e o Cloud Run
+derruba a conexão TCP nesses casos em vez de devolver um erro HTTP
+normal, o que o browser reporta como `TypeError: Failed to fetch` sem
+nenhuma informação útil. Usuário pediu pra combinar 4 propostas
+discutidas (cache entre requisições, pré-computação via job periódico,
+timeout maior, mais memória) num plano único.
+
+### O que foi feito
+- **Cache compartilhado (GCS + Firestore)**: novo `core/event_cache.py`
+  — payload de eventos serializado vai pro GCS (Firestore tem limite de
+  1MiB/doc, facilmente ultrapassado em 30 dias de audit log de um
+  projeto com uso real), metadado pequeno (`cached_at`) vai pro
+  Firestore. `domains/lineage/repository.py` e `domains/access/repository.py`
+  ganham `get_job_events_cached`/`get_access_events_cached` — tentam o
+  cache primeiro, caem no scan ao vivo em cache miss e gravam o
+  resultado (auto-cura).
+- **Job diário (D-1, 03:00 UTC)**: novo pacote `jobs/refresh_event_cache.py`,
+  rodando como Cloud Run Job (`infra/terraform/modules/cloud-run-job`,
+  novo módulo) disparado por Cloud Scheduler — varre a união de
+  `hub_projects` (registro admin) com projetos "vistos" via cache miss
+  no request path (cobre acesso só-wildcard, que nunca ganha doc em
+  `hub_projects`). Roda com a **mesma SA de runtime** do Cloud Run
+  Service correspondente (nunca uma nova), pra não reabrir onboarding
+  manual de IAM cross-project de nenhum cliente já liberado.
+- **Gatilho manual de admin**: `POST /api/v1/admin/event-cache/refresh`
+  + botão "Atualizar cache agora" em Admin → Por projeto — dispara a
+  mesma execução completa do Job sob demanda via Cloud Run Admin API
+  (`core/run_client.py`). Cloud Run Jobs sempre exigem
+  `roles/run.invoker` (diferente do Service), então a SA de runtime do
+  backend só precisou desse IAM binding — sem segredo/token customizado.
+- **Timeout e memória do Cloud Run Service**: novo `timeout_seconds` no
+  módulo `cloud-run` (default 300, preserva os demais serviços);
+  `backend-{dev,prod}` sobem pra 600s/1Gi como rede de segurança do
+  fallback síncrono em cache miss.
+- Frontend: `cache_updated_at` nas 3 responses + badge "Cache atualizado
+  há Xh" (`CacheStalenessBadge.tsx`) em Lineage, Órfãs e Mapa de Acesso.
+- `docs/specs/lineage.md` bump pra v2.3 (primeira vez com seções
+  Critérios de aceite/Suposições/Perguntas em aberto); `docs/specs/access.md`
+  pra v1.1, referenciando o mecanismo compartilhado em vez de duplicá-lo.
+- Bootstrap (`infra/terraform/bootstrap/modules/wif-bootstrap`) ganhou
+  `cloudscheduler.googleapis.com` em `required_apis` e
+  `roles/storage.admin`/`roles/cloudscheduler.admin` nas roles do
+  deployer — **exige um `terraform apply` manual em
+  `infra/terraform/bootstrap` antes do próximo apply de
+  `environments/{dev,prod}`**, já que essas roles/APIs não existiam
+  antes desta mudança.
+
+### Mudanças de arquitetura
+- Decisão explícita (revisitada com o usuário durante a sessão):
+  descartada a alternativa de um Cloud Logging Sink no projeto-alvo
+  exportando pra BigQuery — violaria "o Hub nunca instala nada no
+  projeto alvo" (ADR-006) e trocaria a fonte de dados "custo $0"
+  documentada por queries BigQuery faturáveis. O cache faz o trabalho
+  inteiro dentro do projeto do próprio Hub, sem tocar em nenhum
+  projeto-alvo.
+- Cadência do job mudou de "a cada 15 min" (proposta inicial) para 1x/dia
+  D-1 — decisão do usuário, priorizando custo de execução sobre
+  frescor do dado; compensado pelo gatilho manual de admin pra quando
+  alguém precisar de um refresh imediato.
+
+---
+
 ## Ajustes na aba "Uso do Hub" — remoção do ranking + funil em 4 estágios
 
 Dois ajustes pedidos pelo usuário depois de revisar a v1.7 em produção:

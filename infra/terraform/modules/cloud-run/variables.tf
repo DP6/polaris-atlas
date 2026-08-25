@@ -49,6 +49,12 @@ variable "memory" {
   default     = "512Mi"
 }
 
+variable "timeout_seconds" {
+  description = "Timeout de requisição do Cloud Run, em segundos. Default de 300 preserva o comportamento implícito do GCP para os serviços que não precisam de mais — o backend (lineage/access/órfãs, caminho de fallback síncrono em cache miss) sobe esse valor via override no environment."
+  type        = number
+  default     = 300
+}
+
 variable "min_instance_count" {
   description = "Número mínimo de instâncias (0 permite scale-to-zero)."
   type        = number

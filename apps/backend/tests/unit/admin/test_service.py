@@ -822,3 +822,21 @@ def test_approve_access_request_raises_when_not_found(monkeypatch):
 
     with pytest.raises(AccessRequestNotFoundError):
         service.approve_access_request(_fake_client(), "ghost-id", resolved_by="admin@dp6.com.br")
+
+
+# --- trigger_event_cache_refresh ----------------------------------------------
+
+
+def test_trigger_event_cache_refresh_calls_run_client_with_environment_job_name(monkeypatch):
+    monkeypatch.setattr(service, "get_runtime_project", lambda: "dp6-ci-polaris")
+    monkeypatch.setattr(service.settings, "region", "us-central1")
+    monkeypatch.setattr(service.settings, "environment", "dev")
+    calls = []
+    monkeypatch.setattr(service, "trigger_job_execution", lambda *a, **kw: calls.append((a, kw)))
+
+    run_client = MagicMock()
+    service.trigger_event_cache_refresh(run_client)
+
+    assert len(calls) == 1
+    args, _ = calls[0]
+    assert args == (run_client, "dp6-ci-polaris", "us-central1", "backend-dev-refresh-cache")

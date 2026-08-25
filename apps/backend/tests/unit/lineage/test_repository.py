@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 from google.api_core.exceptions import Forbidden
 
+from observability_hub.core import event_cache as event_cache_module
 from observability_hub.core.exceptions import LoggingAccessDeniedError
 from observability_hub.domains.lineage import repository
 
@@ -458,3 +459,113 @@ def test_list_all_table_refs_filters_by_dataset_when_provided():
     called_sql, called_kwargs = client.query.call_args
     assert "WHERE table_schema IN UNNEST(@datasets)" in called_sql[0]
     assert called_kwargs["job_config"].query_parameters[0].values == ["RAW"]
+
+
+# --- serialize/deserialize_job_events -------------------------------------------
+
+
+def test_serialize_deserialize_job_events_round_trips():
+    events = [
+        repository.JobEvent(
+            job_id="job1",
+            principal_email="a@dp6.com.br",
+            referenced_tables=[("proj", "RAW", "a")],
+            destination_table=("proj", "GOLD", "b"),
+            source_buckets=["landing"],
+            destination_buckets=[],
+        )
+    ]
+
+    round_tripped = repository.deserialize_job_events(repository.serialize_job_events(events))
+
+    assert round_tripped == events
+
+
+def test_deserialize_job_events_handles_no_destination_table():
+    events = [
+        repository.JobEvent(
+            job_id="job1",
+            principal_email="a@dp6.com.br",
+            referenced_tables=[],
+            destination_table=None,
+        )
+    ]
+
+    round_tripped = repository.deserialize_job_events(repository.serialize_job_events(events))
+
+    assert round_tripped[0].destination_table is None
+
+
+# --- get_job_events_cached -------------------------------------------------------
+
+
+def test_get_job_events_cached_returns_cache_hit_without_calling_list_entries(monkeypatch):
+    client = MagicMock()
+    storage_client = MagicMock()
+    firestore_client = MagicMock()
+    cached_events = [
+        repository.JobEvent(
+            job_id="cached-job",
+            principal_email="a@dp6.com.br",
+            referenced_tables=[],
+            destination_table=None,
+        )
+    ]
+    cached_at = object()
+    monkeypatch.setattr(
+        repository,
+        "read_job_events_cache",
+        lambda *a, **kw: (cached_events, cached_at),
+    )
+
+    events, returned_cached_at = repository.get_job_events_cached(
+        client, storage_client, firestore_client, "proj"
+    )
+
+    assert events == cached_events
+    assert returned_cached_at is cached_at
+    client.list_entries.assert_not_called()
+
+
+def test_get_job_events_cached_falls_back_and_writes_cache_on_miss(monkeypatch):
+    client = MagicMock()
+    client.list_entries.return_value = []
+    storage_client = MagicMock()
+    firestore_client = MagicMock()
+    monkeypatch.setattr(repository, "read_job_events_cache", lambda *a, **kw: None)
+    write_calls = []
+    monkeypatch.setattr(
+        repository, "write_job_events_cache", lambda *a, **kw: write_calls.append((a, kw))
+    )
+    seen_calls = []
+    monkeypatch.setattr(
+        event_cache_module, "record_project_seen", lambda *a, **kw: seen_calls.append((a, kw))
+    )
+
+    events, cached_at = repository.get_job_events_cached(
+        client, storage_client, firestore_client, "proj"
+    )
+
+    assert events == []
+    assert cached_at is None
+    client.list_entries.assert_called_once()
+    assert len(write_calls) == 1
+    assert len(seen_calls) == 1
+
+
+def test_get_job_events_cached_ignores_cache_for_non_default_lookback(monkeypatch):
+    client = MagicMock()
+    client.list_entries.return_value = []
+    storage_client = MagicMock()
+    firestore_client = MagicMock()
+    read_calls = []
+    monkeypatch.setattr(
+        repository, "read_job_events_cache", lambda *a, **kw: read_calls.append(1) or None
+    )
+
+    repository.get_job_events_cached(
+        client, storage_client, firestore_client, "proj", lookback_days=90
+    )
+
+    assert read_calls == []
+    client.list_entries.assert_called_once()

@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, Query
-from google.cloud import firestore
+from google.cloud import firestore, run_v2
 
 from observability_hub.core.auth import require_admin
 from observability_hub.core.firestore import get_firestore_client
+from observability_hub.core.run_client import get_run_client
 from observability_hub.domains.admin import analytics_service, service
 from observability_hub.domains.admin.analytics_schemas import (
     AccessRequestAnalyticsResponse,
@@ -216,3 +217,13 @@ def retention_funnel(
     client: firestore.Client = Depends(get_firestore_client),
 ) -> RetentionFunnelResponse:
     return analytics_service.get_retention_funnel(client, lookback_days)
+
+
+@router.post("/event-cache/refresh", status_code=202)
+def refresh_event_cache(run_client: run_v2.JobsClient = Depends(get_run_client)) -> None:
+    """Dispara sob demanda o Cloud Run Job de refresh do cache de audit
+    log (lineage/access) — mesma execução completa do ciclo diário
+    automático (ver docs/specs/lineage.md). 202 porque a execução do Job
+    é assíncrona: este endpoint só confirma o disparo, não espera o
+    resultado."""
+    service.trigger_event_cache_refresh(run_client)

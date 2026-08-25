@@ -21,6 +21,11 @@ env:
   REGION: us-central1
   REPOSITORY: apps
   SERVICE: backend-dev
+  # Cloud Run Job de refresh do cache de audit log (lineage/access) —
+  # mesma imagem do Service, promovida junto (ver
+  # infra/terraform/modules/cloud-run-job e
+  # apps/backend/src/observability_hub/jobs/refresh_event_cache.py).
+  REFRESH_CACHE_JOB: backend-dev-refresh-cache
 
 jobs:
   deploy:
@@ -51,6 +56,14 @@ jobs:
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy "${SERVICE}" \
+            --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --image "${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${SERVICE}:${{ github.sha }}" \
+            --quiet
+
+      - name: Update refresh-cache Cloud Run Job
+        run: |
+          gcloud run jobs update "${REFRESH_CACHE_JOB}" \
             --project "${PROJECT_ID}" \
             --region "${REGION}" \
             --image "${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${SERVICE}:${{ github.sha }}" \

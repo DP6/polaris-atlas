@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, Query
-from google.cloud import bigquery
+from google.cloud import bigquery, firestore, storage
 from google.cloud import logging as cloud_logging
 
 from observability_hub.core.auth import require_project_access
 from observability_hub.core.bigquery import get_client
+from observability_hub.core.firestore import get_firestore_client
 from observability_hub.core.logging_client import get_logging_client
+from observability_hub.core.storage_client import get_storage_client
 from observability_hub.domains.lineage import service
 from observability_hub.domains.lineage.schemas import (
     LineageGraphResponse,
@@ -23,9 +25,17 @@ def get_orphans(
     lookback_days: int = Query(default=30, ge=1),
     client: bigquery.Client = Depends(get_client),
     logging_client: cloud_logging.Client = Depends(get_logging_client),
+    storage_client: storage.Client = Depends(get_storage_client),
+    firestore_client: firestore.Client = Depends(get_firestore_client),
 ) -> OrphansResponse:
     return service.get_orphans(
-        client, logging_client, project_id, datasets=datasets, lookback_days=lookback_days
+        client,
+        logging_client,
+        storage_client,
+        firestore_client,
+        project_id,
+        datasets=datasets,
+        lookback_days=lookback_days,
     )
 
 
@@ -37,7 +47,16 @@ def get_lineage(
     max_hops: int = Query(default=8, ge=1, le=15),
     client: bigquery.Client = Depends(get_client),
     logging_client: cloud_logging.Client = Depends(get_logging_client),
+    storage_client: storage.Client = Depends(get_storage_client),
+    firestore_client: firestore.Client = Depends(get_firestore_client),
 ) -> LineageGraphResponse:
     return service.get_table_lineage(
-        client, logging_client, project_id, dataset_id, table_id, max_hops=max_hops
+        client,
+        logging_client,
+        storage_client,
+        firestore_client,
+        project_id,
+        dataset_id,
+        table_id,
+        max_hops=max_hops,
     )

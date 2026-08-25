@@ -1,4 +1,5 @@
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { CacheStalenessBadge } from '@/components/CacheStalenessBadge'
 import { useTableLineage } from '@/features/lineage/hooks'
 import { LineageGraph } from '@/features/lineage/LineageGraph'
 
@@ -44,9 +45,12 @@ export function LineageTab({ projectId, datasetId, tableId }: LineageTabProps) {
 
       <LineageGraph data={data} />
 
-      <p className="text-xs text-muted-foreground">
-        Baseado em audit logs dos últimos {data.lookback_days} dias.
-      </p>
+      <div className="flex items-center gap-2">
+        <p className="text-xs text-muted-foreground">
+          Baseado em audit logs dos últimos {data.lookback_days} dias.
+        </p>
+        <CacheStalenessBadge cacheUpdatedAt={data.cache_updated_at} />
+      </div>
     </div>
   )
 }

@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 from google.api_core.exceptions import Forbidden
 
+from observability_hub.core import event_cache as event_cache_module
 from observability_hub.core.exceptions import LoggingAccessDeniedError
 from observability_hub.domains.access import repository
 
@@ -221,3 +222,94 @@ def test_list_access_events_parses_valid_entries_and_skips_invalid_ones():
     call_kwargs = client.list_entries.call_args.kwargs
     assert call_kwargs["resource_names"] == ["projects/observability-hub-dev"]
     assert 'resource.type="bigquery_resource"' in call_kwargs["filter_"]
+
+
+# --- serialize/deserialize_access_events ----------------------------------------
+
+
+def test_serialize_deserialize_access_events_round_trips():
+    events = [
+        repository.AccessEvent(
+            job_id="job1",
+            principal_email="a@dp6.com.br",
+            timestamp=datetime(2026, 8, 14, 10, 0, tzinfo=UTC),
+            referenced_tables=[("proj", "RAW", "a")],
+            destination_table=("proj", "GOLD", "b"),
+        )
+    ]
+
+    round_tripped = repository.deserialize_access_events(repository.serialize_access_events(events))
+
+    assert round_tripped == events
+
+
+def test_deserialize_access_events_handles_no_timestamp():
+    events = [
+        repository.AccessEvent(
+            job_id="job1",
+            principal_email="a@dp6.com.br",
+            timestamp=None,
+            referenced_tables=[],
+            destination_table=None,
+        )
+    ]
+
+    round_tripped = repository.deserialize_access_events(repository.serialize_access_events(events))
+
+    assert round_tripped[0].timestamp is None
+
+
+# --- get_access_events_cached ----------------------------------------------------
+
+
+def test_get_access_events_cached_returns_cache_hit_without_calling_list_entries(monkeypatch):
+    client = MagicMock()
+    storage_client = MagicMock()
+    firestore_client = MagicMock()
+    cached_events = [
+        repository.AccessEvent(
+            job_id="cached-job",
+            principal_email="a@dp6.com.br",
+            timestamp=None,
+            referenced_tables=[],
+            destination_table=None,
+        )
+    ]
+    cached_at = object()
+    monkeypatch.setattr(
+        repository, "read_access_events_cache", lambda *a, **kw: (cached_events, cached_at)
+    )
+
+    events, returned_cached_at = repository.get_access_events_cached(
+        client, storage_client, firestore_client, "proj"
+    )
+
+    assert events == cached_events
+    assert returned_cached_at is cached_at
+    client.list_entries.assert_not_called()
+
+
+def test_get_access_events_cached_falls_back_and_writes_cache_on_miss(monkeypatch):
+    client = MagicMock()
+    client.list_entries.return_value = []
+    storage_client = MagicMock()
+    firestore_client = MagicMock()
+    monkeypatch.setattr(repository, "read_access_events_cache", lambda *a, **kw: None)
+    write_calls = []
+    monkeypatch.setattr(
+        repository, "write_access_events_cache", lambda *a, **kw: write_calls.append((a, kw))
+    )
+    seen_calls = []
+    monkeypatch.setattr(
+        event_cache_module, "record_project_seen", lambda *a, **kw: seen_calls.append((a, kw))
+    )
+
+    events, cached_at = repository.get_access_events_cached(
+        client, storage_client, firestore_client, "proj"
+    )
+
+    assert events == []
+    assert cached_at is None
+    client.list_entries.assert_called_once()
+    assert len(write_calls) == 1
+    assert len(seen_calls) == 1

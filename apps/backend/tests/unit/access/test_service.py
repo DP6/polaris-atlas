@@ -22,7 +22,9 @@ def _event(
 
 
 def _events(monkeypatch, events, hub_project="hub-proj"):
-    monkeypatch.setattr(service.repository, "list_access_events", lambda *a, **kw: events)
+    monkeypatch.setattr(
+        service.repository, "get_access_events_cached", lambda *a, **kw: (events, None)
+    )
     # settings.runtime_sa_email é o e-mail da própria SA de runtime do Hub,
     # injetado pelo Terraform em produção (ver core/config.py) —
     # _hub_runtime_sa_email() só lê essa settings, então o teste simula o
@@ -46,7 +48,9 @@ def test_get_table_access_counts_read_access(monkeypatch):
     ]
     _events(monkeypatch, events)
 
-    result = service.get_table_access(MagicMock(), "proj", "RAW", "crm_leads")
+    result = service.get_table_access(
+        MagicMock(), MagicMock(), MagicMock(), "proj", "RAW", "crm_leads"
+    )
 
     assert len(result.users) == 1
     assert result.users[0].access_types == ["read"]
@@ -62,7 +66,9 @@ def test_get_table_access_counts_write_access(monkeypatch):
     ]
     _events(monkeypatch, events)
 
-    result = service.get_table_access(MagicMock(), "proj", "GOLD", "leads_summary")
+    result = service.get_table_access(
+        MagicMock(), MagicMock(), MagicMock(), "proj", "GOLD", "leads_summary"
+    )
 
     assert len(result.users) == 1
     assert result.users[0].access_types == ["write"]
@@ -77,7 +83,9 @@ def test_get_table_access_counts_both_read_and_write_for_self_referencing_job(mo
     ]
     _events(monkeypatch, events)
 
-    result = service.get_table_access(MagicMock(), "proj", "RAW", "crm_leads")
+    result = service.get_table_access(
+        MagicMock(), MagicMock(), MagicMock(), "proj", "RAW", "crm_leads"
+    )
 
     assert len(result.users) == 1
     assert set(result.users[0].access_types) == {"read", "write"}
@@ -90,7 +98,9 @@ def test_get_table_access_ignores_unrelated_tables(monkeypatch):
     ]
     _events(monkeypatch, events)
 
-    result = service.get_table_access(MagicMock(), "proj", "RAW", "crm_leads")
+    result = service.get_table_access(
+        MagicMock(), MagicMock(), MagicMock(), "proj", "RAW", "crm_leads"
+    )
 
     assert result.users == []
 
@@ -99,7 +109,9 @@ def test_get_table_access_ignores_same_named_table_from_other_project(monkeypatc
     events = [_event(referenced=[("other-proj", "RAW", "crm_leads")], destination=None)]
     _events(monkeypatch, events)
 
-    result = service.get_table_access(MagicMock(), "proj", "RAW", "crm_leads")
+    result = service.get_table_access(
+        MagicMock(), MagicMock(), MagicMock(), "proj", "RAW", "crm_leads"
+    )
 
     assert result.users == []
 
@@ -126,7 +138,9 @@ def test_get_table_access_aggregates_multiple_events_from_same_principal(monkeyp
     ]
     _events(monkeypatch, events)
 
-    result = service.get_table_access(MagicMock(), "proj", "RAW", "crm_leads")
+    result = service.get_table_access(
+        MagicMock(), MagicMock(), MagicMock(), "proj", "RAW", "crm_leads"
+    )
 
     assert len(result.users) == 1
     assert result.users[0].access_count == 2
@@ -150,7 +164,9 @@ def test_get_table_access_sorts_users_by_most_recent_access(monkeypatch):
     ]
     _events(monkeypatch, events)
 
-    result = service.get_table_access(MagicMock(), "proj", "RAW", "crm_leads")
+    result = service.get_table_access(
+        MagicMock(), MagicMock(), MagicMock(), "proj", "RAW", "crm_leads"
+    )
 
     assert [u.principal_email for u in result.users] == ["recent@dp6.com.br", "old@dp6.com.br"]
 
@@ -167,7 +183,9 @@ def test_get_table_access_respects_limit(monkeypatch):
     ]
     _events(monkeypatch, events)
 
-    result = service.get_table_access(MagicMock(), "proj", "RAW", "crm_leads", limit=2)
+    result = service.get_table_access(
+        MagicMock(), MagicMock(), MagicMock(), "proj", "RAW", "crm_leads", limit=2
+    )
 
     assert len(result.users) == 2
     assert result.users[0].principal_email == "user4@dp6.com.br"
@@ -186,7 +204,9 @@ def test_get_table_access_classifies_service_account(monkeypatch):
     ]
     _events(monkeypatch, events)
 
-    result = service.get_table_access(MagicMock(), "proj", "RAW", "crm_leads")
+    result = service.get_table_access(
+        MagicMock(), MagicMock(), MagicMock(), "proj", "RAW", "crm_leads"
+    )
 
     assert result.users[0].is_service_account is True
 
@@ -201,7 +221,9 @@ def test_get_table_access_classifies_human_user(monkeypatch):
     ]
     _events(monkeypatch, events)
 
-    result = service.get_table_access(MagicMock(), "proj", "RAW", "crm_leads")
+    result = service.get_table_access(
+        MagicMock(), MagicMock(), MagicMock(), "proj", "RAW", "crm_leads"
+    )
 
     assert result.users[0].is_service_account is False
 
@@ -213,7 +235,9 @@ def test_get_table_access_skips_events_without_timestamp(monkeypatch):
     events = [_event(referenced=[("proj", "RAW", "crm_leads")], destination=None, timestamp=None)]
     _events(monkeypatch, events)
 
-    result = service.get_table_access(MagicMock(), "proj", "RAW", "crm_leads")
+    result = service.get_table_access(
+        MagicMock(), MagicMock(), MagicMock(), "proj", "RAW", "crm_leads"
+    )
 
     assert result.users == []
     assert result.warning is None  # events não está vazio, só não teve timestamp válido
@@ -222,7 +246,9 @@ def test_get_table_access_skips_events_without_timestamp(monkeypatch):
 def test_get_table_access_sets_warning_when_no_events(monkeypatch):
     _events(monkeypatch, [])
 
-    result = service.get_table_access(MagicMock(), "proj", "RAW", "crm_leads")
+    result = service.get_table_access(
+        MagicMock(), MagicMock(), MagicMock(), "proj", "RAW", "crm_leads"
+    )
 
     assert result.users == []
     assert result.warning is not None
@@ -250,7 +276,9 @@ def test_get_table_access_excludes_hub_own_runtime_service_account(monkeypatch):
     ]
     _events(monkeypatch, events, hub_project="hub-proj")
 
-    result = service.get_table_access(MagicMock(), "proj", "RAW", "crm_leads")
+    result = service.get_table_access(
+        MagicMock(), MagicMock(), MagicMock(), "proj", "RAW", "crm_leads"
+    )
 
     assert [u.principal_email for u in result.users] == ["ana@dp6.com.br"]
 
@@ -265,7 +293,9 @@ def test_get_table_access_does_not_exclude_other_service_accounts(monkeypatch):
     ]
     _events(monkeypatch, events, hub_project="hub-proj")
 
-    result = service.get_table_access(MagicMock(), "proj", "RAW", "crm_leads")
+    result = service.get_table_access(
+        MagicMock(), MagicMock(), MagicMock(), "proj", "RAW", "crm_leads"
+    )
 
     assert len(result.users) == 1
     assert result.users[0].principal_email == "glue-job@other-proj.iam.gserviceaccount.com"

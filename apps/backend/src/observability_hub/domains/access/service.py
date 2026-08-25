@@ -3,6 +3,7 @@ via repository) pra descobrir quem acessou uma tabela e quando. api/v1
 só chama estas funções — CLAUDE.md proíbe lógica de negócio em api/.
 """
 
+from google.cloud import firestore, storage
 from google.cloud import logging as cloud_logging
 
 from observability_hub.core.config import settings
@@ -49,13 +50,17 @@ def _hub_runtime_sa_email() -> str:
 
 def get_table_access(
     logging_client: cloud_logging.Client,
+    storage_client: storage.Client,
+    firestore_client: firestore.Client,
     project_id: str,
     dataset_id: str,
     table_id: str,
     limit: int = _DEFAULT_LIMIT,
 ) -> TableAccessResponse:
     target: TableRefTuple = (project_id, dataset_id, table_id)
-    events = repository.list_access_events(logging_client, project_id)
+    events, cache_updated_at = repository.get_access_events_cached(
+        logging_client, storage_client, firestore_client, project_id
+    )
     hub_sa_email = _hub_runtime_sa_email()
 
     by_principal: dict[str, dict] = {}
@@ -100,4 +105,5 @@ def get_table_access(
         lookback_days=repository.LOOKBACK_DAYS,
         users=users[:limit],
         warning=_empty_result_warning(project_id) if not events else None,
+        cache_updated_at=cache_updated_at,
     )

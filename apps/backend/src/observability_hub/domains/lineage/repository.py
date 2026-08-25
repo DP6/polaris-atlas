@@ -23,18 +23,25 @@ path/arquivo é descartado (granularidade do nó de lineage é bucket, não
 objeto).
 """
 
+import json
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 from google.api_core.exceptions import Forbidden
-from google.cloud import bigquery
+from google.cloud import bigquery, firestore, storage
 from google.cloud import logging as cloud_logging
 
+from observability_hub.core import event_cache
+from observability_hub.core.config import settings
 from observability_hub.core.exceptions import LoggingAccessDeniedError
 
 LOOKBACK_DAYS = 30
 _PAGE_SIZE = 1000
+# Namespace do cache dentro do bucket compartilhado (core/event_cache.py)
+# e "kind" do metadado no Firestore — domains/access usa "access" no
+# mesmo bucket, prefixos diferentes.
+_CACHE_KIND = "lineage"
 
 TableRefTuple = tuple[str, str, str]  # (project_id, dataset_id, table_id)
 
@@ -198,3 +205,100 @@ def list_all_table_refs(
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         results = list(pool.map(_list_region, regions))
     return [ref for region_refs in results for ref in region_refs]
+
+
+# --- Cache de audit log (job periódico + fallback do request path) ---------
+
+
+def serialize_job_events(events: list[JobEvent]) -> bytes:
+    payload = [
+        {
+            "job_id": e.job_id,
+            "principal_email": e.principal_email,
+            "referenced_tables": [list(t) for t in e.referenced_tables],
+            "destination_table": list(e.destination_table) if e.destination_table else None,
+            "source_buckets": e.source_buckets,
+            "destination_buckets": e.destination_buckets,
+        }
+        for e in events
+    ]
+    return json.dumps(payload).encode("utf-8")
+
+
+def deserialize_job_events(data: bytes) -> list[JobEvent]:
+    raw = json.loads(data.decode("utf-8"))
+    return [
+        JobEvent(
+            job_id=r["job_id"],
+            principal_email=r["principal_email"],
+            referenced_tables=[tuple(t) for t in r["referenced_tables"]],
+            destination_table=tuple(r["destination_table"]) if r["destination_table"] else None,
+            source_buckets=r.get("source_buckets", []),
+            destination_buckets=r.get("destination_buckets", []),
+        )
+        for r in raw
+    ]
+
+
+def _cache_blob_path(project_id: str) -> str:
+    return f"{_CACHE_KIND}/{project_id}.json"
+
+
+def read_job_events_cache(
+    storage_client: storage.Client, firestore_client: firestore.Client, project_id: str
+) -> tuple[list[JobEvent], datetime | None] | None:
+    """None em cache miss. cached_at pode ser None mesmo com hit, se o
+    metadado não foi encontrado (não deveria acontecer em uso normal —
+    escrito sempre junto do blob — mas não é motivo pra propagar erro)."""
+    data = event_cache.read_cache_bytes(
+        storage_client, settings.event_cache_bucket_name, _cache_blob_path(project_id)
+    )
+    if data is None:
+        return None
+    metadata = event_cache.get_cache_metadata(firestore_client, _CACHE_KIND, project_id)
+    cached_at = metadata["cached_at"] if metadata else None
+    return deserialize_job_events(data), cached_at
+
+
+def write_job_events_cache(
+    storage_client: storage.Client,
+    firestore_client: firestore.Client,
+    project_id: str,
+    events: list[JobEvent],
+) -> None:
+    event_cache.write_cache_bytes(
+        storage_client,
+        settings.event_cache_bucket_name,
+        _cache_blob_path(project_id),
+        serialize_job_events(events),
+    )
+    event_cache.set_cache_metadata(firestore_client, _CACHE_KIND, project_id, len(events))
+
+
+def get_job_events_cached(
+    client: cloud_logging.Client,
+    storage_client: storage.Client,
+    firestore_client: firestore.Client,
+    project_id: str,
+    lookback_days: int = LOOKBACK_DAYS,
+) -> tuple[list[JobEvent], datetime | None]:
+    """Lê o cache pré-computado (job periódico ou fallback de outra
+    requisição) quando lookback_days é o default do módulo — JobEvent não
+    carrega timestamp por evento, então não dá pra recortar um cache de 30
+    dias pra uma janela diferente (ver docs/specs/lineage.md, ASM). Fora
+    desse caso, ou em cache miss, escaneia ao vivo (list_job_events) e
+    grava o resultado pra próxima chamada (auto-cura). Retorna
+    (eventos, cached_at) — cached_at None significa que o dado veio ao
+    vivo nesta própria chamada."""
+    if lookback_days == LOOKBACK_DAYS:
+        cached = read_job_events_cache(storage_client, firestore_client, project_id)
+        if cached is not None:
+            return cached
+
+    events = list_job_events(client, project_id, lookback_days=lookback_days)
+
+    if lookback_days == LOOKBACK_DAYS:
+        write_job_events_cache(storage_client, firestore_client, project_id, events)
+        event_cache.record_project_seen(firestore_client, project_id)
+
+    return events, None

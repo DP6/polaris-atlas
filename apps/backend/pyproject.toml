@@ -17,6 +17,7 @@ dependencies = [
     "google-cloud-storage>=3.13.1",
     "google-auth>=2.35",
     "google-cloud-resource-manager>=1.14",
+    "google-cloud-run>=0.10",
 ]
 
 [dependency-groups]
