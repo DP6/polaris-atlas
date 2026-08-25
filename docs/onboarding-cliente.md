@@ -1,5 +1,12 @@
 # Onboarding de projeto GCP — acesso do Observability Hub
 
+> **Uso interno.** Este documento acumula o log vivo de concessões (seção
+> "Registro de acessos concedidos" no fim) e notas de processo — não deve
+> ser enviado a um cliente como está. A versão limpa, pronta pra entrega,
+> fica em [`docs/onboarding-cliente-entrega.md`](onboarding-cliente-entrega.md)
+> (sem log, sem notas internas, sem referências a arquivos deste repo) —
+> mantenha as duas em sincronia quando o checklist de roles/APIs mudar.
+
 **Objetivo:** checklist completo de tudo que precisa ser configurado em um
 projeto GCP "alvo" (projeto de cliente, ou qualquer projeto que não seja
 o próprio projeto onde o Hub roda — `dp6-ci-polaris`, hospedando dev
