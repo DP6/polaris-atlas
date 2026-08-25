@@ -3,13 +3,11 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
 import { SLA_LABELS, SLA_ORDER, SLA_SHORT_LABELS, SLA_TEXT_COLOR } from '@/features/freshness/sla'
 import { cn } from '@/lib/utils'
 import type { DatasetFreshnessSummary, SLAStatus } from '@/types/freshness'
-
-const SLA_FILTER_ALL = 'all'
-type SlaFilter = SLAStatus | typeof SLA_FILTER_ALL
 
 // Ponto colorido de cada pill de filtro — mesma cor do texto do status
 // na tabela (SLA_TEXT_COLOR), só trocando text- por bg- (mesmo padrão
@@ -39,7 +37,12 @@ function compare(a: DatasetFreshnessSummary, b: DatasetFreshnessSummary, key: So
 
 export function DatasetFreshnessTable({ datasets }: { datasets: DatasetFreshnessSummary[] }) {
   const [nameFilter, setNameFilter] = useState('')
-  const [slaFilter, setSlaFilter] = useState<SlaFilter>(SLA_FILTER_ALL)
+  // Multi-seleção de faixas + mínimo de tabelas: um dataset só aparece
+  // se a SOMA das contagens dele nas faixas selecionadas for >= o
+  // mínimo. Nenhuma faixa selecionada = sem filtro (mostra tudo),
+  // independente do valor de minCount.
+  const [selectedBuckets, setSelectedBuckets] = useState<Set<SLAStatus>>(new Set())
+  const [minCount, setMinCount] = useState(1)
   const [sortKey, setSortKey] = useState<SortKey>('worst_status')
   const [sortDir, setSortDir] = useState<SortDirection>('desc')
 
@@ -52,19 +55,35 @@ export function DatasetFreshnessTable({ datasets }: { datasets: DatasetFreshness
     }
   }
 
+  function toggleBucket(status: SLAStatus) {
+    setSelectedBuckets((current) => {
+      const next = new Set(current)
+      if (next.has(status)) {
+        next.delete(status)
+      } else {
+        next.add(status)
+      }
+      return next
+    })
+  }
+
   const visibleDatasets = useMemo(() => {
     const filtered = datasets.filter((dataset) => {
       const matchesName = dataset.dataset_id.toLowerCase().includes(nameFilter.toLowerCase())
-      const matchesSla = slaFilter === SLA_FILTER_ALL || dataset.worst_status === slaFilter
-      return matchesName && matchesSla
+      if (selectedBuckets.size === 0) return matchesName
+      const matchingCount = SLA_ORDER.reduce(
+        (sum, status) => sum + (selectedBuckets.has(status) ? dataset[status] : 0),
+        0,
+      )
+      return matchesName && matchingCount >= minCount
     })
     const sign = sortDir === 'asc' ? 1 : -1
     return [...filtered].sort((a, b) => sign * compare(a, b, sortKey))
-  }, [datasets, nameFilter, slaFilter, sortKey, sortDir])
+  }, [datasets, nameFilter, selectedBuckets, minCount, sortKey, sortDir])
 
   return (
     <>
-      <div className="mb-3 flex flex-wrap items-center gap-3">
+      <div className="mb-3 flex flex-col gap-2">
         <div className="relative min-w-[220px] flex-1">
           <Search
             size={14}
@@ -77,25 +96,39 @@ export function DatasetFreshnessTable({ datasets }: { datasets: DatasetFreshness
             className="pl-8"
           />
         </div>
-        <div className="flex flex-wrap gap-2">
-          {([SLA_FILTER_ALL, ...SLA_ORDER] as const).map((filter) => (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-muted-foreground text-xs">Faixas de SLA (uma ou mais):</span>
+          {SLA_ORDER.map((status) => (
             <button
-              key={filter}
+              key={status}
               type="button"
-              onClick={() => setSlaFilter(filter)}
+              onClick={() => toggleBucket(status)}
               className={cn(
                 'flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-                slaFilter === filter
+                selectedBuckets.has(status)
                   ? 'border-primary bg-primary/10 text-foreground'
                   : 'border-border text-muted-foreground hover:bg-muted',
               )}
             >
-              {filter !== SLA_FILTER_ALL && (
-                <span className={cn('size-2 rounded-full', SLA_DOT_COLOR[filter])} />
-              )}
-              {filter === SLA_FILTER_ALL ? 'Todos' : SLA_SHORT_LABELS[filter]}
+              <span className={cn('size-2 rounded-full', SLA_DOT_COLOR[status])} />
+              {SLA_SHORT_LABELS[status]}
             </button>
           ))}
+          {selectedBuckets.size > 0 && (
+            <div className="flex items-center gap-1.5">
+              <Label htmlFor="freshness-min-count" className="text-muted-foreground text-xs">
+                Mínimo de tabelas nessa condição
+              </Label>
+              <Input
+                id="freshness-min-count"
+                type="number"
+                min={1}
+                className="h-7 w-16 text-xs"
+                value={minCount}
+                onChange={(e) => setMinCount(Number(e.target.value))}
+              />
+            </div>
+          )}
         </div>
       </div>
 
