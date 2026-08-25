@@ -99,167 +99,6 @@ def _event(
     )
 
 
-# --- scan_unused_tables ----------------------------------------------------------
-
-
-def test_scan_unused_tables_passes_datasets_through_to_repository(monkeypatch):
-    captured = {}
-    monkeypatch.setattr(service, "discover_regions", lambda project_id, client: ["US"])
-
-    def fake_list_all_table_refs(client, project_id, regions, datasets=None):
-        captured["datasets"] = datasets
-        return []
-
-    monkeypatch.setattr(service.repository, "list_all_table_refs", fake_list_all_table_refs)
-    monkeypatch.setattr(service, "get_tables_metadata", lambda client, refs: {})
-    monkeypatch.setattr(service.repository, "list_scan_events", lambda *a, **kw: [])
-
-    service.scan_unused_tables(_fake_client(), MagicMock(), "proj", datasets=["RAW"])
-
-    assert captured["datasets"] == ["RAW"]
-
-
-def test_scan_unused_tables_flags_table_never_accessed(monkeypatch):
-    _stub_common(
-        monkeypatch,
-        all_tables=[("RAW", "crm_leads")],
-        metadata={"proj.RAW.crm_leads": _bq_table()},
-    )
-    monkeypatch.setattr(
-        service.repository, "list_scan_events", lambda *a, **kw: [_event([], _now())]
-    )
-
-    result = service.scan_unused_tables(_fake_client(), MagicMock(), "proj")
-
-    assert len(result.tables) == 1
-    assert result.tables[0].table_id == "crm_leads"
-    assert result.tables[0].days_since_last_access is None
-    assert result.tables[0].last_accessed_at is None
-
-
-def test_scan_unused_tables_excludes_recently_accessed_table(monkeypatch):
-    _stub_common(
-        monkeypatch,
-        all_tables=[("RAW", "crm_leads")],
-        metadata={"proj.RAW.crm_leads": _bq_table()},
-    )
-    recent = _now() - timedelta(days=5)
-    events = [_event([("proj", "RAW", "crm_leads")], recent)]
-    monkeypatch.setattr(service.repository, "list_scan_events", lambda *a, **kw: events)
-
-    result = service.scan_unused_tables(_fake_client(), MagicMock(), "proj", min_days_unused=30)
-
-    assert result.tables == []
-
-
-def test_scan_unused_tables_includes_table_accessed_exactly_at_threshold(monkeypatch):
-    _stub_common(
-        monkeypatch,
-        all_tables=[("RAW", "crm_leads")],
-        metadata={"proj.RAW.crm_leads": _bq_table()},
-    )
-    exactly_30d_ago = _now() - timedelta(days=30)
-    events = [_event([("proj", "RAW", "crm_leads")], exactly_30d_ago)]
-    monkeypatch.setattr(service.repository, "list_scan_events", lambda *a, **kw: events)
-
-    result = service.scan_unused_tables(_fake_client(), MagicMock(), "proj", min_days_unused=30)
-
-    assert len(result.tables) == 1
-    assert result.tables[0].days_since_last_access == 30
-
-
-def test_scan_unused_tables_ignores_events_from_other_projects(monkeypatch):
-    _stub_common(
-        monkeypatch,
-        all_tables=[("RAW", "crm_leads")],
-        metadata={"proj.RAW.crm_leads": _bq_table()},
-    )
-    events = [_event([("other-proj", "RAW", "crm_leads")], _now() - timedelta(days=1))]
-    monkeypatch.setattr(service.repository, "list_scan_events", lambda *a, **kw: events)
-
-    result = service.scan_unused_tables(_fake_client(), MagicMock(), "proj")
-
-    assert len(result.tables) == 1
-    assert result.tables[0].days_since_last_access is None
-
-
-def test_scan_unused_tables_uses_active_storage_price_for_recently_modified_table(monkeypatch):
-    modified = _now() - timedelta(days=10)  # dentro de 90d -> active
-    _stub_common(
-        monkeypatch,
-        all_tables=[("RAW", "crm_leads")],
-        metadata={"proj.RAW.crm_leads": _bq_table(num_bytes=1024**3, modified=modified)},  # 1 GB
-    )
-    monkeypatch.setattr(
-        service.repository, "list_scan_events", lambda *a, **kw: [_event([], _now())]
-    )
-
-    result = service.scan_unused_tables(_fake_client(), MagicMock(), "proj")
-
-    assert (
-        result.tables[0].estimated_monthly_storage_cost_usd
-        == service.settings.bigquery_storage_price_usd_per_gb_month_active
-    )
-
-
-def test_scan_unused_tables_uses_long_term_storage_price_for_old_table(monkeypatch):
-    modified = _now() - timedelta(days=120)  # 90+ dias -> long-term
-    _stub_common(
-        monkeypatch,
-        all_tables=[("RAW", "crm_leads")],
-        metadata={"proj.RAW.crm_leads": _bq_table(num_bytes=1024**3, modified=modified)},
-    )
-    monkeypatch.setattr(
-        service.repository, "list_scan_events", lambda *a, **kw: [_event([], _now())]
-    )
-
-    result = service.scan_unused_tables(_fake_client(), MagicMock(), "proj")
-
-    assert (
-        result.tables[0].estimated_monthly_storage_cost_usd
-        == service.settings.bigquery_storage_price_usd_per_gb_month_long_term
-    )
-
-
-def test_scan_unused_tables_sets_warning_when_no_events(monkeypatch):
-    _stub_common(monkeypatch, all_tables=[], metadata={})
-    monkeypatch.setattr(service.repository, "list_scan_events", lambda *a, **kw: [])
-
-    result = service.scan_unused_tables(_fake_client(), MagicMock(), "proj")
-
-    assert result.warning is not None
-    assert "proj" in result.warning
-
-
-def test_scan_unused_tables_adds_retention_caveat_for_windows_above_30_days(monkeypatch):
-    _stub_common(monkeypatch, all_tables=[], metadata={})
-    monkeypatch.setattr(
-        service.repository, "list_scan_events", lambda *a, **kw: [_event([], _now())]
-    )
-
-    result_30 = service.scan_unused_tables(_fake_client(), MagicMock(), "proj", min_days_unused=30)
-    result_60 = service.scan_unused_tables(_fake_client(), MagicMock(), "proj", min_days_unused=60)
-
-    assert result_30.warning is None
-    assert result_60.warning is not None
-    assert "retenção" in result_60.warning
-
-
-def test_scan_unused_tables_skips_table_missing_from_metadata(monkeypatch):
-    _stub_common(
-        monkeypatch,
-        all_tables=[("RAW", "crm_leads")],
-        metadata={"proj.RAW.crm_leads": None},
-    )
-    monkeypatch.setattr(
-        service.repository, "list_scan_events", lambda *a, **kw: [_event([], _now())]
-    )
-
-    result = service.scan_unused_tables(_fake_client(), MagicMock(), "proj")
-
-    assert result.tables == []
-
-
 # --- scan_partition_candidates ----------------------------------------------------
 
 
@@ -293,6 +132,28 @@ def test_scan_partition_candidates_passes_datasets_through_to_repository(monkeyp
     service.scan_partition_candidates(_fake_client(), MagicMock(), "proj", datasets=["RAW"])
 
     assert captured["datasets"] == ["RAW"]
+
+
+def test_scan_partition_candidates_filters_by_requested_tables(monkeypatch):
+    _stub_partition_common(
+        monkeypatch,
+        all_tables=[("RAW", "crm_leads"), ("RAW", "crm_accounts")],
+        metadata={
+            "proj.RAW.crm_leads": _bq_table(num_bytes=2_000_000_000),
+            "proj.RAW.crm_accounts": _bq_table(num_bytes=2_000_000_000),
+        },
+        date_columns_by_table={
+            ("RAW", "crm_leads"): ["created_at"],
+            ("RAW", "crm_accounts"): ["created_at"],
+        },
+    )
+    monkeypatch.setattr(service.repository, "list_scan_events", lambda *a, **kw: [])
+
+    result = service.scan_partition_candidates(
+        _fake_client(), MagicMock(), "proj", tables=["RAW.crm_leads"]
+    )
+
+    assert [c.table_id for c in result.candidates] == ["crm_leads"]
 
 
 def test_scan_partition_candidates_excludes_small_tables(monkeypatch):

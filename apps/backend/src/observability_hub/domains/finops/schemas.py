@@ -1,37 +1,7 @@
 from datetime import datetime
-from enum import Enum, IntEnum
+from enum import Enum
 
 from pydantic import BaseModel
-
-
-class MinDaysUnused(IntEnum):
-    """IntEnum, não Literal[int,...] — Literal não faz coerção de string
-    pra int em parâmetro de query (FastAPI/Pydantic recebem "30" como
-    string e Literal exige o tipo exato, sem lax-coercion — resultava em
-    422 pra toda chamada com min_days_unused na URL). IntEnum resolve
-    porque seus membros aceitam coerção de string na validação."""
-
-    THIRTY = 30
-    SIXTY = 60
-    NINETY = 90
-
-
-class UnusedTable(BaseModel):
-    dataset_id: str
-    table_id: str
-    size_bytes: int
-    size_human: str
-    last_accessed_at: datetime | None
-    days_since_last_access: int | None
-    estimated_monthly_storage_cost_usd: float
-
-
-class UnusedTablesResponse(BaseModel):
-    project_id: str
-    min_days_unused: MinDaysUnused
-    lookback_days: int
-    tables: list[UnusedTable]
-    warning: str | None = None
 
 
 class PartitionCandidate(BaseModel):

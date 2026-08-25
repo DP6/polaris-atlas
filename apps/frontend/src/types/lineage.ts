@@ -40,6 +40,8 @@ export interface LineageGraphResponse {
 export interface OrphanTable {
   dataset_id: string
   table_id: string
+  size_bytes: number
+  estimated_monthly_storage_cost_usd: number
 }
 
 export interface OrphansResponse {

@@ -1,31 +1,18 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { finopsApi } from '@/lib/api/finops'
-import type { BudgetGroupBy, MinDaysUnused } from '@/types/finops'
+import type { BudgetGroupBy } from '@/types/finops'
 
-// enabled: false até o usuário escolher o escopo (datasets) no
-// DatasetScopeGate e clicar em "Executar" — escanear o projeto inteiro
-// sem gate é o que essa tela deixou de fazer.
-export function useUnusedTables(
-  projectId: string | undefined,
-  minDaysUnused: MinDaysUnused = 30,
-  options: { datasets?: string[]; enabled?: boolean } = {},
-) {
-  const { datasets, enabled = true } = options
-  return useQuery({
-    queryKey: ['finops-unused-tables', projectId, minDaysUnused, datasets],
-    queryFn: () => finopsApi.getUnusedTables(projectId as string, minDaysUnused, datasets),
-    enabled: Boolean(projectId) && enabled,
-  })
-}
-
+// enabled: false até o usuário escolher o escopo (datasets/tabelas) no
+// seletor e clicar em "Executar" — escanear o projeto inteiro sem gate
+// é o que essa tela deixou de fazer.
 export function usePartitionCandidates(
   projectId: string | undefined,
-  options: { datasets?: string[]; enabled?: boolean } = {},
+  options: { datasets?: string[]; tables?: string[]; enabled?: boolean } = {},
 ) {
-  const { datasets, enabled = true } = options
+  const { datasets, tables, enabled = true } = options
   return useQuery({
-    queryKey: ['finops-partition-candidates', projectId, datasets],
-    queryFn: () => finopsApi.getPartitionCandidates(projectId as string, datasets),
+    queryKey: ['finops-partition-candidates', projectId, datasets, tables],
+    queryFn: () => finopsApi.getPartitionCandidates(projectId as string, datasets, tables),
     enabled: Boolean(projectId) && enabled,
   })
 }

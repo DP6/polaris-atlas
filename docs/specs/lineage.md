@@ -1,9 +1,10 @@
 # Spec — Domínio: Lineage e tabelas órfãs
 
-**Versão:** 2.1 (escopo por dataset + lookback ajustável em /orphans)
+**Versão:** 2.2 (custo de storage estimado em /orphans, absorvendo
+"Tabelas sem uso" de `docs/specs/finops-waste-scanner.md`)
 **Status:** Aprovada
 **Fase:** 3 — Sprint 3.2 (lineage e órfãos)
-**Última atualização:** 2026-08-22
+**Última atualização:** 2026-08-25
 
 ---
 
@@ -150,7 +151,7 @@ comportamento é idêntico ao de antes (projeto inteiro, 30 dias):
   sempre manda um escopo explícito via `DatasetScopeGate` — escanear o
   projeto inteiro sem gate era lento em produção com muitos datasets;
   `None` continua existindo como capacidade da API (scripts/testes).
-- `lookback_days` (`int`, `Query(default=30, ge=1)`, v1.1 2026-08-24 —
+- `lookback_days` (`int`, `Query(default=30, ge=1)`, v2.2 2026-08-24 —
   era `LookbackDays` IntEnum restrito a 30/60/90/365; virou `int` livre
   pra o frontend (`OrphansPage.tsx::LookbackPicker`) oferecer "Outro"
   além dos atalhos) — propagado até `repository.list_job_events`, que
@@ -158,6 +159,42 @@ comportamento é idêntico ao de antes (projeto inteiro, 30 dias):
   fixo do módulo (endpoints de lineage transitiva —
   `get_table_lineage`/upstream/downstream — continuam no default do
   módulo, não ganharam esse controle).
+
+### Custo de storage estimado (v2.2)
+
+`OrphanTable` ganhou `size_bytes: int` e
+`estimated_monthly_storage_cost_usd: float` — capacidade absorvida de
+"Tabelas sem uso" (`docs/specs/finops-waste-scanner.md`, removida de lá
+na mesma versão por ser essencialmente a mesma pergunta — "quais tabelas
+ninguém está lendo" — respondida em dois lugares do app).
+
+```json
+{
+  "dataset_id": "RAW",
+  "table_id": "old_import_2024",
+  "size_bytes": 5368709120,
+  "estimated_monthly_storage_cost_usd": 0.0537
+}
+```
+
+Estimativa **factual**, não especulativa: `size_bytes` × preço de
+storage por GB/mês (`settings.bigquery_storage_price_usd_per_gb_month_active`
+ou `..._long_term`, conforme `last_modified_time` — BigQuery já rebaixa
+a tarifa sozinho pra tabelas sem modificação há 90+ dias). Isso é custo
+real de storage que já está sendo pago, não uma projeção — mesmo
+racional que já valia em `finops-waste-scanner.md` antes da fusão.
+
+`get_orphans` busca metadata (`core/bigquery.py::get_tables_metadata`,
+REST, cacheado 5min) só das tabelas órfãs (não de todas as tabelas do
+projeto) — menor, e é só isso que a response precisa. O cálculo em si
+(`estimate_bigquery_storage_cost_usd`) mora em `core/pricing.py`, não em
+`domains/finops/` nem duplicado aqui — é aritmética de preço pura, sem
+estado de domínio, compartilhada entre `finops` (candidatas a
+particionamento, que usa custo de scan, não de storage) e `lineage`; o
+projeto só duplica entre domínios o que tem lógica própria de cada um
+(ex: parsing de audit log), não utilitários puramente matemáticos.
+Tabela sem metadata resolvível (race entre listagem e fetch) entra com
+`size_bytes=0`/custo `0.0`, sem erro.
 
 ---
 

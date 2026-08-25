@@ -12,9 +12,7 @@ from observability_hub.domains.finops.schemas import (
     ColumnTypeEstimateResponse,
     ColumnTypeScanRequest,
     ColumnTypeSuggestionsResponse,
-    MinDaysUnused,
     PartitionCandidatesResponse,
-    UnusedTablesResponse,
 )
 
 router = APIRouter(
@@ -22,27 +20,17 @@ router = APIRouter(
 )
 
 
-@router.get("/{project_id}/unused-tables", response_model=UnusedTablesResponse)
-def get_unused_tables(
-    project_id: str,
-    min_days_unused: MinDaysUnused = Query(default=30),
-    datasets: list[str] | None = Query(default=None),
-    client: bigquery.Client = Depends(get_client),
-    logging_client: cloud_logging.Client = Depends(get_logging_client),
-) -> UnusedTablesResponse:
-    return service.scan_unused_tables(
-        client, logging_client, project_id, min_days_unused=min_days_unused, datasets=datasets
-    )
-
-
 @router.get("/{project_id}/partition-candidates", response_model=PartitionCandidatesResponse)
 def get_partition_candidates(
     project_id: str,
     datasets: list[str] | None = Query(default=None),
+    tables: list[str] | None = Query(default=None),
     client: bigquery.Client = Depends(get_client),
     logging_client: cloud_logging.Client = Depends(get_logging_client),
 ) -> PartitionCandidatesResponse:
-    return service.scan_partition_candidates(client, logging_client, project_id, datasets=datasets)
+    return service.scan_partition_candidates(
+        client, logging_client, project_id, datasets=datasets, tables=tables
+    )
 
 
 @router.get("/{project_id}/budget", response_model=BudgetResponse)

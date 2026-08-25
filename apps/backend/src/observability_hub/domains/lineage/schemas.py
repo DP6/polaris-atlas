@@ -44,6 +44,8 @@ class LineageGraphResponse(BaseModel):
 class OrphanTable(BaseModel):
     dataset_id: str
     table_id: str
+    size_bytes: int
+    estimated_monthly_storage_cost_usd: float
 
 
 class OrphansResponse(BaseModel):

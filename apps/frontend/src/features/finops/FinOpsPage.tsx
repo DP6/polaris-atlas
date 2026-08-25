@@ -1,12 +1,12 @@
-import { Search } from 'lucide-react'
+import { ChevronDown, Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
-import { DatasetScopeGate } from '@/components/DatasetScopeGate'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -26,29 +26,20 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ColumnTypeScopePicker } from '@/features/finops/ColumnTypeScopePicker'
-import { ColumnTypeSuggestionBadges } from '@/features/finops/ColumnTypeSuggestionBadges'
 import {
   useEstimateColumnTypeSuggestions,
   usePartitionCandidates,
   useRunColumnTypeSuggestions,
-  useUnusedTables,
 } from '@/features/finops/hooks'
 import { useProjectContext } from '@/features/projects/ProjectContext'
 import { useTableFilterSort } from '@/hooks/useTableFilterSort'
-import { formatBytes, formatDate, formatNumber } from '@/lib/format'
+import { formatBytes, formatNumber } from '@/lib/format'
 import { ApiError } from '@/lib/http-client'
 import { cn } from '@/lib/utils'
-import type {
-  ColumnTypeCandidate,
-  MinDaysUnused,
-  PartitionCandidate,
-  UnusedTable,
-} from '@/types/finops'
+import type { ColumnTypeCandidate, ColumnTypeSuggestion, PartitionCandidate } from '@/types/finops'
 
-const UNUSED_TAB = 'unused'
 const PARTITION_TAB = 'partition'
 const COLUMN_TYPES_TAB = 'column-types'
-const MIN_DAYS_OPTIONS: MinDaysUnused[] = [30, 60, 90]
 const DATASET_FILTER_ALL = 'all'
 const ESTIMATE_FILTER_ALL = 'all'
 const ESTIMATE_FILTER_WITH = 'with'
@@ -75,21 +66,17 @@ export function FinOpsPage() {
       <div>
         <h1 className="text-2xl font-bold">FinOps — Scanner de desperdício</h1>
         <p className="text-sm text-muted-foreground">
-          Tabelas sem uso, candidatas a particionamento e sugestões de tipo de coluna, com
-          estimativa de custo.
+          Candidatas a particionamento e sugestões de tipo de coluna, com estimativa de custo.
+          Tabelas sem uso ficou só em Governança &gt; "Tabelas sem consumidor", pra não duplicar a
+          mesma informação em dois lugares.
         </p>
       </div>
 
-      <Tabs defaultValue={UNUSED_TAB}>
+      <Tabs defaultValue={PARTITION_TAB}>
         <TabsList className="w-fit">
-          <TabsTrigger value={UNUSED_TAB}>Tabelas sem uso</TabsTrigger>
           <TabsTrigger value={PARTITION_TAB}>Candidatas a particionamento</TabsTrigger>
           <TabsTrigger value={COLUMN_TYPES_TAB}>Tipos de coluna</TabsTrigger>
         </TabsList>
-
-        <TabsContent value={UNUSED_TAB}>
-          <UnusedTablesTab projectId={projectId} />
-        </TabsContent>
 
         <TabsContent value={PARTITION_TAB}>
           <PartitionCandidatesTab projectId={projectId} />
@@ -99,250 +86,6 @@ export function FinOpsPage() {
           <ColumnTypesTab projectId={projectId} />
         </TabsContent>
       </Tabs>
-    </div>
-  )
-}
-
-type UnusedSortKey =
-  | 'table_id'
-  | 'size_bytes'
-  | 'last_accessed_at'
-  | 'estimated_monthly_storage_cost_usd'
-
-function compareUnused(a: UnusedTable, b: UnusedTable, key: UnusedSortKey): number {
-  if (key === 'size_bytes') return a.size_bytes - b.size_bytes
-  if (key === 'estimated_monthly_storage_cost_usd') {
-    return a.estimated_monthly_storage_cost_usd - b.estimated_monthly_storage_cost_usd
-  }
-  if (key === 'last_accessed_at') {
-    return (a.last_accessed_at ?? '').localeCompare(b.last_accessed_at ?? '')
-  }
-  return a.table_id.localeCompare(b.table_id)
-}
-
-function UnusedTablesTab({ projectId }: { projectId: string | undefined }) {
-  const [minDaysUnused, setMinDaysUnused] = useState<MinDaysUnused>(30)
-  const [hasRun, setHasRun] = useState(false)
-  const [scopeDatasets, setScopeDatasets] = useState<string[]>([])
-  const query = useUnusedTables(projectId, minDaysUnused, {
-    datasets: scopeDatasets,
-    enabled: hasRun,
-  })
-  const data = query.data
-
-  const datasets = useMemo(
-    () => [...new Set(data?.tables.map((t) => t.dataset_id) ?? [])].sort(),
-    [data],
-  )
-  const [datasetFilter, setDatasetFilter] = useState(DATASET_FILTER_ALL)
-
-  const {
-    search,
-    setSearch,
-    sortKey,
-    sortDir,
-    toggleSort,
-    visibleRows: visibleTables,
-  } = useTableFilterSort<UnusedTable, UnusedSortKey>({
-    rows: data?.tables ?? [],
-    initialSortKey: 'size_bytes',
-    compare: compareUnused,
-    matches: (table, term) =>
-      matchesSearch(table.dataset_id, table.table_id, term) &&
-      (datasetFilter === DATASET_FILTER_ALL || table.dataset_id === datasetFilter),
-  })
-
-  if (!hasRun) {
-    return (
-      <div className="mt-4">
-        <DatasetScopeGate
-          projectId={projectId}
-          title="Tabelas sem uso"
-          description={
-            'Lista tabelas sem nenhuma leitura registrada (via audit log de jobs do BigQuery) ' +
-            'há pelo menos o número de dias escolhido abaixo. Escolha os datasets antes de ' +
-            'rodar; escanear o projeto inteiro pode ser lento em produção.'
-          }
-          extraControls={
-            <div>
-              <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                Sem uso há pelo menos
-              </span>
-              <div className="flex gap-2">
-                {MIN_DAYS_OPTIONS.map((days) => (
-                  <button
-                    key={days}
-                    type="button"
-                    onClick={() => setMinDaysUnused(days)}
-                    className={cn(
-                      'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-                      minDaysUnused === days
-                        ? 'border-primary bg-primary/10 text-foreground'
-                        : 'border-border text-muted-foreground hover:bg-muted',
-                    )}
-                  >
-                    {days} dias
-                  </button>
-                ))}
-              </div>
-            </div>
-          }
-          onRun={(scopedDatasets) => {
-            setScopeDatasets(scopedDatasets)
-            setHasRun(true)
-          }}
-          isRunning={query.isFetching}
-        />
-      </div>
-    )
-  }
-
-  if (query.isLoading) {
-    return <p className="mt-4 text-sm text-muted-foreground">Carregando…</p>
-  }
-
-  if (query.isError) {
-    return (
-      <div className="mt-4">
-        <ApiErrorNotice error={query.error} />
-      </div>
-    )
-  }
-
-  if (!data) return null
-
-  return (
-    <div className="mt-4 flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative min-w-[220px] flex-1">
-          <Search
-            size={14}
-            className="-translate-y-1/2 absolute top-1/2 left-2.5 text-muted-foreground"
-          />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Filtrar por nome da tabela…"
-            className="pl-8"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Sem uso há pelo menos</span>
-          <Select
-            value={String(minDaysUnused)}
-            onValueChange={(value) => setMinDaysUnused(Number(value) as MinDaysUnused)}
-          >
-            <SelectTrigger className="w-24">
-              <SelectValue>{(value: string) => `${value} dias`}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {MIN_DAYS_OPTIONS.map((days) => (
-                <SelectItem key={days} value={String(days)}>
-                  {days} dias
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <Select
-          value={datasetFilter}
-          onValueChange={(value) => setDatasetFilter(value ?? DATASET_FILTER_ALL)}
-        >
-          <SelectTrigger className="w-52">
-            <SelectValue>
-              {(value: string) => (value === DATASET_FILTER_ALL ? 'Todos os datasets' : value)}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={DATASET_FILTER_ALL}>Todos os datasets</SelectItem>
-            {datasets.map((dataset) => (
-              <SelectItem key={dataset} value={dataset}>
-                {dataset}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <span className="text-sm text-muted-foreground">
-          {visibleTables.length} de {data.tables.length} tabela{data.tables.length === 1 ? '' : 's'}
-        </span>
-        <div className="ml-auto flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setHasRun(false)}>
-            Nova busca
-          </Button>
-          <RefreshButton isRefreshing={query.isFetching} onRefresh={() => query.refetch()} />
-        </div>
-      </div>
-
-      {data.warning && (
-        <div className="rounded-lg border border-status-warn/30 bg-status-warn/10 p-3 text-sm text-status-warn">
-          {data.warning}
-        </div>
-      )}
-
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <SortableTableHead
-              label="Tabela"
-              active={sortKey === 'table_id'}
-              direction={sortDir}
-              onClick={() => toggleSort('table_id')}
-            />
-            <SortableTableHead
-              label="Tamanho"
-              active={sortKey === 'size_bytes'}
-              direction={sortDir}
-              onClick={() => toggleSort('size_bytes')}
-              align="right"
-            />
-            <SortableTableHead
-              label="Último acesso"
-              active={sortKey === 'last_accessed_at'}
-              direction={sortDir}
-              onClick={() => toggleSort('last_accessed_at')}
-            />
-            <SortableTableHead
-              label="Custo de storage estimado/mês"
-              active={sortKey === 'estimated_monthly_storage_cost_usd'}
-              direction={sortDir}
-              onClick={() => toggleSort('estimated_monthly_storage_cost_usd')}
-              align="right"
-            />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {visibleTables.map((table) => (
-            <TableRow key={`${data.project_id}.${table.dataset_id}.${table.table_id}`}>
-              <TableCell>
-                <Link to={`/datasets/${table.dataset_id}`} className="hover:text-primary">
-                  {data.project_id}.{table.dataset_id}
-                </Link>
-                .{table.table_id}
-              </TableCell>
-              <TableCell className="text-right text-muted-foreground">
-                {formatBytes(table.size_bytes)}
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {table.last_accessed_at
-                  ? formatDate(table.last_accessed_at)
-                  : `Nunca nos últimos ${data.lookback_days} dias`}
-              </TableCell>
-              <TableCell className="text-right font-medium">
-                {formatUsd(table.estimated_monthly_storage_cost_usd)}
-              </TableCell>
-            </TableRow>
-          ))}
-          {visibleTables.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={4} className="text-center text-muted-foreground">
-                {data.tables.length === 0
-                  ? 'Nenhuma tabela sem uso encontrada.'
-                  : 'Nenhuma tabela encontrada com esse filtro.'}
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
     </div>
   )
 }
@@ -369,9 +112,11 @@ function comparePartition(
 }
 
 function PartitionCandidatesTab({ projectId }: { projectId: string | undefined }) {
+  const [selectedScope, setSelectedScope] = useState<Set<string>>(new Set())
+  const [scopeOpen, setScopeOpen] = useState(true)
   const [hasRun, setHasRun] = useState(false)
-  const [scopeDatasets, setScopeDatasets] = useState<string[]>([])
-  const query = usePartitionCandidates(projectId, { datasets: scopeDatasets, enabled: hasRun })
+  const scopeTables = Array.from(selectedScope)
+  const query = usePartitionCandidates(projectId, { tables: scopeTables, enabled: hasRun })
   const data = query.data
   const [estimateFilter, setEstimateFilter] = useState<EstimateFilter>(ESTIMATE_FILTER_ALL)
 
@@ -408,205 +153,220 @@ function PartitionCandidatesTab({ projectId }: { projectId: string | undefined }
     },
   })
 
-  if (!hasRun) {
-    return (
-      <div className="mt-4">
-        <DatasetScopeGate
-          projectId={projectId}
-          title="Candidatas a particionamento"
-          description={
-            'Sinaliza tabelas ainda não particionadas, com pelo menos 1GB, que têm ao menos ' +
-            'uma coluna DATE/DATETIME/TIMESTAMP candidata a chave de partição. A economia ' +
-            'estimada (quando exibida) usa o custo real observado nos últimos 30 dias de jobs ' +
-            'que referenciaram a tabela — sem atividade recente, a tabela ainda aparece como ' +
-            'candidata, só sem estimativa de economia. Escolha os datasets antes de rodar.'
-          }
-          onRun={(datasets) => {
-            setScopeDatasets(datasets)
-            setHasRun(true)
-          }}
-          isRunning={query.isFetching}
-        />
-      </div>
-    )
-  }
-
-  if (query.isLoading) {
-    return <p className="mt-4 text-sm text-muted-foreground">Carregando…</p>
-  }
-
-  if (query.isError) {
-    return (
-      <div className="mt-4">
-        <ApiErrorNotice error={query.error} />
-      </div>
-    )
-  }
-
-  if (!data) return null
-
   return (
     <div className="mt-4 flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative min-w-[220px] flex-1">
-          <Search
+      <Collapsible open={scopeOpen} onOpenChange={setScopeOpen}>
+        <CollapsibleTrigger className="flex items-center gap-1.5 text-sm font-medium hover:text-primary">
+          <ChevronDown
             size={14}
-            className="-translate-y-1/2 absolute top-1/2 left-2.5 text-muted-foreground"
+            className={cn('transition-transform', !scopeOpen && '-rotate-90')}
           />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Filtrar por nome da tabela…"
-            className="pl-8"
+          Escopo —{' '}
+          {scopeTables.length === 0
+            ? 'nenhuma tabela selecionada'
+            : `${scopeTables.length} tabela${scopeTables.length === 1 ? '' : 's'} selecionada${scopeTables.length === 1 ? '' : 's'}`}
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-2 flex flex-col gap-3">
+          <p className="text-sm text-muted-foreground">
+            Sinaliza tabelas ainda não particionadas, com pelo menos 1GB, que têm ao menos uma
+            coluna DATE/DATETIME/TIMESTAMP candidata a chave de partição. A economia estimada
+            (quando exibida) usa o custo real observado nos últimos 30 dias de jobs que
+            referenciaram a tabela — sem atividade recente, a tabela ainda aparece como candidata,
+            só sem estimativa de economia.
+          </p>
+          <ColumnTypeScopePicker
+            projectId={projectId}
+            selected={selectedScope}
+            onChange={setSelectedScope}
           />
-        </div>
-        <Button variant="outline" size="sm" onClick={() => setHasRun(false)}>
-          Nova busca
-        </Button>
-        <Select
-          value={estimateFilter}
-          onValueChange={(value) =>
-            setEstimateFilter((value as EstimateFilter) ?? ESTIMATE_FILTER_ALL)
-          }
-        >
-          <SelectTrigger className="w-52">
-            <SelectValue>
-              {(value: EstimateFilter) =>
-                value === ESTIMATE_FILTER_WITH
-                  ? 'Com estimativa de economia'
-                  : value === ESTIMATE_FILTER_WITHOUT
-                    ? 'Sem estimativa de economia'
-                    : 'Todas'
-              }
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ESTIMATE_FILTER_ALL}>Todas</SelectItem>
-            <SelectItem value={ESTIMATE_FILTER_WITH}>Com estimativa de economia</SelectItem>
-            <SelectItem value={ESTIMATE_FILTER_WITHOUT}>Sem estimativa de economia</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select
-          value={datasetFilter}
-          onValueChange={(value) => setDatasetFilter(value ?? DATASET_FILTER_ALL)}
-        >
-          <SelectTrigger className="w-52">
-            <SelectValue>
-              {(value: string) => (value === DATASET_FILTER_ALL ? 'Todos os datasets' : value)}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={DATASET_FILTER_ALL}>Todos os datasets</SelectItem>
-            {datasets.map((dataset) => (
-              <SelectItem key={dataset} value={dataset}>
-                {dataset}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <span className="text-sm text-muted-foreground">
-          {visibleCandidates.length} de {data.candidates.length} candidata
-          {data.candidates.length === 1 ? '' : 's'} — custo observado nos últimos{' '}
-          {data.lookback_days} dias
-        </span>
-        <div className="ml-auto">
-          <RefreshButton isRefreshing={query.isFetching} onRefresh={() => query.refetch()} />
-        </div>
-      </div>
+          <div>
+            <Button
+              onClick={() => {
+                setHasRun(true)
+                setScopeOpen(false)
+              }}
+              disabled={scopeTables.length === 0 || query.isFetching}
+            >
+              {query.isFetching ? 'Executando…' : 'Executar'}
+            </Button>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
 
-      {data.warning && (
-        <div className="rounded-lg border border-status-warn/30 bg-status-warn/10 p-3 text-sm text-status-warn">
-          {data.warning}
-        </div>
+      {!hasRun && (
+        <p className="text-sm text-muted-foreground">
+          Selecione ao menos uma tabela acima e clique em "Executar".
+        </p>
       )}
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <SortableTableHead
-              label="Tabela"
-              active={sortKey === 'table_id'}
-              direction={sortDir}
-              onClick={() => toggleSort('table_id')}
-            />
-            <SortableTableHead
-              label="Tamanho"
-              active={sortKey === 'size_bytes'}
-              direction={sortDir}
-              onClick={() => toggleSort('size_bytes')}
-              align="right"
-            />
-            <TableHead>Coluna candidata</TableHead>
-            <SortableTableHead
-              label="Custo observado (30d)"
-              active={sortKey === 'observed_cost_usd_30d'}
-              direction={sortDir}
-              onClick={() => toggleSort('observed_cost_usd_30d')}
-              align="right"
-            />
-            <SortableTableHead
-              label="Economia estimada"
-              active={sortKey === 'estimated_savings_usd_conservative'}
-              direction={sortDir}
-              onClick={() => toggleSort('estimated_savings_usd_conservative')}
-              align="right"
-            />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {visibleCandidates.map((candidate) => (
-            <TableRow key={`${data.project_id}.${candidate.dataset_id}.${candidate.table_id}`}>
-              <TableCell>
-                <Link to={`/datasets/${candidate.dataset_id}`} className="hover:text-primary">
-                  {data.project_id}.{candidate.dataset_id}
-                </Link>
-                .{candidate.table_id}
-                <span className="ml-2 text-xs text-muted-foreground">
-                  {formatNumber(candidate.row_count)} linhas
-                </span>
-              </TableCell>
-              <TableCell className="text-right text-muted-foreground">
-                {formatBytes(candidate.size_bytes)}
-              </TableCell>
-              <TableCell>
-                <div className="flex flex-wrap gap-1">
-                  {candidate.candidate_partition_columns.map((col) => (
-                    <Badge key={col} variant="outline">
-                      {col}
-                    </Badge>
-                  ))}
-                </div>
-              </TableCell>
-              <TableCell className="text-right text-muted-foreground">
-                {formatUsd(candidate.observed_cost_usd_30d)}
-              </TableCell>
-              <TableCell className="text-right">
-                {candidate.estimated_savings_usd_conservative !== null &&
-                candidate.estimated_savings_usd_optimistic !== null ? (
-                  <span
-                    className="font-medium text-status-ok"
-                    title={candidate.savings_disclaimer ?? undefined}
-                  >
-                    {formatUsd(candidate.estimated_savings_usd_conservative)} –{' '}
-                    {formatUsd(candidate.estimated_savings_usd_optimistic)}
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground">Sem dado suficiente</span>
-                )}
-              </TableCell>
-            </TableRow>
-          ))}
-          {visibleCandidates.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={5} className="text-center text-muted-foreground">
-                {data.candidates.length === 0
-                  ? 'Nenhuma candidata a particionamento encontrada.'
-                  : 'Nenhuma candidata encontrada com esse filtro.'}
-              </TableCell>
-            </TableRow>
+      {hasRun && query.isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}
+
+      {hasRun && query.isError && <ApiErrorNotice error={query.error} />}
+
+      {hasRun && data && (
+        <>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative min-w-[220px] flex-1">
+              <Search
+                size={14}
+                className="-translate-y-1/2 absolute top-1/2 left-2.5 text-muted-foreground"
+              />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Filtrar por nome da tabela…"
+                className="pl-8"
+              />
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setScopeOpen(true)}>
+              Alterar escopo
+            </Button>
+            <Select
+              value={estimateFilter}
+              onValueChange={(value) =>
+                setEstimateFilter((value as EstimateFilter) ?? ESTIMATE_FILTER_ALL)
+              }
+            >
+              <SelectTrigger className="w-52">
+                <SelectValue>
+                  {(value: EstimateFilter) =>
+                    value === ESTIMATE_FILTER_WITH
+                      ? 'Com estimativa de economia'
+                      : value === ESTIMATE_FILTER_WITHOUT
+                        ? 'Sem estimativa de economia'
+                        : 'Todas'
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ESTIMATE_FILTER_ALL}>Todas</SelectItem>
+                <SelectItem value={ESTIMATE_FILTER_WITH}>Com estimativa de economia</SelectItem>
+                <SelectItem value={ESTIMATE_FILTER_WITHOUT}>Sem estimativa de economia</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              value={datasetFilter}
+              onValueChange={(value) => setDatasetFilter(value ?? DATASET_FILTER_ALL)}
+            >
+              <SelectTrigger className="w-52">
+                <SelectValue>
+                  {(value: string) => (value === DATASET_FILTER_ALL ? 'Todos os datasets' : value)}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={DATASET_FILTER_ALL}>Todos os datasets</SelectItem>
+                {datasets.map((dataset) => (
+                  <SelectItem key={dataset} value={dataset}>
+                    {dataset}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span className="text-sm text-muted-foreground">
+              {visibleCandidates.length} de {data.candidates.length} candidata
+              {data.candidates.length === 1 ? '' : 's'} — custo observado nos últimos{' '}
+              {data.lookback_days} dias
+            </span>
+            <div className="ml-auto">
+              <RefreshButton isRefreshing={query.isFetching} onRefresh={() => query.refetch()} />
+            </div>
+          </div>
+
+          {data.warning && (
+            <div className="rounded-lg border border-status-warn/30 bg-status-warn/10 p-3 text-sm text-status-warn">
+              {data.warning}
+            </div>
           )}
-        </TableBody>
-      </Table>
+
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <SortableTableHead
+                  label="Tabela"
+                  active={sortKey === 'table_id'}
+                  direction={sortDir}
+                  onClick={() => toggleSort('table_id')}
+                />
+                <SortableTableHead
+                  label="Tamanho"
+                  active={sortKey === 'size_bytes'}
+                  direction={sortDir}
+                  onClick={() => toggleSort('size_bytes')}
+                  align="right"
+                />
+                <TableHead>Coluna candidata</TableHead>
+                <SortableTableHead
+                  label="Custo observado (30d)"
+                  active={sortKey === 'observed_cost_usd_30d'}
+                  direction={sortDir}
+                  onClick={() => toggleSort('observed_cost_usd_30d')}
+                  align="right"
+                />
+                <SortableTableHead
+                  label="Economia estimada"
+                  active={sortKey === 'estimated_savings_usd_conservative'}
+                  direction={sortDir}
+                  onClick={() => toggleSort('estimated_savings_usd_conservative')}
+                  align="right"
+                />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {visibleCandidates.map((candidate) => (
+                <TableRow key={`${data.project_id}.${candidate.dataset_id}.${candidate.table_id}`}>
+                  <TableCell>
+                    <Link to={`/datasets/${candidate.dataset_id}`} className="hover:text-primary">
+                      {data.project_id}.{candidate.dataset_id}
+                    </Link>
+                    .{candidate.table_id}
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {formatNumber(candidate.row_count)} linhas
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right text-muted-foreground">
+                    {formatBytes(candidate.size_bytes)}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {candidate.candidate_partition_columns.map((col) => (
+                        <Badge key={col} variant="outline">
+                          {col}
+                        </Badge>
+                      ))}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right text-muted-foreground">
+                    {formatUsd(candidate.observed_cost_usd_30d)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {candidate.estimated_savings_usd_conservative !== null &&
+                    candidate.estimated_savings_usd_optimistic !== null ? (
+                      <span
+                        className="font-medium text-status-ok"
+                        title={candidate.savings_disclaimer ?? undefined}
+                      >
+                        {formatUsd(candidate.estimated_savings_usd_conservative)} –{' '}
+                        {formatUsd(candidate.estimated_savings_usd_optimistic)}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">Sem dado suficiente</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {visibleCandidates.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                    {data.candidates.length === 0
+                      ? 'Nenhuma candidata a particionamento encontrada.'
+                      : 'Nenhuma candidata encontrada com esse filtro.'}
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </>
+      )}
     </div>
   )
 }
@@ -627,9 +387,25 @@ function compareColumnType(
   return a.table_id.localeCompare(b.table_id)
 }
 
+function ColumnTypeSuggestionsList({ suggestions }: { suggestions: ColumnTypeSuggestion[] }) {
+  return (
+    <div className="flex flex-col gap-1">
+      {suggestions.map((s) => (
+        <div key={s.column_name} className="flex items-center gap-1.5 text-xs">
+          <span className="font-medium">{s.column_name}</span>
+          <span className="text-muted-foreground">{s.current_type}</span>
+          <span className="text-muted-foreground">→</span>
+          <Badge variant="outline">{s.suggested_type}</Badge>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function ColumnTypesTab({ projectId }: { projectId: string | undefined }) {
   const [samplePercent, setSamplePercent] = useState(10)
   const [selectedScope, setSelectedScope] = useState<Set<string>>(new Set())
+  const [scopeOpen, setScopeOpen] = useState(true)
   const estimateMutation = useEstimateColumnTypeSuggestions()
   const runMutation = useRunColumnTypeSuggestions()
   const scopeTables = Array.from(selectedScope)
@@ -666,19 +442,25 @@ function ColumnTypesTab({ projectId }: { projectId: string | undefined }) {
         custo real de BigQuery — escolha o escopo, estime antes de escanear.
       </p>
 
-      <div className="flex flex-col gap-1.5">
-        <Label>Escopo (datasets/tabelas)</Label>
-        <ColumnTypeScopePicker
-          projectId={projectId}
-          selected={selectedScope}
-          onChange={setSelectedScope}
-        />
-        <span className="text-xs text-muted-foreground">
+      <Collapsible open={scopeOpen} onOpenChange={setScopeOpen}>
+        <CollapsibleTrigger className="flex items-center gap-1.5 text-sm font-medium hover:text-primary">
+          <ChevronDown
+            size={14}
+            className={cn('transition-transform', !scopeOpen && '-rotate-90')}
+          />
+          Escopo (datasets/tabelas) —{' '}
           {scopeTables.length === 0
-            ? 'Selecione ao menos uma tabela para habilitar o scan.'
-            : `${scopeTables.length} tabela${scopeTables.length === 1 ? '' : 's'} selecionada${scopeTables.length === 1 ? '' : 's'}.`}
-        </span>
-      </div>
+            ? 'nenhuma tabela selecionada'
+            : `${scopeTables.length} tabela${scopeTables.length === 1 ? '' : 's'} selecionada${scopeTables.length === 1 ? '' : 's'}`}
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-2">
+          <ColumnTypeScopePicker
+            projectId={projectId}
+            selected={selectedScope}
+            onChange={setSelectedScope}
+          />
+        </CollapsibleContent>
+      </Collapsible>
 
       <div className="flex flex-wrap items-end gap-4">
         <div className="flex flex-col gap-1.5">
@@ -706,9 +488,11 @@ function ColumnTypesTab({ projectId }: { projectId: string | undefined }) {
           </Button>
           <Button
             disabled={runMutation.isPending || !canRun}
-            onClick={() =>
-              projectId && runMutation.mutate({ projectId, samplePercent, tables: scopeTables })
-            }
+            onClick={() => {
+              if (!projectId) return
+              runMutation.mutate({ projectId, samplePercent, tables: scopeTables })
+              setScopeOpen(false)
+            }}
           >
             {runMutation.isPending ? 'Escaneando…' : 'Escanear'}
           </Button>
@@ -784,7 +568,7 @@ function ColumnTypesTab({ projectId }: { projectId: string | undefined }) {
                   onClick={() => toggleSort('size_bytes')}
                   align="right"
                 />
-                <TableHead>Sugestões</TableHead>
+                <TableHead>Tipo atual → sugerido</TableHead>
                 <SortableTableHead
                   label="Economia estimada/mês"
                   active={sortKey === 'total_savings_usd_month'}
@@ -812,7 +596,7 @@ function ColumnTypesTab({ projectId }: { projectId: string | undefined }) {
                     {formatBytes(candidate.size_bytes)}
                   </TableCell>
                   <TableCell>
-                    <ColumnTypeSuggestionBadges suggestions={candidate.suggestions} />
+                    <ColumnTypeSuggestionsList suggestions={candidate.suggestions} />
                   </TableCell>
                   <TableCell className="text-right font-medium text-status-ok">
                     {formatUsd(totalSavings(candidate))}

@@ -5,6 +5,80 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## UX: 12 ajustes identificados durante a documentação de telas (6 PRs)
+
+Usuário começou a tirar prints pra montar a documentação de telas do
+Hub e, no processo, listou 12 problemas/ajustes de UX espalhados pelo
+app. Cada item foi esclarecido via pergunta direta antes de implementar
+(navegação, redundância entre features, filtros pouco flexíveis,
+consistência de padrão entre telas parecidas, tema claro). Entregue em
+6 PRs pequenos, empilhados numa cadeia de branches (só a última branch
+da série vira PR pra `main` — decisão do usuário pra testar tudo junto
+em dev antes de qualquer coisa ir pra prod, em vez de 6 aprovações de
+deploy separadas).
+
+### O que foi feito
+- **Tema claro menos branco chapado**: `--background`/`--card`/
+  `--popover`/`--sidebar` do tema claro viram off-white leve
+  (`#FAFAF8`/`#F0EFEC`), mudança sutil pedida explicitamente.
+- **Descrições nas abas do modal de Profiling**: Análise de qualidade,
+  Lineage, Acesso e Tipos de coluna ganham um parágrafo curto
+  explicando a funcionalidade.
+- **Sidebar**: "Datasets disponíveis"→"Catálogo"; seção "Profiling"
+  renomeada "Análises de DQ" e movida pra logo acima de "Recentes";
+  "Favoritos" sempre visível (com estado vazio) mesmo sem nenhum
+  favorito ainda; seletor de quantidade (5/10/20/Todos) em Favoritos e
+  Recentes.
+- **Seletor de dia com texto livre**: "Período analisado" (Tabelas sem
+  consumidor) e "sem modificação há pelo menos" (Storage/Scanner de
+  desperdício) ganham opção "Outro" além dos atalhos — backend trocou
+  `IntEnum` restrito por `int` livre (`Query(ge=1)`) nos três lugares
+  que tinham essa trava (`lookback_days` em lineage, `min_days_unused`
+  em storage).
+- **Freshness — filtro por múltiplas faixas + mínimo de tabelas**: a
+  tabela de datasets troca o filtro de faixa única por seleção múltipla
+  de faixas de SLA + campo de mínimo — um dataset só aparece se a soma
+  das contagens dele nas faixas selecionadas atingir o mínimo. 100%
+  client-side, sem mudança de backend.
+- **Consolidação FinOps** (o PR maior dos 6):
+  - "Tabelas sem uso" (FinOps) removida — era essencialmente a mesma
+    pergunta que "Tabelas sem consumidor" (Governança/lineage) já
+    respondia, só em lugar diferente do app. A única capacidade
+    exclusiva (custo de storage estimado) foi levada pra
+    `OrphanTable`, não perdida — `estimate_bigquery_storage_cost_usd`
+    extraída de `domains/finops/service.py` pra `core/pricing.py`
+    (cálculo puro, sem estado de domínio, agora reaproveitado por
+    `finops` e `lineage`).
+  - "Candidatas a particionamento" ganhou escopo por tabela (não só
+    por dataset inteiro) — mesmo `ColumnTypeScopePicker` já usado em
+    "Tipos de coluna", dataset expansível → tabela individual.
+  - Os dois seletores de escopo (particionamento, tipos de coluna)
+    ficaram colapsáveis (`Collapsible`), economizando espaço na tela
+    depois da primeira seleção.
+  - "Tipos de coluna" do FinOps trocou o badge compacto (tipo atual só
+    no hover) por uma tabela com "Tipo atual"/"Tipo sugerido" em
+    colunas visíveis — mesmo padrão que a aba equivalente dentro do
+    modal de Profiling já usava.
+
+### Erros cometidos e aprendizados
+- `pnpm exec tsc --noEmit` (sem `-b`) deu falso-negativo — não acusou
+  um `Cannot find name` real (componente removido de um import mas
+  ainda usado no JSX) que `pnpm build` (`tsc -b && vite build`) pegou
+  na hora. O projeto usa TypeScript composite/project references
+  (`tsconfig.json` com `references`), e `tsc --noEmit` solto não
+  reavalia esse grafo do mesmo jeito que `tsc -b`. A partir daqui,
+  `pnpm build` é o check autoritativo neste repo, não `tsc --noEmit`
+  isolado — usar o `--noEmit` só como feedback rápido intermediário,
+  sempre confirmando com `pnpm build` antes de considerar um PR pronto.
+
+### Mudanças de arquitetura
+- Primeiro caso de fluxo git "branches empilhadas, PR só na última"
+  nesta sessão — cada PR pequeno pode ser revisado/testado
+  isoladamente em dev (push em qualquer branch já dispara deploy de
+  dev), mas só um merge/aprovação de prod cobre a série inteira.
+
+---
+
 ## Docs: specs faltantes (auth/favorites/history) + práticas de rastreabilidade no CLAUDE.md
 
 Pedido do usuário, motivado por uma comparação com o framework

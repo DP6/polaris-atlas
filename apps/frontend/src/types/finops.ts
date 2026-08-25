@@ -1,23 +1,3 @@
-export type MinDaysUnused = 30 | 60 | 90
-
-export interface UnusedTable {
-  dataset_id: string
-  table_id: string
-  size_bytes: number
-  size_human: string
-  last_accessed_at: string | null
-  days_since_last_access: number | null
-  estimated_monthly_storage_cost_usd: number
-}
-
-export interface UnusedTablesResponse {
-  project_id: string
-  min_days_unused: MinDaysUnused
-  lookback_days: number
-  tables: UnusedTable[]
-  warning: string | null
-}
-
 export interface PartitionCandidate {
   dataset_id: string
   table_id: string

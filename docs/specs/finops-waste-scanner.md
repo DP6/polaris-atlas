@@ -1,22 +1,30 @@
 # Spec — Domínio: FinOps — Scanner de desperdício
 
-**Versão:** 1.1 (escopo por dataset nos dois endpoints)
+**Versão:** 1.2 (escopo por tabela em partition-candidates; "Tabelas sem
+uso" absorvida por Governança/`docs/specs/lineage.md`)
 **Status:** Aprovada
 **Fase:** 4 — FinOps (primeira frente: scanner de desperdício)
-**Última atualização:** 2026-08-22
+**Última atualização:** 2026-08-25
 
 ---
 
 ## Objetivo
 
-Duas checagens independentes de desperdício num projeto BigQuery:
+**Candidatas a particionamento** — tabelas grandes, sem partição, com
+uma coluna `DATE`/`DATETIME`/`TIMESTAMP` candidata, com uma estimativa
+(deliberadamente conservadora, nunca um número único de falsa precisão)
+de quanto poderia ser economizado particionando.
 
-1. **Tabelas sem uso** — nunca lidas (ou não lidas há N dias) nos audit
-   logs, com estimativa de custo de storage evitável.
-2. **Candidatas a particionamento** — tabelas grandes, sem partição,
-   com uma coluna `DATE`/`DATETIME`/`TIMESTAMP` candidata, com uma
-   estimativa (deliberadamente conservadora, nunca um número único de
-   falsa precisão) de quanto poderia ser economizado particionando.
+**v1.2 (2026-08-25)**: esta spec cobria duas checagens até a v1.1 —
+"Tabelas sem uso" foi removida daqui e absorvida por "Tabelas sem
+consumidor" (`docs/specs/lineage.md`, domínio `lineage`/Governança), que
+já cobria essencialmente a mesma pergunta ("quais tabelas ninguém está
+lendo") por uma fonte de dados equivalente — as duas features
+coexistindo em lugares diferentes do app era redundância de produto, não
+uma diferença real de funcionalidade. A única capacidade exclusiva de
+"Tabelas sem uso" (estimativa de custo de storage) foi levada pra
+`OrphanTable` em vez de perdida — ver "Estimativa de economia — desenho"
+em `lineage.md`.
 
 Este é o primeiro dos três sub-domínios de FinOps do roadmap (`docs/prd.md`,
 Fase 4) — budget/custo por dataset e otimizações sugeridas ficam pra
@@ -50,53 +58,25 @@ outro).
 
 ## Endpoints da API
 
-### GET /api/v1/finops/{project_id}/unused-tables
-Tabelas sem leitura conhecida na janela pedida.
-
-**Parâmetros opcionais:**
-- `min_days_unused` (query, default `30`) — `30`, `60` ou `90`.
-- `datasets` (query, repetido, v1.1) — filtra a enumeração de tabelas
-  pra um subconjunto de `dataset_id`. Sem ele, escaneia o projeto
-  inteiro (comportamento anterior, ainda a capacidade padrão da API —
-  o frontend (`UnusedTablesTab`) sempre manda um escopo explícito via
-  `DatasetScopeGate`, escanear tudo sem gate era lento em produção).
-
-**Response 200:**
-```json
-{
-  "project_id": "observability-hub-dev",
-  "min_days_unused": 30,
-  "lookback_days": 90,
-  "tables": [
-    {
-      "dataset_id": "RAW",
-      "table_id": "old_import_2024",
-      "size_bytes": 5368709120,
-      "size_human": "5.37 GB",
-      "last_accessed_at": null,
-      "days_since_last_access": null,
-      "estimated_monthly_storage_cost_usd": 0.0537
-    }
-  ],
-  "warning": null
-}
-```
-
-`last_accessed_at`/`days_since_last_access` nulos = tabela não aparece
-em nenhum job de leitura nos 90 dias consultados (pode nunca ter sido
-lida, ou ter sido lida antes disso — os dois casos são indistinguíveis
-pela mesma razão de sempre: a janela de audit logs é finita).
-
----
-
 ### GET /api/v1/finops/{project_id}/partition-candidates
 Tabelas grandes, não particionadas, com coluna candidata a chave de
 partição.
 
 **Parâmetros opcionais:**
-- `datasets` (query, repetido, v1.1) — mesmo racional do parâmetro
-  acima em `unused-tables`; o frontend (`PartitionCandidatesTab`)
-  sempre manda um escopo explícito via `DatasetScopeGate`.
+- `datasets` (query, repetido, v1.1) — filtra a enumeração de tabelas
+  pra um subconjunto de `dataset_id`.
+- `tables` (query, repetido, v1.2) — formato `"dataset_id.table_id"`
+  (mesmo formato de `ColumnTypeScanRequest.tables`, `docs/specs/
+  finops-column-types.md`). Quando presente, filtra o resultado de
+  `list_all_table_refs(datasets=...)` em Python contra o conjunto
+  pedido antes do resto do pipeline — não pula a enumeração via
+  `INFORMATION_SCHEMA` (diferente do caminho "sem enumeração" de
+  column-type-suggestions), escopo mais simples por ora. Frontend
+  (`PartitionCandidatesTab`) trocou o seletor de `datasets` (checkbox
+  por dataset inteiro) por `ColumnTypeScopePicker` — mesmo componente
+  de `docs/specs/finops-column-types.md` — dataset expansível → tabela
+  individual, sempre manda `tables`, nunca `datasets`, num
+  `Collapsible` que recolhe sozinho ao clicar "Executar".
 
 **Response 200:**
 ```json
@@ -135,13 +115,6 @@ Decisão de design discutida explicitamente com o usuário: **nunca
 fabricar um número de aparência precisa sobre uma suposição não
 verificada** — o risco de superestimar e gerar frustração depois pesa
 mais que a conveniência de mostrar "um número só".
-
-### Tabelas sem uso
-Estimativa **factual**, não especulativa: `size_bytes` × preço de
-storage por GB/mês (`settings.bigquery_storage_price_usd_per_gb_month_active`
-ou `..._long_term`, conforme `last_modified_time` — BigQuery já rebaixa
-a tarifa sozinho pra tabelas sem modificação há 90+ dias). Isso é custo
-real de storage que já está sendo pago, não uma projeção.
 
 ### Candidatas a particionamento
 Aqui não dá pra saber se as queries reais filtram pela coluna de data
@@ -193,25 +166,13 @@ apps/backend/src/observability_hub/
 
 | Cenário | Comportamento |
 |---|---|
-| `min_days_unused` = 60 ou 90 | `warning` informa a limitação de retenção padrão de 30 dias dos audit logs (ver abaixo) |
-| Tabela nunca aparece em nenhum job de leitura | `last_accessed_at`/`days_since_last_access` nulos, sempre incluída (qualquer que seja `min_days_unused`) |
-| Tabela acessada exatamente há `min_days_unused` dias | Incluída (`>=`, não `>` — "sem uso há pelo menos N dias") |
-| Job de outro projeto referenciando a tabela | Ignorado — comparação sempre pela tripla completa `(project_id, dataset_id, table_id)` |
-| Tabela some entre a listagem e o fetch de metadata (race) | Não aparece no resultado, sem erro |
+| `tables` pedido junto com `datasets` | `datasets` filtra a enumeração primeiro, `tables` filtra o resultado depois — uma tabela só aparece se sobreviver aos dois filtros |
+| `tables` com entrada malformada (sem `.`) | Descartada silenciosamente por `_parse_scoped_tables`, mesmo comportamento de `finops-column-types.md` |
 | Tabela já particionada | Nunca aparece em `partition-candidates` |
 | Tabela abaixo do limite de tamanho (1 GB) | Nunca aparece em `partition-candidates` — pequena demais pra valer o aviso |
 | Tabela grande, não particionada, sem coluna DATE/DATETIME/TIMESTAMP | Não aparece — sem coluna candidata, sugestão não é viável |
 | Candidata sem custo observado nos últimos 30 dias | Aparece sem `estimated_savings_usd_*`/`savings_disclaimer` (ambos `null`) |
 | Nenhum evento de job no projeto | `warning` populado (mesmo texto/causas de lineage/access) |
-
-**Retenção padrão do Cloud Logging**: Data Access audit logs retêm 30
-dias por padrão, salvo bucket/sink customizado. `unused-tables` sempre
-busca 90 dias de logs (`_UNUSED_TABLES_LOOKBACK_DAYS`), mas se a
-retenção real do projeto for a padrão, tudo além de 30 dias atrás
-simplesmente não existe mais pra consultar — uma tabela acessada há 45
-dias apareceria como "sem uso há 60+ dias" não porque não foi usada, mas
-porque o log expirou. Por isso o aviso é automático sempre que
-`min_days_unused > 30`.
 
 ---
 

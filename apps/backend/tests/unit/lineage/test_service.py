@@ -1,7 +1,10 @@
+from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
+from observability_hub.core.config import settings
 from observability_hub.core.exceptions import LoggingAccessDeniedError
 from observability_hub.domains.lineage import service
 from observability_hub.domains.lineage.repository import JobEvent
@@ -457,6 +460,7 @@ def test_get_orphans_returns_tables_never_referenced(monkeypatch):
             _event(referenced=[("proj", "RAW", "crm_leads")], destination=("proj", "GOLD", "x"))
         ],
     )
+    monkeypatch.setattr(service, "get_tables_metadata", lambda client, refs: {})
 
     result = service.get_orphans(client, logging_client, "proj")
 
@@ -503,6 +507,7 @@ def test_get_orphans_ignores_referenced_tables_from_other_projects(monkeypatch):
             _event(referenced=[("other-proj", "RAW", "crm_leads")], destination=None)
         ],
     )
+    monkeypatch.setattr(service, "get_tables_metadata", lambda client, refs: {})
 
     result = service.get_orphans(client, logging_client, "proj")
 
@@ -517,8 +522,51 @@ def test_get_orphans_sets_warning_when_no_events(monkeypatch):
         service.repository, "list_all_table_refs", lambda *a, **kw: [("RAW", "crm_leads")]
     )
     monkeypatch.setattr(service.repository, "list_job_events", lambda *a, **kw: [])
+    monkeypatch.setattr(service, "get_tables_metadata", lambda client, refs: {})
 
     result = service.get_orphans(client, logging_client, "proj")
 
     assert result.warning is not None
     assert len(result.orphans) == 1
+
+
+def test_get_orphans_includes_estimated_storage_cost(monkeypatch):
+    client = MagicMock()
+    logging_client = MagicMock()
+    modified = datetime.now(UTC) - timedelta(days=10)
+    monkeypatch.setattr(service, "discover_regions", lambda project_id, client: ["US"])
+    monkeypatch.setattr(
+        service.repository, "list_all_table_refs", lambda *a, **kw: [("RAW", "crm_leads")]
+    )
+    monkeypatch.setattr(service.repository, "list_job_events", lambda *a, **kw: [])
+    monkeypatch.setattr(
+        service,
+        "get_tables_metadata",
+        lambda client, refs: {
+            "proj.RAW.crm_leads": SimpleNamespace(num_bytes=1024**3, modified=modified)
+        },
+    )
+
+    result = service.get_orphans(client, logging_client, "proj")
+
+    assert result.orphans[0].size_bytes == 1024**3
+    assert (
+        result.orphans[0].estimated_monthly_storage_cost_usd
+        == settings.bigquery_storage_price_usd_per_gb_month_active
+    )
+
+
+def test_get_orphans_defaults_cost_to_zero_when_metadata_missing(monkeypatch):
+    client = MagicMock()
+    logging_client = MagicMock()
+    monkeypatch.setattr(service, "discover_regions", lambda project_id, client: ["US"])
+    monkeypatch.setattr(
+        service.repository, "list_all_table_refs", lambda *a, **kw: [("RAW", "crm_leads")]
+    )
+    monkeypatch.setattr(service.repository, "list_job_events", lambda *a, **kw: [])
+    monkeypatch.setattr(service, "get_tables_metadata", lambda client, refs: {})
+
+    result = service.get_orphans(client, logging_client, "proj")
+
+    assert result.orphans[0].size_bytes == 0
+    assert result.orphans[0].estimated_monthly_storage_cost_usd == 0.0
