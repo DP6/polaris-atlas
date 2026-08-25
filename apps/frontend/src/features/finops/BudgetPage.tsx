@@ -1,6 +1,16 @@
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { Fragment, useState } from 'react'
 import { Link } from 'react-router-dom'
+import {
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SortableTableHead } from '@/components/SortableTableHead'
@@ -29,7 +39,7 @@ import { useProjectContext } from '@/features/projects/ProjectContext'
 import { useTableFilterSort } from '@/hooks/useTableFilterSort'
 import { formatBytes, formatDate, formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import type { BudgetGroupBy, CostGroup, CostlyQuery } from '@/types/finops'
+import type { BudgetGroupBy, CostGroup, CostlyQuery, CostProjection } from '@/types/finops'
 
 const COST_TAB = 'cost'
 const QUERIES_TAB = 'queries'
@@ -215,6 +225,7 @@ export function BudgetPage() {
                 totalCostUsd={data.total_cost_usd}
                 groupBy={groupBy}
                 onGroupByChange={setGroupBy}
+                projection={data.projection}
               />
             </TabsContent>
 
@@ -246,12 +257,14 @@ function CostByGroupTab({
   totalCostUsd,
   groupBy,
   onGroupByChange,
+  projection,
 }: {
   projectId: string
   groups: CostGroup[]
   totalCostUsd: number
   groupBy: BudgetGroupBy
   onGroupByChange: (value: BudgetGroupBy) => void
+  projection: CostProjection
 }) {
   const {
     sortKey,
@@ -264,6 +277,25 @@ function CostByGroupTab({
     compare: compareGroup,
     matches: () => true,
   })
+
+  // Só faz sentido com groupBy=day — groups[].key vira "YYYY-MM-DD",
+  // ordenável direto como string. Só dias com atividade aparecem na
+  // resposta (API não zera dias sem custo); sem preenchimento de gap,
+  // mantém simples — o acumulado sobe em degraus nos dias com dado.
+  let cumulativeChartData: { date: string; acumulado: number; projecao: number }[] = []
+  if (groupBy === 'day') {
+    let running = 0
+    cumulativeChartData = [...groups]
+      .sort((a, b) => a.key.localeCompare(b.key))
+      .map((group, index) => {
+        running += group.cost_usd
+        return {
+          date: group.key.slice(5), // "MM-DD", ano é sempre o mês corrente
+          acumulado: running,
+          projecao: projection.daily_average_usd * (index + 1),
+        }
+      })
+  }
 
   return (
     <div className="mt-4 flex flex-col gap-4">
@@ -284,6 +316,37 @@ function CostByGroupTab({
           </button>
         ))}
       </div>
+
+      {groupBy === 'day' && cumulativeChartData.length > 0 && (
+        <div className="h-56 w-full shrink-0 rounded-lg border border-border bg-card p-4">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={cumulativeChartData}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+              <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} width={48} tickFormatter={(v) => formatUsd(v)} />
+              <RechartsTooltip formatter={(value) => formatUsd(Number(value))} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Line
+                type="monotone"
+                dataKey="acumulado"
+                name="Custo acumulado"
+                stroke="var(--color-primary)"
+                strokeWidth={2}
+                dot={{ r: 3 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="projecao"
+                name="Projeção"
+                stroke="var(--color-muted-foreground)"
+                strokeWidth={2}
+                strokeDasharray="4 4"
+                dot={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       <Table>
         <TableHeader>
