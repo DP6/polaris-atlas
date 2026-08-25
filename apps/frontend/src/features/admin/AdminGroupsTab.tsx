@@ -1,9 +1,25 @@
-import { ChevronDown, ChevronRight, Plus, ShieldCheck, Trash2 } from 'lucide-react'
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  ChevronsUpDown,
+  Plus,
+  ShieldCheck,
+  Trash2,
+} from 'lucide-react'
 import { useState } from 'react'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { RefreshButton } from '@/components/RefreshButton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
 import {
   Dialog,
   DialogContent,
@@ -14,13 +30,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   useDeleteHubGroup,
   useHubGroups,
@@ -29,6 +39,7 @@ import {
 } from '@/features/admin/hooks'
 import { ProjectChipEditor } from '@/features/admin/ProjectChipEditor'
 import { ApiError } from '@/lib/http-client'
+import { cn } from '@/lib/utils'
 import type { HubGroup } from '@/types/admin'
 
 const CUSTOM_GROUP_OPTION = '__custom__'
@@ -154,12 +165,22 @@ function CreateGroupDialog({
 }) {
   const [selected, setSelected] = useState('')
   const [customGroupId, setCustomGroupId] = useState('')
+  const [groupPickerOpen, setGroupPickerOpen] = useState(false)
   const upsertMutation = useUpsertHubGroup()
   const workspaceGroupsQuery = useWorkspaceGroups(open)
 
   const availableWorkspaceGroups = (workspaceGroupsQuery.data?.groups ?? []).filter(
     (g) => !existingGroupIds.has(g.email),
   )
+
+  const selectedWorkspaceGroup = availableWorkspaceGroups.find((g) => g.email === selected)
+  const selectedLabel =
+    selected === CUSTOM_GROUP_OPTION
+      ? 'Nome livre (não é um grupo do Workspace)'
+      : selectedWorkspaceGroup &&
+        (selectedWorkspaceGroup.name
+          ? `${selectedWorkspaceGroup.name} (${selectedWorkspaceGroup.email})`
+          : selectedWorkspaceGroup.email)
 
   const groupId = selected === CUSTOM_GROUP_OPTION ? customGroupId.trim() : selected
 
@@ -203,30 +224,78 @@ function CreateGroupDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="new-group-select">Grupo</Label>
-          <Select value={selected} onValueChange={(value) => setSelected(value ?? '')}>
-            <SelectTrigger id="new-group-select">
-              <SelectValue placeholder="Selecione um grupo do Workspace…" />
-            </SelectTrigger>
-            <SelectContent>
-              {workspaceGroupsQuery.isLoading && (
-                <div className="px-2 py-1.5 text-sm text-muted-foreground">Carregando…</div>
-              )}
-              {workspaceGroupsQuery.isError && (
-                <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                  Não foi possível listar os grupos do Workspace.
-                </div>
-              )}
-              {availableWorkspaceGroups.map((g) => (
-                <SelectItem key={g.email} value={g.email}>
-                  {g.name ? `${g.name} (${g.email})` : g.email}
-                </SelectItem>
-              ))}
-              <SelectItem value={CUSTOM_GROUP_OPTION}>
-                Nome livre (não é um grupo do Workspace)
-              </SelectItem>
-            </SelectContent>
-          </Select>
+          <Label htmlFor="new-group-trigger">Grupo</Label>
+          <Popover open={groupPickerOpen} onOpenChange={setGroupPickerOpen}>
+            <PopoverTrigger
+              render={
+                <Button
+                  id="new-group-trigger"
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={groupPickerOpen}
+                  className="w-full justify-between font-normal"
+                />
+              }
+            >
+              <span className={cn('truncate text-left', !selectedLabel && 'text-muted-foreground')}>
+                {selectedLabel || 'Selecione um grupo do Workspace…'}
+              </span>
+              <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
+            </PopoverTrigger>
+            <PopoverContent className="w-(--anchor-width) p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Buscar por trecho do nome ou e-mail…" />
+                <CommandList>
+                  {workspaceGroupsQuery.isLoading && (
+                    <div className="px-2 py-1.5 text-sm text-muted-foreground">Carregando…</div>
+                  )}
+                  {workspaceGroupsQuery.isError && (
+                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                      Não foi possível listar os grupos do Workspace.
+                    </div>
+                  )}
+                  <CommandEmpty>Nenhum grupo encontrado.</CommandEmpty>
+                  <CommandGroup>
+                    {availableWorkspaceGroups.map((g) => (
+                      <CommandItem
+                        key={g.email}
+                        value={`${g.name ?? ''} ${g.email}`}
+                        onSelect={() => {
+                          setSelected(g.email)
+                          setGroupPickerOpen(false)
+                        }}
+                      >
+                        <Check
+                          className={cn(
+                            'size-4 shrink-0',
+                            selected === g.email ? 'opacity-100' : 'opacity-0',
+                          )}
+                        />
+                        <span className="flex-1 break-words whitespace-normal">
+                          {g.name ? `${g.name} (${g.email})` : g.email}
+                        </span>
+                      </CommandItem>
+                    ))}
+                    <CommandItem
+                      value={CUSTOM_GROUP_OPTION}
+                      onSelect={() => {
+                        setSelected(CUSTOM_GROUP_OPTION)
+                        setGroupPickerOpen(false)
+                      }}
+                    >
+                      <Check
+                        className={cn(
+                          'size-4 shrink-0',
+                          selected === CUSTOM_GROUP_OPTION ? 'opacity-100' : 'opacity-0',
+                        )}
+                      />
+                      Nome livre (não é um grupo do Workspace)
+                    </CommandItem>
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
         </div>
         {selected === CUSTOM_GROUP_OPTION && (
           <div className="flex flex-col gap-1.5">

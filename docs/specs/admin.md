@@ -590,9 +590,14 @@ Remove o documento (idempotente). Membros perdem só o acesso concedido
 por este grupo — `hub_users` não é afetado.
 
 ### GET /api/v1/admin/workspace-groups (v1.6)
-Lista `{email, name}` de todos os grupos do domínio do Workspace, pra
-popular o seletor de "criar grupo" na UI. Lista vazia se a integração
-não estiver configurada ou a Directory API falhar — nunca erro.
+Lista `{email, name}` dos grupos do domínio do Workspace, pra popular o
+seletor de "criar grupo" na UI. Exclui grupos com `directMembersCount
+<= 1` — em domínios reais é comum haver um Google Group pessoal por
+funcionário (nome + `firstname.lastname@dominio`), que não são grupos
+de time/acesso e só teriam poluído o seletor (descoberto testando
+contra o Workspace real da DP6, 2026-08-25). Lista vazia se a
+integração não estiver configurada ou a Directory API falhar — nunca
+erro.
 
 ### GET /api/v1/admin/access-requests?status=pending
 Lista `access_requests`, mais recente primeiro. `status` opcional
