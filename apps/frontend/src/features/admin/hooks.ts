@@ -228,13 +228,6 @@ export function usePiiScanActivity(limit?: number) {
   })
 }
 
-export function useDomainUsageRanking() {
-  return useQuery({
-    queryKey: ['admin-domain-usage-ranking'],
-    queryFn: adminApi.getDomainUsageRanking,
-  })
-}
-
 export function useUsageHeatmap(lookbackDays?: number) {
   return useQuery({
     queryKey: ['admin-usage-heatmap', lookbackDays],

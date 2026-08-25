@@ -21,19 +21,26 @@ export function RetentionFunnelSection() {
     return <p className="text-sm text-status-error">Erro ao carregar o funil de retenção.</p>
   }
 
-  const { users_with_login, users_with_action, users_with_repeat_action } = funnelQuery.data
+  const {
+    users_with_login,
+    users_with_action,
+    users_with_5plus_actions,
+    users_with_10plus_actions,
+  } = funnelQuery.data
   const stages = [
-    { label: 'Logaram', count: users_with_login },
-    { label: '≥1 ação', count: users_with_action },
-    { label: 'Ação repetida', count: users_with_repeat_action },
+    { label: 'Acesso', count: users_with_login },
+    { label: 'Ação', count: users_with_action },
+    { label: '+4 Ações', count: users_with_5plus_actions },
+    { label: '+9 Ações', count: users_with_10plus_actions },
   ]
 
   return (
     <CollapsibleSection title="Funil de retenção">
       <p className="text-sm text-muted-foreground">
         Últimos 90 dias — login, pelo menos uma ação (profiling, scan de PII, visualização de tabela
-        ou busca) e ação repetida (2 ou mais, qualquer combinação). Login e ação não precisam estar
-        em ordem, só na mesma janela — leitura aproximada de engajamento, não um funil estrito.
+        ou busca), 5 ou mais ações e 10 ou mais ações (qualquer combinação). Login e ação não
+        precisam estar em ordem, só na mesma janela — leitura aproximada de engajamento, não um
+        funil estrito.
       </p>
 
       <div className="h-40 w-full shrink-0 rounded-lg border border-border bg-card p-4">

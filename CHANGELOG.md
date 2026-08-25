@@ -5,6 +5,35 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Ajustes na aba "Uso do Hub" — remoção do ranking + funil em 4 estágios
+
+Dois ajustes pedidos pelo usuário depois de revisar a v1.7 em produção:
+o ranking de domínios só comparava 2 de 8 domínios do produto (o gap já
+estava documentado no CHANGELOG anterior e na spec), e o usuário decidiu
+remover a seção em vez de completar a instrumentação dos domínios
+faltantes. O funil de retenção ganhou 2 estágios novos.
+
+### O que foi feito
+- Removido por completo o ranking de domínios mais usados (endpoint,
+  service, schemas, hook, tipo e componente React) — comparava só
+  profiling vs. PII scan (catalog/lineage/freshness/finops/storage sem
+  tracking de uso, `access_requests` não integrado). Decisão do usuário:
+  "exclua essa seção por enquanto, não faz sentido ter ela".
+- Funil de retenção expandido de 3 para 4 estágios: acesso → ação
+  (≥1) → +4 ações (≥5 total) → +9 ações (≥10 total). Nomes de campo no
+  schema usam o limiar literal (`users_with_5plus_actions`/
+  `users_with_10plus_actions`) em vez da fraseação relativa do usuário —
+  essa fica só no rótulo do frontend.
+- `docs/specs/admin.md` bump pra v1.8.
+
+### Mudanças de arquitetura
+- Nenhuma — mesma mecânica de agregação em Python sobre os sinais já
+  rastreados; a remoção do ranking não afeta `analytics_repository.py`
+  (suas funções continuam usadas por outras 3 leituras: atividade de
+  profiling, atividade de PII scan e o heatmap de horário).
+
+---
+
 ## Visualizações do brainstorm (Uso do Hub + telas existentes, 2 PRs)
 
 Continuação da série de ajustes de UX — usuário pediu pra implementar o

@@ -248,30 +248,6 @@ def test_get_pii_scan_activity_sorts_desc_and_limits(monkeypatch):
     assert result.scans[1].table_id == "t3"
 
 
-def test_get_domain_usage_ranking_buckets_by_month_and_totals(monkeypatch):
-    client = MagicMock()
-    profiling_runs = [
-        {"executed_at": datetime(2026, 8, 1, tzinfo=UTC)},
-        {"executed_at": datetime(2026, 8, 15, tzinfo=UTC)},
-        {"executed_at": datetime(2026, 7, 1, tzinfo=UTC)},
-    ]
-    pii_scans = [{"executed_at": datetime(2026, 8, 1, tzinfo=UTC)}]
-    monkeypatch.setattr(
-        service.repository, "list_all_profiling_runs", lambda client: profiling_runs
-    )
-    monkeypatch.setattr(service.repository, "list_all_pii_scans", lambda client: pii_scans)
-
-    result = service.get_domain_usage_ranking(client)
-
-    monthly_by_period = {b.period: b for b in result.monthly}
-    assert monthly_by_period["2026-08"].profiling_count == 2
-    assert monthly_by_period["2026-08"].pii_scan_count == 1
-    assert monthly_by_period["2026-07"].profiling_count == 1
-    assert monthly_by_period["2026-07"].pii_scan_count == 0
-    assert result.total_profiling_runs == 3
-    assert result.total_pii_scans == 1
-
-
 def test_get_usage_heatmap_combines_sources_and_filters_by_lookback(monkeypatch):
     client = MagicMock()
     in_window = datetime.now(UTC)
@@ -309,36 +285,43 @@ def test_get_usage_heatmap_combines_sources_and_filters_by_lookback(monkeypatch)
     assert abs((captured["since"] - expected_since).total_seconds()) < 5
 
 
-def test_get_retention_funnel_three_stages(monkeypatch):
+def test_get_retention_funnel_four_stages(monkeypatch):
     client = MagicMock()
     now = datetime(2026, 8, 17, tzinfo=UTC)
+
+    def runs_for(email: str, count: int) -> list[dict]:
+        return [{"executed_by": email, "executed_at": now} for _ in range(count)]
+
     login_events = [
         {"email": "no-action@dp6.com.br", "logged_in_at": now},
         {"email": "one-action@dp6.com.br", "logged_in_at": now},
-        {"email": "repeat-action@dp6.com.br", "logged_in_at": now},
+        {"email": "four-actions@dp6.com.br", "logged_in_at": now},
+        {"email": "five-actions@dp6.com.br", "logged_in_at": now},
+        {"email": "nine-actions@dp6.com.br", "logged_in_at": now},
+        {"email": "ten-actions@dp6.com.br", "logged_in_at": now},
     ]
     monkeypatch.setattr(service.repository, "list_login_events", lambda client, since: login_events)
     monkeypatch.setattr(
         service.repository,
         "list_all_profiling_runs",
-        lambda client: [
-            {"executed_by": "one-action@dp6.com.br", "executed_at": now},
-            {"executed_by": "repeat-action@dp6.com.br", "executed_at": now},
-        ],
+        lambda client: (
+            runs_for("one-action@dp6.com.br", 1)
+            + runs_for("four-actions@dp6.com.br", 4)
+            + runs_for("five-actions@dp6.com.br", 5)
+            + runs_for("nine-actions@dp6.com.br", 9)
+            + runs_for("ten-actions@dp6.com.br", 10)
+        ),
     )
     monkeypatch.setattr(service.repository, "list_all_pii_scans", lambda client: [])
-    monkeypatch.setattr(
-        service.repository,
-        "list_all_table_views",
-        lambda client: [{"owner_email": "repeat-action@dp6.com.br", "viewed_at": now}],
-    )
+    monkeypatch.setattr(service.repository, "list_all_table_views", lambda client: [])
     monkeypatch.setattr(service.repository, "list_all_searches", lambda client: [])
 
     result = service.get_retention_funnel(client)
 
-    assert result.users_with_login == 3
-    assert result.users_with_action == 2
-    assert result.users_with_repeat_action == 1
+    assert result.users_with_login == 6
+    assert result.users_with_action == 5
+    assert result.users_with_5plus_actions == 3
+    assert result.users_with_10plus_actions == 1
 
 
 def test_get_retention_funnel_ignores_actions_outside_lookback_window(monkeypatch):

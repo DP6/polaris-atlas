@@ -4,7 +4,6 @@ import type {
   AccessRequestAnalyticsResponse,
   AccessRequestStatus,
   AccessRequestsListResponse,
-  DomainUsageRankingResponse,
   FavoritesAnalyticsResponse,
   HubGroup,
   HubGroupsListResponse,
@@ -103,9 +102,6 @@ export const adminApi = {
     httpClient.get<PiiScanActivityResponse>(
       `/api/v1/admin/analytics/pii-scans${limit ? `?limit=${limit}` : ''}`,
     ),
-
-  getDomainUsageRanking: () =>
-    httpClient.get<DomainUsageRankingResponse>('/api/v1/admin/analytics/domain-usage'),
 
   getUsageHeatmap: (lookbackDays?: number) =>
     httpClient.get<UsageHeatmapResponse>(
