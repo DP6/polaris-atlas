@@ -140,7 +140,9 @@ def list_domain_groups() -> list[dict]:
     """Grupos do domínio do Workspace (o mesmo domínio de
     settings.workspace_impersonate_email), pra popular o seletor de
     "criar grupo" na UI em vez do admin ter que saber o e-mail exato de
-    cor. Cada item: {"email": str, "name": str | None}. Lista vazia nas
+    cor. Cada item: {"email": str, "name": str | None}. Exclui grupos
+    com directMembersCount <= 1 (grupos pessoais de 1 funcionário, não
+    grupos de time/acesso — comuns em domínios reais). Lista vazia nas
     mesmas condições de get_group_members (integração não configurada,
     Workspace fora do ar, escopo faltando) — nunca propaga exceção."""
     now = time.monotonic()
@@ -171,7 +173,11 @@ def list_domain_groups() -> list[dict]:
             groups.extend(
                 {"email": g["email"].strip().lower(), "name": g.get("name")}
                 for g in data.get("groups", [])
-                if g.get("email")
+                # directMembersCount <= 1 é quase sempre grupo pessoal
+                # auto-criado por funcionário (comum em domínios reais),
+                # não um grupo de time/acesso — não faz sentido oferecer
+                # no seletor de "criar grupo".
+                if g.get("email") and int(g.get("directMembersCount", 0)) > 1
             )
             page_token = data.get("nextPageToken")
             if not page_token:
