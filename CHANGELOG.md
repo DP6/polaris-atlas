@@ -5,6 +5,65 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Cloud Run com CPU sempre alocada de novo — recorrência do diagnóstico anterior, agora fixado no Terraform
+
+Usuário reportou custo de Cloud Run de ~R$5/dia com uso quase só de
+teste — muito acima do esperado pra volume de tráfego tão baixo.
+
+### Diagnóstico
+Billing Report (agrupado por SKU) mostrou o SKU **"Services CPU
+(Instance-based billing) in us-central1"** dominando o mês (R$17,75 de
+R$20,38 total), com **169.551 segundos de CPU** (~47h) — muito mais do
+que cliques manuais explicariam. "Instance-based billing" é o nome do
+SKU quando `cpu_idle=false` ("CPU sempre alocada", cobra o tempo de
+vida inteiro da instância, não só o processamento de requisição) — a
+alternativa normal pra uma API HTTP é `cpu_idle=true` ("CPU só durante
+requisição"). `terraform plan` contra o state real confirmou:
+`cpu_idle: false -> true` nos 4 serviços (backend/frontend × dev/prod).
+
+Isso é uma **recorrência** de um diagnóstico já feito antes (ver seção
+"CI/CD: gate de aprovação manual antes de deploy de app em prod", achado
+de custo do Cloud Run) — na época, a mesma configuração foi encontrada
+ligada, revertida **manualmente via `gcloud`** (nunca chegou a ir pro
+Terraform, que não declarava `resources.cpu_idle` de jeito nenhum) e
+sem registro de como foi religada. Sem estar no IaC, o fix anterior não
+era durável — por isso recorreu.
+
+### O que foi feito
+`infra/terraform/modules/cloud-run/main.tf`: `resources.cpu_idle = true`
+declarado explicitamente (nunca existia no módulo antes). Efeito: agora
+todo `terraform apply` (automático em dev a cada push, automático em
+prod a cada merge em `main`) reafirma esse valor — uma mudança manual
+fora do fluxo do projeto não sobrevive ao próximo apply. Confirmado via
+`terraform plan` real (dev e prod): `Plan: 0 to add, 3 to change, 0 to
+destroy` nos dois — só update in-place, sem destroy/replace.
+
+### Avaliação de risco (antes de aplicar)
+- Nenhum dos 4 serviços usa `BackgroundTasks`/thread solta/streaming
+  (confirmado por grep) — nada depende de CPU disponível depois da
+  resposta HTTP ser enviada, então `cpu_idle=true` é seguro pro
+  comportamento atual.
+- Cloud Run Job (`backend-{env}-refresh-cache`) não é afetado — Jobs
+  não têm conceito de "idle", sempre rodam com CPU cheia até terminar.
+- `terraform-apply-prod.yml` roda automático no merge (sem gate manual,
+  decisão já registrada) — a mudança em prod acontece assim que este PR
+  for mergeado em `main`, sem aprovação extra.
+- Causa raiz de como isso foi ligado da primeira (e agora segunda) vez
+  continua desconhecida — declarar no Terraform corrige a recorrência
+  via IaC, mas não identifica quem/o que ligou manualmente.
+
+### Erros cometidos e aprendizados
+- O fix anterior (seção "CI/CD: gate de aprovação manual...", mais
+  abaixo neste arquivo) só corrigiu o sintoma ao vivo (`gcloud run
+  services update` manual), sem trazer a configuração pro Terraform —
+  por isso não durou. Aprendizado
+  aplicável a qualquer diagnóstico de config incorreta encontrada ao
+  vivo num recurso gerenciado por Terraform: o fix "de verdade" é
+  sempre no código (IaC), nunca só no recurso — senão o próximo apply
+  (ou uma mudança manual futura) desfaz silenciosamente.
+
+---
+
 ## Apagar projeto, checklist de onboarding e solicitação de inclusão de projeto
 
 Três ajustes pedidos no admin/seletor de projeto: (1) quando o usuário
