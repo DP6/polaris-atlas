@@ -14,6 +14,7 @@ parsing; só adiciona a escrita no cache compartilhado (core/event_cache.py).
 import json
 import logging as std_logging
 
+from google.api_core.exceptions import GoogleAPICallError
 from google.cloud import firestore, storage
 from google.cloud import logging as cloud_logging
 
@@ -57,6 +58,22 @@ def _refresh_project(
         )
     except LoggingAccessDeniedError:
         logger.warning(json.dumps({"project_id": project_id, "status": "access_denied"}))
+        return
+    except GoogleAPICallError as exc:
+        # Cobre, entre outros, projeto inexistente/renomeado/deletado
+        # (Cloud Logging devolve 404 NotFound em vez de 403 Forbidden
+        # quando a SA do Hub não tem NENHUM binding de IAM no projeto —
+        # `hub_projects`/"vistos" pode conter entradas obsoletas, ex:
+        # projeto de cliente descontinuado). Um projeto com problema não
+        # pode derrubar o refresh dos demais.
+        logger.warning(
+            json.dumps({"project_id": project_id, "status": "api_error", "error": str(exc)})
+        )
+        return
+    except Exception as exc:  # noqa: BLE001 — rede de segurança final do job em lote
+        logger.error(
+            json.dumps({"project_id": project_id, "status": "unexpected_error", "error": str(exc)})
+        )
         return
 
     logger.info(

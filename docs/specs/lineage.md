@@ -377,7 +377,7 @@ apps/backend/src/observability_hub/
 | `max_hops` fora do intervalo 1–15 | HTTP 422 (validação do `Query(ge=1, le=15)`) |
 | Projeto nunca varrido pelo Job (cache miss) | Fallback síncrono (scan ao vivo), resultado gravado no cache pra próxima chamada — `cache_updated_at: null` só nesta resposta |
 | `lookback_days` custom em `/orphans` | Cache ignorado (sempre scan ao vivo) — `JobEvent` não carrega timestamp por evento, não dá pra recortar um cache de 30 dias pra outra janela |
-| Job falha num projeto (`LoggingAccessDeniedError`) | Logado e pulado — não derruba o refresh dos demais projetos conhecidos |
+| Job falha num projeto (acesso negado, projeto inexistente/descontinuado, ou qualquer outro erro) | Logado e pulado — não derruba o refresh dos demais projetos conhecidos |
 | Admin dispara o gatilho manual enquanto o ciclo diário já está rodando | Duas execuções do Job em paralelo — sem deduplicação na v1, ambas terminam gravando o mesmo resultado (idempotente) |
 
 ---
@@ -390,7 +390,7 @@ apps/backend/src/observability_hub/
 | AC-002 | Cache miss faz o scan ao vivo e grava o resultado no cache antes de retornar | `test_get_job_events_cached_falls_back_and_writes_cache_on_miss` |
 | AC-003 | `lookback_days` diferente do default do módulo sempre ignora o cache | `test_get_job_events_cached_ignores_cache_for_non_default_lookback` |
 | AC-004 | O job de refresh cobre a união de `hub_projects` e projetos vistos via cache miss | `test_known_projects_unions_hub_projects_and_seen_projects` |
-| AC-005 | Falha de acesso a um projeto durante o refresh não interrompe os demais | `test_refresh_project_skips_project_without_logging_access` |
+| AC-005 | Falha em um projeto durante o refresh (acesso negado, projeto inexistente, ou qualquer erro inesperado) não interrompe os demais | `test_refresh_project_skips_project_without_logging_access`, `test_refresh_project_skips_project_that_does_not_exist`, `test_refresh_project_skips_project_on_unexpected_error`, `test_main_processes_all_projects_even_when_one_does_not_exist` |
 | AC-006 | Gatilho manual de admin chama a Cloud Run Admin API com o nome de Job do ambiente atual | `test_trigger_event_cache_refresh_calls_run_client_with_environment_job_name` |
 
 ---
@@ -403,6 +403,7 @@ apps/backend/src/observability_hub/
 | ASM-002 | Job roda com a mesma SA de runtime do Cloud Run Service (nunca uma SA nova) — evita reabrir o onboarding manual de IAM cross-project (`docs/onboarding-cliente.md`) de todo cliente já liberado | confirmada |
 | ASM-003 | `hub_projects` não é uma lista exaustiva de projetos consultados (acesso via wildcard `"*"` não gera doc lá) — por isso o job também cobre projetos "vistos" via cache miss no request path | confirmada, documentado em `core/event_cache.py::list_seen_projects` |
 | ASM-004 | Gatilho manual de admin não precisa de deduplicação de execuções concorrentes na v1 — o resultado é idempotente (regrava o mesmo cache), então uma segunda execução em paralelo não corrompe nada, só desperdiça uma chamada a mais | confirmada |
+| ASM-005 | Cloud Logging devolve `404 NotFound` (não `403 Forbidden`) quando a SA do Hub não tem **nenhum** binding de IAM no projeto — diferente de "tem acesso mas falta a role certa" (`LoggingAccessDeniedError`). `hub_projects`/"vistos" podem conter entradas obsoletas (projeto descontinuado/renomeado); o job trata os dois casos (e qualquer outro erro de API) como "pula e segue" | confirmada em produção — causou `Container called exit(1)` na primeira execução real do job em dev, ver CHANGELOG |
 
 ## Perguntas em aberto
 

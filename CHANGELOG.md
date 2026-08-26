@@ -72,6 +72,23 @@ timeout maior, mais memória) num plano único.
   frescor do dado; compensado pelo gatilho manual de admin pra quando
   alguém precisar de um refresh imediato.
 
+### Erros cometidos e aprendizados
+- Primeira execução manual do Job em dev **derrubou o processo inteiro**
+  (`Container called exit(1)`) na primeira entrada de `hub_projects`/
+  "vistos" apontando pra um projeto inexistente (`inter-mta`, cliente
+  descontinuado) — `list_job_events` levantou `google.api_core.exceptions.NotFound`
+  (404), não `LoggingAccessDeniedError` (403), e `_refresh_project` só
+  tratava o segundo caso. Cloud Logging devolve 404 (não 403) quando a
+  SA do Hub não tem **nenhum** binding de IAM no projeto — caso
+  diferente de "tem algum acesso mas falta a role certa" (que já era
+  coberto). Corrigido capturando também `GoogleAPICallError` (cobre
+  `NotFound` e qualquer outro erro de API do Google) e, como rede de
+  segurança final, `Exception` genérica — nenhuma entrada obsoleta em
+  `hub_projects`/"vistos" pode voltar a derrubar o refresh dos demais
+  projetos. Adicionado teste de regressão rodando `main()` de ponta a
+  ponta com um projeto inexistente no meio da lista
+  (`test_main_processes_all_projects_even_when_one_does_not_exist`).
+
 ---
 
 ## Ajustes na aba "Uso do Hub" — remoção do ranking + funil em 4 estágios
