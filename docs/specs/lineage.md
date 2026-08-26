@@ -290,7 +290,11 @@ e grava o resultado num cache compartilhado:
 - Payload grande (lista de eventos serializada) → bucket GCS dedicado
   (`google_storage_bucket.event_cache`, `environments/{dev,prod}/main.tf`)
   — Firestore tem limite de 1MiB/doc, facilmente ultrapassado em 30 dias
-  de audit log de um projeto com uso real.
+  de audit log de um projeto com uso real. A SA de runtime do backend
+  precisa de `roles/storage.objectAdmin` **no bucket** (não vem de
+  graça por estarem no mesmo projeto —
+  `google_storage_bucket_iam_member.event_cache_runtime_access`, ver
+  ASM-006); sem isso, toda leitura/escrita levanta `Forbidden`.
 - Metadado pequeno (`cached_at`, contagem de eventos) → Firestore
   (`core/event_cache.py`, mesmo padrão de dado derivado de
   `domains/quality/history_repository.py`).
@@ -300,6 +304,11 @@ O request path (`domains/lineage/repository.py::get_job_events_cached`,
 primeiro; em **cache miss** (projeto nunca varrido ainda) faz o scan
 síncrono de hoje como fallback e grava o resultado — auto-cura: só a
 primeira consulta de um projeto novo continua exposta ao cenário antigo.
+Qualquer falha ao ler ou gravar o cache (não só cache miss — ex: bucket
+sem permissão, GCS fora do ar) é capturada e ignorada nesse ponto,
+sempre caindo pro scan ao vivo: o cache é uma otimização, nunca pode ser
+a causa de uma resposta quebrar (ver ASM-006, causa raiz de uma
+regressão real do "Failed to fetch" que esta mesma versão introduziu).
 
 `list_job_events` não carrega timestamp por evento — por isso o cache só
 é usado quando chamado com `lookback_days` igual ao default do módulo
@@ -392,6 +401,8 @@ apps/backend/src/observability_hub/
 | AC-004 | O job de refresh cobre a união de `hub_projects` e projetos vistos via cache miss | `test_known_projects_unions_hub_projects_and_seen_projects` |
 | AC-005 | Falha em um projeto durante o refresh (acesso negado, projeto inexistente, ou qualquer erro inesperado) não interrompe os demais | `test_refresh_project_skips_project_without_logging_access`, `test_refresh_project_skips_project_that_does_not_exist`, `test_refresh_project_skips_project_on_unexpected_error`, `test_main_processes_all_projects_even_when_one_does_not_exist` |
 | AC-006 | Gatilho manual de admin chama a Cloud Run Admin API com o nome de Job do ambiente atual | `test_trigger_event_cache_refresh_calls_run_client_with_environment_job_name` |
+| AC-007 | Falha ao ler o cache (qualquer exceção, não só cache miss) cai pro scan ao vivo em vez de propagar | `test_get_job_events_cached_falls_back_to_live_scan_when_cache_read_fails` |
+| AC-008 | Falha ao gravar o cache não impede a resposta de conter o resultado do scan ao vivo já feito | `test_get_job_events_cached_returns_live_data_when_cache_write_fails` |
 
 ---
 
@@ -404,6 +415,7 @@ apps/backend/src/observability_hub/
 | ASM-003 | `hub_projects` não é uma lista exaustiva de projetos consultados (acesso via wildcard `"*"` não gera doc lá) — por isso o job também cobre projetos "vistos" via cache miss no request path | confirmada, documentado em `core/event_cache.py::list_seen_projects` |
 | ASM-004 | Gatilho manual de admin não precisa de deduplicação de execuções concorrentes na v1 — o resultado é idempotente (regrava o mesmo cache), então uma segunda execução em paralelo não corrompe nada, só desperdiça uma chamada a mais | confirmada |
 | ASM-005 | Cloud Logging devolve `404 NotFound` (não `403 Forbidden`) quando a SA do Hub não tem **nenhum** binding de IAM no projeto — diferente de "tem acesso mas falta a role certa" (`LoggingAccessDeniedError`). `hub_projects`/"vistos" podem conter entradas obsoletas (projeto descontinuado/renomeado); o job trata os dois casos (e qualquer outro erro de API) como "pula e segue" | confirmada em produção — causou `Container called exit(1)` na primeira execução real do job em dev, ver CHANGELOG |
+| ASM-006 | O bucket do cache não concede acesso a nenhuma SA por padrão só por estar no mesmo projeto — a SA de runtime do backend precisa de um `google_storage_bucket_iam_member` explícito (`roles/storage.objectAdmin`); sem ele, `read_cache_bytes`/`write_cache_bytes` levantam `Forbidden`, não capturado pelo `except NotFound` original. `get_job_events_cached`/`get_access_events_cached` passaram a capturar qualquer exceção (não só `NotFound`) ao redor do read/write do cache, caindo pro scan ao vivo | confirmada em produção — causou um "Failed to fetch" novo (mais rápido, HTTP 500 sem CORS) na primeira consulta real pós-deploy, ver CHANGELOG |
 
 ## Perguntas em aberto
 

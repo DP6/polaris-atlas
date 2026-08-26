@@ -203,6 +203,7 @@ duplicado aqui. Diferenças específicas deste domínio:
 |---|---|---|
 | AC-001 | Cache hit não chama `client.list_entries` (Cloud Logging) | `test_get_access_events_cached_returns_cache_hit_without_calling_list_entries` |
 | AC-002 | Cache miss faz o scan ao vivo e grava o resultado no cache antes de retornar | `test_get_access_events_cached_falls_back_and_writes_cache_on_miss` |
+| AC-003 | Falha ao ler/gravar o cache (qualquer exceção, não só cache miss) nunca impede a resposta de conter o resultado do scan ao vivo | `test_get_access_events_cached_falls_back_to_live_scan_when_cache_read_fails`, `test_get_access_events_cached_returns_live_data_when_cache_write_fails` |
 
 ## Suposições
 

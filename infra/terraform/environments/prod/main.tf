@@ -125,6 +125,18 @@ resource "google_storage_bucket" "event_cache" {
   }
 }
 
+# Bucket não concede acesso a nenhuma SA por padrão — a SA de runtime do
+# backend (mesma usada pelo Service e pelo Job, ver módulo cloud-run-job)
+# precisa desse binding explícito pra ler/escrever o cache
+# (core/event_cache.py). Faltou na v2.3 original: causou 403 Forbidden
+# não tratado (só NotFound era capturado) em toda leitura/escrita de
+# cache, um "Failed to fetch" novo e mais rápido que o original.
+resource "google_storage_bucket_iam_member" "event_cache_runtime_access" {
+  bucket = google_storage_bucket.event_cache.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${module.backend_cloud_run.runtime_service_account_email}"
+}
+
 # Job periódico (1x/dia, D-1) que popula o cache acima — ver
 # infra/terraform/modules/cloud-run-job e
 # apps/backend/src/observability_hub/jobs/refresh_event_cache.py.

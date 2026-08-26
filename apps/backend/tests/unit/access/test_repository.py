@@ -313,3 +313,58 @@ def test_get_access_events_cached_falls_back_and_writes_cache_on_miss(monkeypatc
     client.list_entries.assert_called_once()
     assert len(write_calls) == 1
     assert len(seen_calls) == 1
+
+
+def test_get_access_events_cached_falls_back_to_live_scan_when_cache_read_fails(monkeypatch):
+    """Regressão real: bucket sem IAM pra SA de runtime levantava
+    Forbidden (não capturado por read_cache_bytes, que só trata
+    NotFound) — propagava até o endpoint como 500 (\"Failed to fetch\"
+    no browser). Falha ao LER o cache nunca deve impedir o scan ao vivo."""
+    client = MagicMock()
+    client.list_entries.return_value = []
+    storage_client = MagicMock()
+    firestore_client = MagicMock()
+    monkeypatch.setattr(
+        repository,
+        "read_access_events_cache",
+        lambda *a, **kw: (_ for _ in ()).throw(Forbidden("no access to bucket")),
+    )
+    monkeypatch.setattr(repository, "write_access_events_cache", lambda *a, **kw: None)
+
+    events, cached_at = repository.get_access_events_cached(
+        client, storage_client, firestore_client, "proj"
+    )
+
+    assert events == []
+    assert cached_at is None
+    client.list_entries.assert_called_once()
+
+
+def test_get_access_events_cached_returns_live_data_when_cache_write_fails(monkeypatch):
+    """Falha ao GRAVAR o cache (mesmo bucket sem IAM) não pode impedir a
+    resposta de conter o resultado do scan ao vivo que já foi feito."""
+    client = MagicMock()
+    live_event = repository.AccessEvent(
+        job_id="job1",
+        principal_email="a@dp6.com.br",
+        timestamp=None,
+        referenced_tables=[],
+        destination_table=None,
+    )
+    client.list_entries.return_value = []
+    storage_client = MagicMock()
+    firestore_client = MagicMock()
+    monkeypatch.setattr(repository, "read_access_events_cache", lambda *a, **kw: None)
+    monkeypatch.setattr(repository, "list_access_events", lambda *a, **kw: [live_event])
+
+    def _raise_write(*a, **kw):
+        raise Forbidden("no access to bucket")
+
+    monkeypatch.setattr(repository, "write_access_events_cache", _raise_write)
+
+    events, cached_at = repository.get_access_events_cached(
+        client, storage_client, firestore_client, "proj"
+    )
+
+    assert events == [live_event]
+    assert cached_at is None

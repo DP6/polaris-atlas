@@ -88,6 +88,36 @@ timeout maior, mais memória) num plano único.
   projetos. Adicionado teste de regressão rodando `main()` de ponta a
   ponta com um projeto inexistente no meio da lista
   (`test_main_processes_all_projects_even_when_one_does_not_exist`).
+- Segundo bug real, mais sério: usuário testou Lineage logo depois do
+  deploy e levou o **mesmo "Failed to fetch"** que esta mudança inteira
+  existe pra resolver — dessa vez em segundos, não minutos, e pra
+  qualquer projeto (inclusive `observability-hub-dev`, já consultado
+  com sucesso antes). Causa: `google_storage_bucket.event_cache` foi
+  criado, mas **nenhum IAM binding concedeu acesso a ele pra SA de
+  runtime do backend** — toda leitura/escrita do cache batia
+  `403 Forbidden`, e `event_cache.read_cache_bytes` só tratava
+  `NotFound` (cache miss legítimo), não `Forbidden`. A exceção não
+  tratada virava 500 sem headers de CORS (por isso `net::ERR_FAILED`
+  no browser, não um 500 "normal"). Pior: o Job de refresh **mascarou
+  esse mesmo bug** — a rede de segurança genérica adicionada no bug
+  anterior (`except GoogleAPICallError`/`except Exception`) capturou o
+  `Forbidden` de cada escrita e logou como aviso, então a execução do
+  Job aparecia como "Succeeded" no Console mesmo sem gravar nada de
+  verdade no cache. Corrigido em duas frentes: (1)
+  `google_storage_bucket_iam_member` concedendo `roles/storage.objectAdmin`
+  pra SA de runtime, nos dois ambientes (infra, causa raiz); (2)
+  `get_job_events_cached`/`get_access_events_cached` passaram a
+  capturar **qualquer** exceção ao ler/gravar o cache (não só
+  `NotFound`) e cair pro scan ao vivo — o cache nunca mais pode
+  transformar uma resposta que funcionaria em uma que quebra.
+  Aprendizado: ao adicionar um recurso de storage novo num
+  Terraform module, sempre conferir explicitamente se a SA que vai
+  *usá-lo em runtime* tem IAM sobre ele — criar o bucket não concede
+  acesso a ninguém por padrão, e um `except` genérico numa rede de
+  segurança de nível superior (o Job) pode esconder um bug de nível
+  inferior (a causa raiz) em vez de só conter danos, então esse tipo de
+  cobertura ampla não substitui monitorar o *conteúdo* dos logs, só a
+  ausência de crash.
 
 ---
 

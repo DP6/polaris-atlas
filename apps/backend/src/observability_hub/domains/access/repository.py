@@ -15,6 +15,7 @@ jobChange).
 """
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -29,6 +30,8 @@ from observability_hub.core.exceptions import LoggingAccessDeniedError
 LOOKBACK_DAYS = 30
 _PAGE_SIZE = 1000
 _CACHE_KIND = "access"
+
+logger = logging.getLogger(__name__)
 
 TableRefTuple = tuple[str, str, str]  # (project_id, dataset_id, table_id)
 
@@ -200,12 +203,27 @@ def get_access_events_cached(
 ) -> tuple[list[AccessEvent], datetime | None]:
     """Endpoint de access não tem lookback_days variável (sempre
     LOOKBACK_DAYS) — cache sempre elegível, diferente de lineage/orphans.
-    cached_at None significa que o dado veio ao vivo nesta chamada."""
-    cached = read_access_events_cache(storage_client, firestore_client, project_id)
-    if cached is not None:
-        return cached
+    cached_at None significa que o dado veio ao vivo nesta chamada.
+    Qualquer falha ao ler/gravar o cache é logada e ignorada — o cache é
+    uma otimização, uma falha nele nunca deve derrubar a resposta pro
+    usuário (ver domains/lineage/repository.py::get_job_events_cached,
+    mesmo racional)."""
+    try:
+        cached = read_access_events_cache(storage_client, firestore_client, project_id)
+    except Exception:
+        logger.exception(
+            "Falha ao ler cache de access para %s — caindo pro scan ao vivo", project_id
+        )
+    else:
+        if cached is not None:
+            return cached
 
     events = list_access_events(client, project_id)
-    write_access_events_cache(storage_client, firestore_client, project_id, events)
-    event_cache.record_project_seen(firestore_client, project_id)
+
+    try:
+        write_access_events_cache(storage_client, firestore_client, project_id, events)
+        event_cache.record_project_seen(firestore_client, project_id)
+    except Exception:
+        logger.exception("Falha ao gravar cache de access para %s", project_id)
+
     return events, None

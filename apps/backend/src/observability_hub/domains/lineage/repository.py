@@ -24,6 +24,7 @@ objeto).
 """
 
 import json
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -42,6 +43,8 @@ _PAGE_SIZE = 1000
 # e "kind" do metadado no Firestore — domains/access usa "access" no
 # mesmo bucket, prefixos diferentes.
 _CACHE_KIND = "lineage"
+
+logger = logging.getLogger(__name__)
 
 TableRefTuple = tuple[str, str, str]  # (project_id, dataset_id, table_id)
 
@@ -289,16 +292,29 @@ def get_job_events_cached(
     desse caso, ou em cache miss, escaneia ao vivo (list_job_events) e
     grava o resultado pra próxima chamada (auto-cura). Retorna
     (eventos, cached_at) — cached_at None significa que o dado veio ao
-    vivo nesta própria chamada."""
+    vivo nesta própria chamada. Qualquer falha ao ler/gravar o cache
+    (ex: bucket sem permissão, GCS fora do ar) é logada e ignorada — o
+    cache é uma otimização, uma falha nele nunca deve derrubar a
+    resposta pro usuário (causa raiz de uma regressão real: 403 Forbidden
+    não tratado virou "Failed to fetch" de novo, ver CHANGELOG)."""
     if lookback_days == LOOKBACK_DAYS:
-        cached = read_job_events_cache(storage_client, firestore_client, project_id)
-        if cached is not None:
-            return cached
+        try:
+            cached = read_job_events_cache(storage_client, firestore_client, project_id)
+        except Exception:
+            logger.exception(
+                "Falha ao ler cache de lineage para %s — caindo pro scan ao vivo", project_id
+            )
+        else:
+            if cached is not None:
+                return cached
 
     events = list_job_events(client, project_id, lookback_days=lookback_days)
 
     if lookback_days == LOOKBACK_DAYS:
-        write_job_events_cache(storage_client, firestore_client, project_id, events)
-        event_cache.record_project_seen(firestore_client, project_id)
+        try:
+            write_job_events_cache(storage_client, firestore_client, project_id, events)
+            event_cache.record_project_seen(firestore_client, project_id)
+        except Exception:
+            logger.exception("Falha ao gravar cache de lineage para %s", project_id)
 
     return events, None
