@@ -27,9 +27,24 @@ terraform {
 provider "google" {
   project = var.project_id
   region  = var.region
+
+  # Taxonomia de labels FinOps — ver docs/finops-labels.md. Precisa estar
+  # nos dois providers (google e google-beta): o Cloud Run service roda
+  # em google-beta por causa de iap_enabled (ver modules/cloud-run/main.tf).
+  default_labels = {
+    environment = "dev"
+    app         = "observability-hub"
+    managed-by  = "terraform"
+  }
 }
 
 provider "google-beta" {
   project = var.project_id
   region  = var.region
+
+  default_labels = {
+    environment = "dev"
+    app         = "observability-hub"
+    managed-by  = "terraform"
+  }
 }
