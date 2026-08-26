@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Observability Hub — desenvolvimento com IA</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Ubuntu:wght@300;400;700&display=swap');
+
+  :root {
+    --color-primary: #FFB302;
+    --color-bg-page: #FFFFFF;
+    --color-bg-surface: #F7F7F5;
+    --color-bg-muted: #ECECE9;
+    --color-border: #E2E2DE;
+    --color-text-primary: #1D1D1B;
+    --color-text-muted: #5B626C;
+    --color-text-inverse: #1D1D1B;
+    --color-ok: #1E7A3D;
+    --color-warn: #B5480A;
+    --font-sans: 'Ubuntu', 'Verdana', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    padding: 0;
+    background: var(--color-bg-page);
+    color: var(--color-text-primary);
+    font-family: var(--font-sans);
+  }
+
+  .page { display: flex; flex-direction: column; min-height: 100vh; }
+
+  .site-tabs {
+    flex: 0 0 auto;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 44px;
+    padding: 0 16px;
+    background: var(--color-text-primary);
+    border-bottom: 2px solid var(--color-primary);
+  }
+
+  .site-tabs-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.8125rem;
+    margin-right: 12px;
+    white-space: nowrap;
+  }
+
+  .site-tabs-brand .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    flex: 0 0 auto;
+  }
+
+  .site-tabs a {
+    color: rgba(255, 255, 255, 0.72);
+    text-decoration: none;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    padding: 6px 14px;
+    border-radius: 999px;
+    transition: background 0.15s ease, color 0.15s ease;
+    white-space: nowrap;
+  }
+
+  .site-tabs a:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+  .site-tabs a.active { background: var(--color-primary); color: var(--color-text-inverse); }
+
+  .layout { display: flex; align-items: flex-start; flex: 1 1 auto; }
+
+  .toc {
+    width: 260px;
+    flex: 0 0 auto;
+    position: sticky;
+    top: 44px;
+    height: calc(100vh - 44px);
+    overflow-y: auto;
+    background: var(--color-bg-surface);
+    border-right: 1px solid var(--color-border);
+    padding-bottom: 32px;
+  }
+
+  .toc-group-label {
+    padding: 16px 16px 4px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-text-muted);
+  }
+
+  .toc a {
+    display: block;
+    padding: 7px 16px 7px 18px;
+    font-size: 0.8125rem;
+    line-height: 1.3;
+    color: var(--color-text-muted);
+    text-decoration: none;
+    border-left: 3px solid transparent;
+  }
+
+  .toc a:hover { background: var(--color-bg-muted); color: var(--color-text-primary); }
+
+  .toc a.active {
+    background: var(--color-bg-muted);
+    border-left-color: var(--color-primary);
+    color: var(--color-text-primary);
+    font-weight: 700;
+  }
+
+  .content {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 40px 56px 120px;
+    max-width: 840px;
+  }
+
+  .content h1 { font-size: 2rem; margin: 0 0 8px; }
+
+  .lede {
+    font-size: 1.0625rem;
+    color: var(--color-text-muted);
+    line-height: 1.55;
+    max-width: 700px;
+    margin: 0 0 40px;
+  }
+
+  section.doc-section { margin-bottom: 60px; scroll-margin-top: 60px; }
+
+  section.doc-section h2 {
+    font-size: 1.5rem;
+    margin: 0 0 4px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--color-border);
+  }
+
+  .exec-summary {
+    background: var(--color-bg-surface);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 20px 0 24px;
+    font-size: 1rem;
+    line-height: 1.55;
+  }
+
+  .exec-summary strong.label {
+    display: block;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-text-muted);
+    margin-bottom: 6px;
+  }
+
+  h3.sub-title { font-size: 1.0625rem; margin: 28px 0 6px; }
+
+  .content p { line-height: 1.6; margin: 0 0 12px; }
+  .content ul, .content ol { line-height: 1.6; margin: 0 0 12px; padding-left: 20px; }
+  .content li { margin-bottom: 4px; }
+  .content code {
+    background: var(--color-bg-muted);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 0.875em;
+  }
+
+  .example {
+    border: 1px solid var(--color-border);
+    border-left: 3px solid var(--color-primary);
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin: 14px 0 18px;
+    background: #FFFDF7;
+  }
+
+  .example strong.tag {
+    display: block;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-warn);
+    margin-bottom: 6px;
+  }
+
+  .example p:last-child { margin-bottom: 0; }
+
+  table.gate-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0 24px;
+    font-size: 0.875rem;
+  }
+
+  table.gate-table th, table.gate-table td {
+    border: 1px solid var(--color-border);
+    padding: 8px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  table.gate-table th {
+    background: var(--color-bg-surface);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-muted);
+  }
+
+  @media (max-width: 900px) {
+    .toc { display: none; }
+    .content { padding: 24px 20px 80px; }
+    .site-tabs { overflow-x: auto; }
+    .site-tabs-brand { display: none; }
+    table.gate-table { display: block; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+  <div class="page">
+    <header class="site-tabs">
+      <span class="site-tabs-brand"><span class="dot"></span> Observability Hub</span>
+      <a href="../produto/">Demonstrativo do produto</a>
+      <a href="../tecnico/">Guia técnico</a>
+      <a href="../desenvolvimento-ia/" class="active">Desenvolvimento com IA</a>
+    </header>
+
+    <div class="layout">
+      <nav class="toc" id="toc">
+        <div class="toc-group-label">Neste documento</div>
+        <a href="#introducao">Introdução</a>
+        <a href="#diferenca">Claude Code vs. IA conversacional</a>
+        <a href="#riscos">Riscos de IA agêntica</a>
+        <a href="#spec-driven">Spec-driven development</a>
+        <a href="#gates">Exemplos de gates</a>
+        <a href="#licoes">Lições e próximos passos</a>
+      </nav>
+
+      <main class="content">
+        <h1>Desenvolvimento com IA neste projeto</h1>
+        <p class="lede">
+          Como o Observability Hub foi construído com um agente de IA no
+          driver seat do código, e que controles de processo mantiveram isso
+          seguro — documento de processo interno da equipe, não material de
+          marketing do produto.
+        </p>
+
+        <section class="doc-section" id="introducao">
+          <h2>Introdução</h2>
+          <div class="exec-summary">
+            <strong class="label">Resumo executivo</strong>
+            Todo o código deste repositório — backend, frontend e infraestrutura —
+            foi escrito por um agente de IA (Claude Code), sob supervisão humana
+            constante. Isso só é seguro porque o processo de trabalho impõe
+            três coisas: (1) toda mudança de comportamento parte de uma
+            especificação escrita e revisada antes do código, nunca do código
+            direto; (2) ações irreversíveis ou de alto impacto (push, merge em
+            produção, mudança de infraestrutura, aplicação de IAM) exigem
+            confirmação humana explícita a cada vez, nunca uma aprovação
+            genérica de "pode fazer sempre"; (3) toda decisão de produto
+            ambígua é perguntada antes de ser assumida.
+          </div>
+          <p>
+            Este documento explica como isso funciona na prática, com exemplos
+            reais tirados do desenvolvimento deste projeto — não hipotéticos.
+          </p>
+        </section>
+
+        <section class="doc-section" id="diferenca">
+          <h2>Diferença entre Claude Code e uma IA conversacional</h2>
+          <div class="exec-summary">
+            <strong class="label">Resumo executivo</strong>
+            Uma IA conversacional (ex: ChatGPT numa aba do navegador) responde
+            perguntas e sugere trechos de código, mas não toca o repositório —
+            uma pessoa lê a resposta, decide o que aproveitar e cola manualmente.
+            Claude Code é um <strong>agente</strong>: ele lê o repositório
+            inteiro, edita arquivos de verdade, roda comandos no terminal
+            (testes, lint, <code>git</code>, <code>gcloud</code>,
+            <code>terraform</code>) e itera sozinho até o resultado passar nos
+            próprios critérios que ele mesmo verifica. A vantagem é velocidade e
+            profundidade de contexto; o custo é que erros também viram ação de
+            verdade, não só texto errado numa tela — daí todo o resto deste
+            documento.
+          </div>
+          <h3 class="sub-title">Na prática, neste projeto</h3>
+          <p>
+            Claude Code leu specs inteiras em <code>docs/specs/</code>, editou
+            simultaneamente arquivos de backend (Python/FastAPI), frontend
+            (React/TypeScript) e infraestrutura (Terraform) para uma mesma
+            funcionalidade, rodou a suíte de testes (<code>pytest</code>),
+            lint (<code>ruff</code>, <code>biome</code>) e
+            <code>terraform plan</code> reais antes de considerar qualquer
+            tarefa concluída — e corrigiu o próprio código quando algum desses
+            comandos falhava, sem esperar uma pessoa apontar o erro.
+          </p>
+          <p>
+            Isso também significa que o agente pode executar um comando
+            destrutivo se não for contido por processo — não porque "queira",
+            mas porque, tecnicamente, nada o impede de rodar <code>git push
+            --force</code> ou <code>terraform apply</code> em produção do
+            mesmo jeito que roda <code>pytest</code>. É exatamente esse ponto
+            que os gates da seção <a href="#gates">Exemplos de gates</a> abaixo
+            existem para cobrir.
+          </p>
+        </section>
+
+        <section class="doc-section" id="riscos">
+          <h2>Riscos de trabalhar com IA agêntica</h2>
+          <div class="exec-summary">
+            <strong class="label">Resumo executivo</strong>
+            Os riscos reais não são "a IA ter má intenção" — são erros de
+            julgamento amplificados por velocidade e por acesso direto a
+            sistemas de produção: uma ação irreversível tomada cedo demais, uma
+            suposição de produto não confirmada que vira funcionalidade errada,
+            ou uma "correção" de obstáculo que contorna uma proteção em vez de
+            resolver a causa raiz.
+          </div>
+          <h3 class="sub-title">Ações irreversíveis ou de amplo impacto</h3>
+          <p>
+            Force-push, <code>git reset --hard</code>, deletar recursos de
+            infraestrutura, aprovar o gate de deploy em produção — qualquer uma
+            dessas ações, tomada sem revisão humana, pode destruir trabalho ou
+            afetar usuários reais antes de alguém perceber. A mitigação não é
+            "confiar que a IA não vai fazer isso" — é <strong>nunca permitir
+            que ela decida sozinha</strong> quando o custo de errar é alto (ver
+            <a href="#gates">gates</a> abaixo).
+          </p>
+          <h3 class="sub-title">Suposição de produto não verificada</h3>
+          <p>
+            Um agente de IA consegue preencher uma lacuna de especificação com
+            uma suposição plausível — e seguir em frente. Se essa suposição
+            estiver errada, o resultado é uma funcionalidade tecnicamente
+            correta, mas que resolve o problema errado, só descoberta tarde.
+          </p>
+          <div class="example">
+            <strong class="tag">Exemplo real deste projeto</strong>
+            <p>
+              Ao implementar a opção de solicitar acesso a um projeto não
+              onboardado no Hub, em vez de assumir que os dois casos de erro
+              (projeto sem IAM concedido vs. projeto inexistente) deveriam ter
+              tratamentos diferentes na interface, o agente perguntou
+              explicitamente ao usuário como tratar cada caso antes de
+              implementar — e a resposta ("o usuário não consegue diferenciar
+              os dois, deixa o admin investigar depois") mudou o desenho da
+              solução.
+            </p>
+          </div>
+          <h3 class="sub-title">Contornar um obstáculo em vez de resolver a causa</h3>
+          <p>
+            Sob pressão pra "fazer o teste passar" ou "fazer o comando
+            funcionar", um agente pode pular uma verificação (<code>--no-verify</code>),
+            desabilitar um teste, ou usar credenciais/flags que baixam uma
+            proteção — resolvendo o sintoma, não a causa, e escondendo um
+            problema real.
+          </p>
+          <div class="example">
+            <strong class="tag">Exemplo real deste projeto</strong>
+            <p>
+              Durante a investigação da falha "Failed to fetch" em lineage/
+              mapa de acesso, o job de atualização de cache quebrava ao
+              encontrar um projeto inexistente na lista de projetos conhecidos.
+              A correção não foi "ignorar projetos com erro" de forma genérica
+              — foi identificar exatamente qual exceção não estava sendo
+              tratada (<code>NotFound</code>, da lib do GCP) e tratá-la
+              explicitamente, com um teste de regressão cobrindo o caso
+              (<code>test_main_processes_all_projects_even_when_one_does_not_exist</code>).
+            </p>
+          </div>
+          <h3 class="sub-title">Credenciais e autenticação</h3>
+          <p>
+            Um agente com sessão de terminal própria poderia, em tese, tentar
+            se autenticar com credenciais de infraestrutura sensíveis. Neste
+            projeto, a política adotada foi o oposto: nenhuma autenticação
+            <code>gcloud</code> interativa é feita pelo agente — comandos que
+            exigem uma sessão autenticada de verdade (aplicar Terraform do
+            bootstrap, rodar um job manualmente) são executados pelo próprio
+            usuário, via terminal, quando necessário.
+          </p>
+        </section>
+
+        <section class="doc-section" id="spec-driven">
+          <h2>O que é spec-driven, como trabalhar com ela e como ela garante segurança</h2>
+          <div class="exec-summary">
+            <strong class="label">Resumo executivo</strong>
+            Spec-driven development significa que nenhuma mudança de
+            comportamento de um domínio entra no código sem antes existir,
+            revisada, uma especificação escrita descrevendo objetivo, fonte de
+            dado, endpoints, custo de query e critérios de aceite numerados. A
+            especificação vira o contrato contra o qual o próprio código e os
+            testes são cobrados — inclusive pela IA que escreveu o código.
+          </div>
+          <h3 class="sub-title">Estrutura de uma spec (<code>docs/specs/&lt;domínio&gt;.md</code>)</h3>
+          <ul>
+            <li><strong>Objetivo e fonte de dados</strong> — qual API/tabela/log
+              alimenta a funcionalidade.</li>
+            <li><strong>Endpoints da API</strong> — método, path, parâmetros,
+              schema de resposta.</li>
+            <li><strong>Critérios de aceite numerados</strong> (<code>AC-xxx</code>)
+              — uma frase clara de comportamento esperado, cada um apontando
+              pro teste que o comprova.</li>
+            <li><strong>Suposições</strong> (<code>ASM-xxx</code>) e
+              <strong>perguntas em aberto</strong> (<code>Q-xxx</code>) — cada
+              decisão de produto esclarecida com o usuário durante a
+              implementação fica registrada aqui, com status
+              (aberta/confirmada/invalidada; aberta/respondida) — não só na
+              conversa, que não sobrevive a uma sessão nova.</li>
+            <li><strong>Casos de borda</strong> e <strong>o que fica fora do
+              escopo</strong> — delimita o que a spec propositalmente não
+              resolve.</li>
+          </ul>
+          <h3 class="sub-title">Por que isso garante segurança</h3>
+          <p>
+            Três propriedades, todas verificáveis por fora, sem precisar
+            confiar na "boa vontade" do agente:
+          </p>
+          <ol>
+            <li><strong>Rastreabilidade</strong> — toda funcionalidade tem um
+              documento anterior ao código que explica por que ela existe e o
+              que ela deveria fazer; qualquer divergência entre spec e código é
+              detectável por qualquer pessoa lendo os dois, sem precisar
+              reconstituir a conversa que gerou o código.</li>
+            <li><strong>Verificação objetiva</strong> — critério de aceite
+              numerado + teste referenciando o número transforma "a IA disse
+              que funciona" em "existe um teste automatizado passando que prova
+              isso", rodado a cada mudança futura (inclusive por outra sessão de
+              IA, meses depois).</li>
+            <li><strong>Decisão de produto nunca fica implícita</strong> — a
+              convenção deste projeto (ver <code>CLAUDE.md</code>, seção
+              "Colaboração": <em>"perguntar mais, presumir menos"</em>) exige
+              que qualquer ambiguidade de nome, escopo, comportamento ou
+              formato de dado seja perguntada ao usuário antes de implementar,
+              e a resposta entra na spec como <code>ASM</code>/<code>Q</code>
+              respondida — não fica só na cabeça de quem perguntou.</li>
+          </ol>
+          <div class="example">
+            <strong class="tag">Exemplo real deste projeto</strong>
+            <p>
+              As specs de <code>lineage</code>, <code>access</code> e
+              <code>admin</code> ganharam suas primeiras seções de AC/ASM/Q
+              formal justamente durante mudanças recentes de comportamento
+              (cache de lineage/acesso; apagar projeto, checklist de
+              onboarding, solicitação de inclusão) — a própria estrutura da
+              spec evoluiu junto com a regra do <code>CLAUDE.md</code> que a
+              exige, em vez de ser escrita solta e esquecida.
+            </p>
+          </div>
+        </section>
+
+        <section class="doc-section" id="gates">
+          <h2>Exemplos de gates</h2>
+          <div class="exec-summary">
+            <strong class="label">Resumo executivo</strong>
+            "Gate" aqui significa qualquer ponto do processo em que uma ação só
+            avança com confirmação humana explícita — não uma aprovação geral
+            dada uma vez, mas uma checagem repetida a cada ocorrência. A tabela
+            abaixo lista os gates realmente em vigor neste projeto, com um
+            exemplo concreto de cada um.
+          </div>
+          <table class="gate-table">
+            <thead>
+              <tr><th>Gate</th><th>Onde vive</th><th>Exemplo real</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>git push</code> exige confirmação a cada vez</td>
+                <td><code>CLAUDE.md</code> — "Git e Claude Code"</td>
+                <td>Uma aprovação de push numa sessão não vale como aprovação
+                  permanente pras próximas, mesmo dentro da mesma conversa —
+                  perguntado de novo a cada push feito nesta sessão.</td>
+              </tr>
+              <tr>
+                <td>Merge/aprovação de deploy em produção</td>
+                <td>GitHub Environment "production" com required reviewers</td>
+                <td>PRs #37 e #38 (correção de lineage/acesso; recursos de
+                  admin) só chegaram a produção depois de aprovação manual do
+                  usuário no gate de deploy de app — o merge em <code>main</code>
+                  sozinho não libera.</td>
+              </tr>
+              <tr>
+                <td><code>terraform plan</code> revisado antes de qualquer
+                  <code>apply</code></td>
+                <td><code>CLAUDE.md</code> — Contexto IaC</td>
+                <td>A correção de custo do Cloud Run (<code>cpu_idle = true</code>)
+                  só foi implementada depois de rodar <code>terraform plan</code>
+                  real contra dev e prod, confirmando a mudança esperada (0
+                  add / 3 change / 0 destroy) antes de qualquer código ser
+                  alterado — o plano provou a causa raiz, não uma suposição.</td>
+              </tr>
+              <tr>
+                <td>Avaliação de risco antes de mudança sensível</td>
+                <td>Pedido explícito do usuário, não automatizado</td>
+                <td>Antes de aplicar a correção de <code>cpu_idle</code>, o
+                  usuário pediu explicitamente "avalie os riscos e pontos
+                  negativos primeiro, liste-os" — a lista de riscos foi
+                  apresentada e só depois veio o "pode ir em frente".</td>
+              </tr>
+              <tr>
+                <td>Nenhuma credencial estática / autenticação manual pelo
+                  agente</td>
+                <td><code>CLAUDE.md</code> — CI/CD; prática desta sessão</td>
+                <td>Autenticação no GCP via Workload Identity Federation, sem
+                  chaves de service account em segredo algum; comandos que
+                  exigiam sessão <code>gcloud</code> autenticada de verdade
+                  (aplicar o bootstrap do WIF) foram executados pelo próprio
+                  usuário no terminal, nunca pelo agente.</td>
+              </tr>
+              <tr>
+                <td>Git safety protocol (sem <code>--force</code>, sem
+                  <code>--no-verify</code>, sem amend em commit publicado)</td>
+                <td><code>CLAUDE.md</code> — instruções de sistema</td>
+                <td>Falha de hook de pre-commit é resolvida corrigindo a causa
+                  e criando um commit novo — nunca pulando o hook pra "destravar"
+                  o commit.</td>
+              </tr>
+              <tr>
+                <td>Correção de bug provada por teste de regressão, não só
+                  por "parece que funciona agora"</td>
+                <td>Checklist de entrega — Contexto Backend</td>
+                <td>Os dois bugs encontrados durante a correção de lineage/
+                  acesso (job quebrando em projeto inexistente; falta de IAM
+                  no bucket de cache) ganharam teste de regressão cada um,
+                  antes de considerar a correção concluída.</td>
+              </tr>
+              <tr>
+                <td>Decisão de produto ambígua sempre vira pergunta, nunca
+                  suposição</td>
+                <td><code>CLAUDE.md</code> — "Colaboração"</td>
+                <td>Este próprio par de documentos: antes de escrever qualquer
+                  linha, o agente perguntou audiência, tom, exemplos e formato
+                  de publicação de cada um, em várias rodadas, em vez de
+                  assumir.</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="doc-section" id="licoes">
+          <h2>Lições e próximos passos</h2>
+          <p>
+            O padrão que se repete nos exemplos acima não é "a IA erra menos" —
+            é que <strong>nenhum gate depende de a IA se lembrar de aplicá-lo
+            sozinha</strong>. Cada um vive em processo (CLAUDE.md, GitHub
+            Environment, revisão de plano) ou em confirmação humana pontual, e
+            nenhum é opcional por "já ter sido aprovado antes". É esse desenho
+            — não a capacidade do modelo — que faz o agente ser seguro o
+            suficiente pra ter acesso de escrita a produção.
+          </p>
+          <p>
+            Pontos ainda abertos, deliberadamente fora do escopo deste
+            documento: automatizar a checagem desses gates (hoje a maioria é
+            processual, não tecnicamente bloqueada), e formalizar um processo
+            de revisão periódica do próprio <code>CLAUDE.md</code> conforme o
+            projeto cresce.
+          </p>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    const sections = document.querySelectorAll('section.doc-section[id]');
+    const tocLinks = document.querySelectorAll('.toc a');
+    const linkById = {};
+    tocLinks.forEach((a) => { linkById[a.getAttribute('href').slice(1)] = a; });
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          const link = linkById[entry.target.id];
+          if (!link) return;
+          if (entry.isIntersecting) {
+            tocLinks.forEach((a) => a.classList.remove('active'));
+            link.classList.add('active');
+          }
+        });
+      },
+      { rootMargin: '-20% 0px -70% 0px' },
+    );
+    sections.forEach((s) => observer.observe(s));
+  </script>
+</body>
+</html>
