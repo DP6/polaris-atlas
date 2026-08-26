@@ -36,13 +36,15 @@
      nos comentários de cada index.html. */
   .page { display: flex; flex-direction: column; height: 100vh; }
 
+  /* Compacta só nesta página (produto) — libera mais altura pro conteúdo
+     principal, que é o foco aqui; as outras 3 páginas mantêm 44px. */
   .site-tabs {
     flex: 0 0 auto;
     display: flex;
     align-items: center;
-    gap: 4px;
-    height: 44px;
-    padding: 0 16px;
+    gap: 2px;
+    height: 32px;
+    padding: 0 12px;
     background: var(--color-text-primary);
     border-bottom: 2px solid var(--color-primary);
   }
@@ -50,17 +52,17 @@
   .site-tabs-brand {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     color: #fff;
     font-weight: 700;
-    font-size: 0.8125rem;
-    margin-right: 12px;
+    font-size: 0.75rem;
+    margin-right: 10px;
     white-space: nowrap;
   }
 
   .site-tabs-brand .dot {
-    width: 8px;
-    height: 8px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
     background: var(--color-primary);
     flex: 0 0 auto;
@@ -69,9 +71,9 @@
   .site-tabs a {
     color: rgba(255, 255, 255, 0.72);
     text-decoration: none;
-    font-size: 0.8125rem;
+    font-size: 0.75rem;
     font-weight: 700;
-    padding: 6px 14px;
+    padding: 3px 10px;
     border-radius: 999px;
     transition: background 0.15s ease, color 0.15s ease;
     white-space: nowrap;
@@ -88,21 +90,60 @@
   }
 
   .app {
+    position: relative;
     display: flex;
     flex: 1 1 auto;
     min-height: 0;
   }
 
-  /* --- Sidebar de navegação (scroll vertical) --------------------------- */
+  /* --- Sidebar de navegação (scroll vertical), recolhível --------------- */
 
   .sidebar {
     width: 280px;
     flex: 0 0 auto;
     height: 100%;
     overflow-y: auto;
+    overflow-x: hidden;
     background: var(--color-bg-surface);
     border-right: 1px solid var(--color-border);
     padding-bottom: 24px;
+    transition: width 0.18s ease;
+  }
+
+  .app.sidebar-collapsed .sidebar {
+    width: 0;
+    border-right: none;
+  }
+
+  .sidebar-toggle {
+    position: absolute;
+    top: 10px;
+    left: 280px;
+    transform: translateX(-50%);
+    z-index: 5;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 1px solid var(--color-border);
+    background: #fff;
+    box-shadow: 0 2px 6px rgba(29, 29, 27, 0.14);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    color: var(--color-text-primary);
+    transition: left 0.18s ease;
+    padding: 0;
+  }
+
+  .sidebar-toggle:hover {
+    background: var(--color-bg-muted);
+  }
+
+  .app.sidebar-collapsed .sidebar-toggle {
+    left: 8px;
+    transform: none;
   }
 
   .sidebar-brand {
@@ -140,6 +181,7 @@
     display: block;
     width: 100%;
     text-align: left;
+    text-decoration: none;
     appearance: none;
     border: none;
     background: none;
@@ -150,6 +192,7 @@
     color: var(--color-text-muted);
     border-left: 3px solid transparent;
     font-family: inherit;
+    box-sizing: border-box;
   }
 
   .sidebar-item:hover {
@@ -186,49 +229,23 @@
     min-width: 0;
   }
 
-  header.deck-header {
-    height: 56px;
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    padding: 0 24px;
-    border-bottom: 1px solid var(--color-border);
-  }
-
-  .deck-counter {
-    font-size: 0.875rem;
-    color: var(--color-text-muted);
-    font-variant-numeric: tabular-nums;
-  }
+  /* --- Slides em fluxo contínuo (scroll), não mais um-por-vez ------------ */
 
   main.slides {
-    position: relative;
     flex: 1 1 auto;
-    overflow: hidden;
+    overflow-y: auto;
+    scroll-behavior: smooth;
   }
 
   .slide {
-    position: absolute;
-    inset: 0;
+    min-height: 100%;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     gap: 12px;
     padding: 28px 40px 24px;
-    opacity: 0;
-    transform: translateX(24px);
-    transition: opacity 0.25s ease, transform 0.25s ease;
-    pointer-events: none;
-  }
-
-  .slide.active {
-    opacity: 1;
-    transform: translateX(0);
-    pointer-events: auto;
-  }
-
-  .slide.leaving {
-    transform: translateX(-24px);
+    border-bottom: 1px solid var(--color-border);
+    scroll-margin-top: 12px;
   }
 
   .slide-caption {
@@ -329,45 +346,6 @@
     opacity: 0.85;
   }
 
-  nav.deck-nav {
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 16px;
-    padding: 12px 24px 20px;
-    border-top: 1px solid var(--color-border);
-  }
-
-  .nav-btn {
-    appearance: none;
-    border: none;
-    background: var(--color-bg-surface);
-    color: var(--color-text-primary);
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    font-size: 1.125rem;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.15s ease;
-  }
-
-  .nav-btn:hover:not(:disabled) {
-    background: var(--color-bg-muted);
-  }
-
-  .nav-btn:disabled {
-    opacity: 0.3;
-    cursor: default;
-  }
-
-  .nav-hint {
-    font-size: 0.8125rem;
-    color: var(--color-text-muted);
-  }
 
   /* --- Lightbox ------------------------------------------------------------ */
 
@@ -411,6 +389,7 @@
 
   @media (max-width: 900px) {
     .sidebar { display: none; }
+    .sidebar-toggle { display: none; }
     .slide { padding: 20px 20px 20px; }
     .slide-caption h2 { font-size: 1.125rem; }
     .site-tabs { overflow-x: auto; }
@@ -428,21 +407,12 @@
       <a href="../componentes/">Componentes</a>
     </header>
 
-    <div class="app">
+    <div class="app" id="app">
       <nav class="sidebar" id="sidebar"></nav>
+      <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Ocultar menu">‹</button>
 
       <div class="main">
-        <header class="deck-header">
-          <div class="deck-counter"><span id="current-index">1</span> / <span id="total-slides">1</span></div>
-        </header>
-
         <main class="slides" id="slides"></main>
-
-        <nav class="deck-nav">
-          <button class="nav-btn" id="prev-btn" aria-label="Slide anterior">‹</button>
-          <span class="nav-hint">Navegue pela lista à esquerda, pelas setas ou pelo teclado</span>
-          <button class="nav-btn" id="next-btn" aria-label="Próximo slide">›</button>
-        </nav>
       </div>
     </div>
   </div>
@@ -712,12 +682,8 @@
 
     const slidesEl = document.getElementById('slides');
     const sidebarEl = document.getElementById('sidebar');
-    const prevBtn = document.getElementById('prev-btn');
-    const nextBtn = document.getElementById('next-btn');
-    const currentIndexEl = document.getElementById('current-index');
-    const totalSlidesEl = document.getElementById('total-slides');
-
-    let current = 0;
+    const appEl = document.getElementById('app');
+    const sidebarToggle = document.getElementById('sidebar-toggle');
 
     function slideClass(slide) {
       if (slide.type === 'divider') return 'slide divider-slide';
@@ -735,7 +701,7 @@
         // --- slide em si ---
         const section = document.createElement('section');
         section.className = slideClass(slide);
-        section.dataset.index = i;
+        section.id = 'slide-' + i;
 
         const caption = document.createElement('div');
         caption.className = 'slide-caption';
@@ -757,12 +723,12 @@
 
         slidesEl.appendChild(section);
 
-        // --- item da sidebar ---
+        // --- item da sidebar (âncora, igual às outras páginas do site) ---
         if (slide.type === 'divider') {
-          const item = document.createElement('button');
+          const item = document.createElement('a');
           item.className = 'sidebar-item divider-item';
+          item.href = '#slide-' + i;
           item.textContent = slide.title;
-          item.addEventListener('click', () => goTo(i));
           sidebarEl.appendChild(item);
           lastGroupLabel = null;
         } else {
@@ -776,45 +742,49 @@
           }
           if (!groupLabel) lastGroupLabel = null;
 
-          const item = document.createElement('button');
+          const item = document.createElement('a');
           item.className = 'sidebar-item';
+          item.href = '#slide-' + i;
           item.textContent = slide.title;
-          item.dataset.index = i;
-          item.addEventListener('click', () => goTo(i));
           sidebarEl.appendChild(item);
         }
       });
 
-      totalSlidesEl.textContent = slides.length;
-      update();
+      setupScrollspy();
     }
 
-    function update() {
-      const sections = slidesEl.querySelectorAll('.slide');
-      sections.forEach((s, i) => {
-        s.classList.toggle('active', i === current);
-        s.classList.toggle('leaving', i < current);
+    // Scrollspy: destaca no sidebar a seção visível durante o scroll —
+    // root é main.slides (o próprio container com scroll), não a viewport.
+    function setupScrollspy() {
+      const sections = slidesEl.querySelectorAll('.slide[id]');
+      const sidebarItems = sidebarEl.querySelectorAll('.sidebar-item');
+      const itemById = {};
+      sidebarItems.forEach((item) => {
+        itemById[item.getAttribute('href').slice(1)] = item;
       });
 
-      const items = sidebarEl.querySelectorAll('.sidebar-item[data-index]');
-      items.forEach((item) => {
-        const isActive = Number(item.dataset.index) === current;
-        item.classList.toggle('active', isActive);
-        if (isActive) item.scrollIntoView({ block: 'nearest' });
-      });
-
-      currentIndexEl.textContent = current + 1;
-      prevBtn.disabled = current === 0;
-      nextBtn.disabled = current === slides.length - 1;
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            const item = itemById[entry.target.id];
+            if (!item) return;
+            if (entry.isIntersecting) {
+              sidebarItems.forEach((a) => a.classList.remove('active'));
+              item.classList.add('active');
+              item.scrollIntoView({ block: 'nearest' });
+            }
+          });
+        },
+        { root: slidesEl, rootMargin: '-20% 0px -70% 0px' },
+      );
+      sections.forEach((s) => observer.observe(s));
     }
 
-    function goTo(i) {
-      current = Math.max(0, Math.min(slides.length - 1, i));
-      update();
-    }
-
-    prevBtn.addEventListener('click', () => goTo(current - 1));
-    nextBtn.addEventListener('click', () => goTo(current + 1));
+    sidebarToggle.addEventListener('click', () => {
+      const collapsed = appEl.classList.toggle('sidebar-collapsed');
+      sidebarToggle.textContent = collapsed ? '›' : '‹';
+      sidebarToggle.setAttribute('aria-label', collapsed ? 'Mostrar menu' : 'Ocultar menu');
+    });
 
     const lightbox = document.getElementById('lightbox');
     const lightboxImg = document.getElementById('lightbox-img');
@@ -835,12 +805,7 @@
     lightboxClose.addEventListener('click', closeLightbox);
 
     document.addEventListener('keydown', (e) => {
-      if (lightbox.classList.contains('open')) {
-        if (e.key === 'Escape') closeLightbox();
-        return;
-      }
-      if (e.key === 'ArrowRight' || e.key === ' ') goTo(current + 1);
-      if (e.key === 'ArrowLeft') goTo(current - 1);
+      if (e.key === 'Escape') closeLightbox();
     });
 
     renderSlides();
