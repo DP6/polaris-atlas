@@ -112,6 +112,15 @@ labels junto.
 billing vinculada a `dp6-ci-polaris` — não é uma permissão que a service
 account de runtime do Hub tem ou deveria ter.
 
+**Status:** 🔴 bloqueado, aguardando TI (desde 2026-08-26). Billing
+account vinculada identificada: **DP6 Self Billing (Voucher)**,
+`008012-F93445-DFD798`. `matheus.fuzati@dp6.com.br` não tem nenhuma role
+nela hoje (dropdown de "Billing export" vazio, página `/export` retorna
+erro genérico de carregamento — consistente com 403 mascarado, não
+confirmado como problema de rede). Pedido feito à TI: `roles/billing.admin`
+nessa billing account. Atualizar esta linha quando a role for concedida
+e/ou o export for de fato habilitado.
+
 **Passos (Console):**
 1. [Cloud Billing Console](https://console.cloud.google.com/billing) →
    selecionar a billing account do projeto.
