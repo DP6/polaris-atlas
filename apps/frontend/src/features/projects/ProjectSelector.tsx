@@ -27,6 +27,10 @@ export function ProjectSelector() {
   const [submittedProjectId, setSubmittedProjectId] = useState<string | undefined>(undefined)
   const [isRestoring, setIsRestoring] = useState(false)
   const [requestAccessOpen, setRequestAccessOpen] = useState(false)
+  // "access" (sem acesso no Hub a um projeto já onboardado) vs.
+  // "inclusion" (projeto sem IAM concedido à SA do Hub, ou nem
+  // existente) — mesmo dialog, textos e efeito de aprovação diferentes.
+  const [requestType, setRequestType] = useState<'access' | 'inclusion'>('access')
   // Alterna entre o Select (lista de projetos que a SA alcança) e o campo
   // de texto livre — só um dos dois fica visível por vez, nunca os dois
   // juntos (eram redundantes antes desta versão).
@@ -96,6 +100,14 @@ export function ProjectSelector() {
   const isNotAuthorized =
     validateQuery.error instanceof ApiError &&
     validateQuery.error.body?.error === 'project_not_authorized'
+  // access_denied (SA do Hub sem IAM no GCP) e project_not_found (404)
+  // ganham a mesma CTA — o usuário comum não consegue diferenciar "não
+  // onboardado" de "nome errado/inexistente"; o admin investiga qual é
+  // qual ao triar o pedido de inclusão.
+  const isNotOnboarded =
+    validateQuery.error instanceof ApiError &&
+    (validateQuery.error.body?.error === 'access_denied' ||
+      validateQuery.error.body?.error === 'project_not_found')
 
   return (
     <div className="relative">
@@ -200,8 +212,22 @@ export function ProjectSelector() {
             showFix={false}
             action={
               isNotAuthorized
-                ? { label: 'Solicitar acesso', onClick: () => setRequestAccessOpen(true) }
-                : undefined
+                ? {
+                    label: 'Solicitar acesso',
+                    onClick: () => {
+                      setRequestType('access')
+                      setRequestAccessOpen(true)
+                    },
+                  }
+                : isNotOnboarded
+                  ? {
+                      label: 'Solicitar inclusão no Hub',
+                      onClick: () => {
+                        setRequestType('inclusion')
+                        setRequestAccessOpen(true)
+                      },
+                    }
+                  : undefined
             }
           />
         </div>
@@ -211,6 +237,7 @@ export function ProjectSelector() {
         open={requestAccessOpen}
         onOpenChange={setRequestAccessOpen}
         initialProjectId={submittedProjectId}
+        requestType={requestType}
       />
     </div>
   )

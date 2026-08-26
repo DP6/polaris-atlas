@@ -110,10 +110,21 @@ class AccessRequestStatus(str, Enum):
     DENIED = "denied"
 
 
+class AccessRequestType(str, Enum):
+    ACCESS = "access"
+    INCLUSION = "inclusion"
+
+
 class AccessRequest(BaseModel):
     request_id: str
     email: str
     project_id: str
+    # "access" = pedir acesso a um projeto já onboardado no Hub (fluxo
+    # original); "inclusion" = pedir que o projeto seja registrado no
+    # Hub — aprovar chama upsert_project além de grant_project_to_user.
+    # Default cobre docs antigos no Firestore, gravados antes deste
+    # campo existir.
+    request_type: AccessRequestType = AccessRequestType.ACCESS
     status: AccessRequestStatus
     requested_at: datetime
     resolved_at: datetime | None = None
@@ -126,3 +137,29 @@ class AccessRequestsListResponse(BaseModel):
 
 class CreateAccessRequestsRequest(BaseModel):
     project_ids: list[str] = Field(default_factory=list)
+    request_type: AccessRequestType = AccessRequestType.ACCESS
+
+
+class ChecklistItemName(str, Enum):
+    BIGQUERY = "bigquery"
+    LOGGING = "logging"
+    STORAGE = "storage"
+    AUDIT_LOGS = "audit_logs"
+
+
+class ChecklistItemStatus(str, Enum):
+    OK = "ok"
+    DENIED = "denied"
+    NOT_FOUND = "not_found"
+    NOT_CHECKED = "not_checked"
+
+
+class ChecklistItem(BaseModel):
+    item: ChecklistItemName
+    status: ChecklistItemStatus
+    detail: str
+
+
+class ProjectChecklistResponse(BaseModel):
+    project_id: str
+    items: list[ChecklistItem]

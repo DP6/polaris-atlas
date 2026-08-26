@@ -27,4 +27,6 @@ def create_access_requests(
     user: UserInfo = Depends(get_current_user),
     client: firestore.Client = Depends(get_firestore_client),
 ) -> AccessRequestsListResponse:
-    return service.create_access_requests(client, user.email, request.project_ids)
+    return service.create_access_requests(
+        client, user.email, request.project_ids, request.request_type.value
+    )

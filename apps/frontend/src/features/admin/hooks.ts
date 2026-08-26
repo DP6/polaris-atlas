@@ -4,6 +4,7 @@ import { accessRequestsApi } from '@/lib/api/accessRequests'
 import { adminApi } from '@/lib/api/admin'
 import type {
   AccessRequestStatus,
+  AccessRequestType,
   UpsertHubGroupRequest,
   UpsertHubProjectRequest,
   UpsertHubUserRequest,
@@ -65,6 +66,29 @@ export function useUpsertHubProject() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ADMIN_PROJECTS_QUERY_KEY })
     },
+  })
+}
+
+export function useDeleteHubProject() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (projectId: string) => adminApi.removeProject(projectId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ADMIN_PROJECTS_QUERY_KEY })
+    },
+  })
+}
+
+// Sob demanda (botão "Verificar checklist"), nunca automático — cada
+// chamada faz 2-3 leituras reais no GCP (BigQuery/Logging/Storage).
+export function useProjectChecklist(
+  projectId: string | undefined,
+  options: { enabled?: boolean } = {},
+) {
+  return useQuery({
+    queryKey: ['admin-project-checklist', projectId],
+    queryFn: () => adminApi.getProjectChecklist(projectId as string),
+    enabled: Boolean(projectId) && (options.enabled ?? true),
   })
 }
 
@@ -171,6 +195,9 @@ export function useApproveAccessRequest() {
       queryClient.invalidateQueries({ queryKey: ADMIN_ACCESS_REQUESTS_QUERY_KEY })
       queryClient.invalidateQueries({ queryKey: ['admin-access-requests-all'] })
       queryClient.invalidateQueries({ queryKey: ADMIN_USERS_QUERY_KEY })
+      // Aprovar um pedido "inclusion" registra o projeto (hub_projects)
+      // além de liberar o solicitante — invalida também "Por projeto".
+      queryClient.invalidateQueries({ queryKey: ADMIN_PROJECTS_QUERY_KEY })
     },
   })
 }
@@ -188,7 +215,13 @@ export function useDenyAccessRequest() {
 
 export function useCreateAccessRequests() {
   return useMutation({
-    mutationFn: (projectIds: string[]) => accessRequestsApi.create(projectIds),
+    mutationFn: ({
+      projectIds,
+      requestType,
+    }: {
+      projectIds: string[]
+      requestType?: AccessRequestType
+    }) => accessRequestsApi.create(projectIds, requestType),
   })
 }
 

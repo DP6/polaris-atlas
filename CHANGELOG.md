@@ -5,6 +5,55 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Apagar projeto, checklist de onboarding e solicitação de inclusão de projeto
+
+Três ajustes pedidos no admin/seletor de projeto: (1) quando o usuário
+digita manualmente um `project_id` que falha na validação por falta de
+onboarding (não só falta de ACL, que já tinha CTA), agora dá pra pedir
+que o projeto seja incluído no Hub; (2) `Admin → Por projeto` ganhou um
+botão de apagar (só tinha registrar); (3) um checklist best-effort
+confirma BigQuery/Logging/Storage antes de registrar um projeto ou
+aprovar um pedido de inclusão.
+
+### O que foi feito
+- **Apagar projeto**: `DELETE /api/v1/admin/projects/{project_id}`
+  (`domains/admin/repository.py::delete_project`, mirror de
+  `delete_group`) — remove só o doc `hub_projects`, sem cascade pra
+  grants explícitos de usuários/grupos. Botão novo em `AdminProjectsTab.tsx`,
+  sem confirmação modal (mesmo padrão do botão de revogar acesso já
+  existente).
+- **Checklist de onboarding (best-effort)**: novo
+  `domains/admin/checklist_service.py` — 4 itens (`bigquery` reaproveita
+  `discover_regions`, já usado por `validate_project`; `logging`/`storage`
+  ganham probes novos e pequenos; `audit_logs` é sempre `not_checked`,
+  não dá pra verificar sem uma role nova que não faz parte do onboarding
+  hoje). `GET /api/v1/admin/projects/{project_id}/checklist` + componente
+  `ProjectChecklistPanel.tsx` reaproveitado em dois lugares: no fluxo de
+  registrar projeto e nas linhas de pedido de inclusão em "Solicitações".
+- **Solicitação de inclusão de projeto**: `access_requests` ganhou
+  `request_type: "access" | "inclusion"` (default `"access"`, cobre docs
+  antigos). Aprovar um pedido `"inclusion"` chama `upsert_project` antes
+  de `grant_project_to_user` — registra o projeto e libera o solicitante
+  num clique só, assumindo que o admin já fez o onboarding real no GCP.
+  `ProjectSelector.tsx`: `access_denied`/`project_not_found` ganham a
+  mesma CTA "Solicitar inclusão no Hub" (usuário comum não distingue os
+  dois casos — admin investiga qual é qual ao revisar).
+- `docs/specs/admin.md` bump pra v1.9, primeira vez com seções Critérios
+  de aceite/Suposições/Perguntas em aberto.
+
+### Decisões tomadas com o usuário (perguntadas antes de implementar)
+- `access_denied` e `project_not_found` compartilham a mesma CTA de
+  inclusão, em vez de diferenciar (usuário não consegue distinguir os
+  dois na prática).
+- Aprovar uma inclusão registra + libera tudo junto, não em dois passos
+  manuais separados.
+- Checklist é best-effort (probing real, sem exigir role nova de
+  `resourcemanager.projects.getIamPolicy`) em vez de introspecção exata
+  de IAM policy — troca precisão por não exigir mudança de escopo em
+  todo cliente já onboardado.
+
+---
+
 ## Cache pré-computado de audit log — resolve "Failed to fetch" em Lineage/Acesso/Órfãs
 
 Usuário relatou "failed to fetch" recorrente nas telas de Lineage, Mapa

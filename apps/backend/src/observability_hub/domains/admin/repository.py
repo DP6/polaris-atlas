@@ -113,6 +113,15 @@ def upsert_project(
     return data
 
 
+def delete_project(client: firestore.Client, project_id: str) -> None:
+    """Remove só o registro hub_projects/{project_id} (e o is_public que
+    ele carrega) — não cascateia pra allowed_projects de hub_users/
+    hub_groups, que continuam com o project_id até alguém revogar
+    manualmente em "Por usuário"/"Grupos" (dois eixos independentes, ver
+    docs/specs/admin.md)."""
+    _projects_collection(client).document(project_id).delete()
+
+
 def _groups_collection(client: firestore.Client):
     return client.collection("hub_groups")
 
@@ -157,15 +166,20 @@ def _access_requests_collection(client: firestore.Client):
 
 
 def create_access_request(
-    client: firestore.Client, email: str, project_id: str, now: datetime
+    client: firestore.Client, email: str, project_id: str, now: datetime, request_type: str
 ) -> dict:
     """doc_id gerado pelo Firestore (.document() sem argumento) — cada
-    pedido é uma entrada própria, não um upsert por email/projeto."""
+    pedido é uma entrada própria, não um upsert por email/projeto.
+    request_type distingue "access" (usuário quer acesso a um projeto já
+    onboardado) de "inclusion" (projeto ainda nem está registrado no
+    Hub) — aprovar um pedido "inclusion" também registra o projeto em
+    hub_projects, ver service.py::_resolve_access_request."""
     doc_ref = _access_requests_collection(client).document()
     data = {
         "request_id": doc_ref.id,
         "email": email,
         "project_id": project_id,
+        "request_type": request_type,
         "status": "pending",
         "requested_at": now,
         "resolved_at": None,
@@ -190,13 +204,20 @@ def list_access_requests(client: firestore.Client, status: str | None = None) ->
     return results
 
 
-def has_pending_request(client: firestore.Client, email: str, project_id: str) -> bool:
+def has_pending_request(
+    client: firestore.Client, email: str, project_id: str, request_type: str
+) -> bool:
     """Só um campo no where (email) — mesmo motivo de list_access_requests,
-    evita índice composto de 3 campos; project_id/status filtrados em
-    Python sobre os pedidos desse e-mail (poucos, por usuário)."""
+    evita índice composto de 4 campos; project_id/status/request_type
+    filtrados em Python sobre os pedidos desse e-mail (poucos, por
+    usuário). Dedupe é por (project_id, request_type): um "access" e uma
+    "inclusion" pendentes pro mesmo projeto não se bloqueiam — são
+    pedidos com efeitos diferentes na aprovação."""
     docs = _access_requests_collection(client).where(filter=FieldFilter("email", "==", email))
     return any(
-        d["project_id"] == project_id and d["status"] == "pending"
+        d["project_id"] == project_id
+        and d["status"] == "pending"
+        and d.get("request_type", "access") == request_type
         for d in (doc.to_dict() for doc in docs.stream())
     )
 

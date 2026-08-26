@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Plus, RotateCw, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, ClipboardCheck, Plus, RotateCw, Trash2, X } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import {
+  useDeleteHubProject,
   useGrantProjectAccess,
   useHubProjects,
   useProjectUsers,
@@ -15,6 +16,7 @@ import {
   useRevokeProjectAccess,
   useUpsertHubProject,
 } from '@/features/admin/hooks'
+import { ProjectChecklistPanel } from '@/features/admin/ProjectChecklistPanel'
 import { ApiError } from '@/lib/http-client'
 import type { HubProject } from '@/types/admin'
 
@@ -28,6 +30,7 @@ export function AdminProjectsTab() {
   const refreshEventCacheMutation = useRefreshEventCache()
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [newProjectId, setNewProjectId] = useState('')
+  const [checkingNewProject, setCheckingNewProject] = useState(false)
 
   function refreshEventCache() {
     refreshEventCacheMutation.mutate(undefined, {
@@ -59,6 +62,7 @@ export function AdminProjectsTab() {
       {
         onSuccess: () => {
           setNewProjectId('')
+          setCheckingNewProject(false)
           setExpanded((current) => new Set(current).add(value))
         },
       },
@@ -95,32 +99,49 @@ export function AdminProjectsTab() {
         </Button>
       </div>
 
-      <div className="flex items-center gap-2">
-        <Input
-          value={newProjectId}
-          onChange={(e) => setNewProjectId(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              registerProject()
-            }
-          }}
-          placeholder="project-id"
-          className="max-w-xs"
-        />
-        <Button
-          type="button"
-          variant="outline"
-          disabled={!newProjectId.trim() || upsertProjectMutation.isPending}
-          onClick={registerProject}
-        >
-          <Plus size={16} />
-          Registrar projeto
-        </Button>
-        <RefreshButton
-          isRefreshing={projectsQuery.isFetching}
-          onRefresh={() => projectsQuery.refetch()}
-        />
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <Input
+            value={newProjectId}
+            onChange={(e) => {
+              setNewProjectId(e.target.value)
+              setCheckingNewProject(false)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                registerProject()
+              }
+            }}
+            placeholder="project-id"
+            className="max-w-xs"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!newProjectId.trim()}
+            onClick={() => setCheckingNewProject(true)}
+          >
+            <ClipboardCheck size={16} />
+            Verificar checklist
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!newProjectId.trim() || upsertProjectMutation.isPending}
+            onClick={registerProject}
+          >
+            <Plus size={16} />
+            Registrar projeto
+          </Button>
+          <RefreshButton
+            isRefreshing={projectsQuery.isFetching}
+            onRefresh={() => projectsQuery.refetch()}
+          />
+        </div>
+        {checkingNewProject && (
+          <ProjectChecklistPanel projectId={newProjectId.trim()} enabled={checkingNewProject} />
+        )}
       </div>
 
       {projectsQuery.isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}
@@ -157,6 +178,8 @@ function ProjectRow({
   onToggleExpanded: () => void
 }) {
   const upsertProjectMutation = useUpsertHubProject()
+  const deleteProjectMutation = useDeleteHubProject()
+  const [checkingChecklist, setCheckingChecklist] = useState(false)
 
   return (
     <div className="rounded-md border border-border">
@@ -188,7 +211,29 @@ function ProjectRow({
             Liberado a todos
           </label>
         </div>
+        <button
+          type="button"
+          onClick={() => setCheckingChecklist((current) => !current)}
+          aria-label={`Verificar checklist de ${project.project_id}`}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <ClipboardCheck size={14} />
+        </button>
+        <button
+          type="button"
+          onClick={() => deleteProjectMutation.mutate(project.project_id)}
+          disabled={deleteProjectMutation.isPending}
+          aria-label={`Apagar ${project.project_id}`}
+          className="text-muted-foreground hover:text-status-error"
+        >
+          <Trash2 size={14} />
+        </button>
       </div>
+      {checkingChecklist && (
+        <div className="border-t border-border px-3 py-3">
+          <ProjectChecklistPanel projectId={project.project_id} enabled={checkingChecklist} />
+        </div>
+      )}
       {expanded && <ProjectUsersDetail projectId={project.project_id} />}
     </div>
   )
