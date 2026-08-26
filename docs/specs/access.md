@@ -1,9 +1,11 @@
 # Spec — Domínio: Mapa de acesso
 
-**Versão:** 1.0
+**Versão:** 1.1 (cache pré-computado de audit log compartilhado com
+lineage — job diário D-1 + gatilho manual de admin, ver
+`docs/specs/lineage.md` seção "Cache pré-computado de audit log")
 **Status:** Aprovada
 **Fase:** 3 — Sprint 3.2
-**Última atualização:** 2026-08-14
+**Última atualização:** 2026-08-25
 
 ---
 
@@ -154,6 +156,30 @@ apps/backend/src/observability_hub/
 
 ---
 
+## Cache pré-computado de audit log (v1.1)
+
+`list_access_events` passou a ter uma camada de cache compartilhada com
+`domains/lineage` — mecanismo completo (motivação, storage GCS+Firestore,
+job diário D-1, gatilho manual de admin) descrito em
+`docs/specs/lineage.md`, seção "Cache pré-computado de audit log", não
+duplicado aqui. Diferenças específicas deste domínio:
+
+- `get_table_access` (`domains/access/service.py`) chama
+  `repository.get_access_events_cached` em vez de `list_access_events`
+  diretamente — cache sempre elegível aqui (diferente de lineage/órfãs),
+  já que este endpoint **não tem** `lookback_days` variável, é sempre
+  `LOOKBACK_DAYS` fixo.
+- `TableAccessResponse` ganha `cache_updated_at: datetime | None` —
+  mesmo significado (`null` = veio ao vivo nesta chamada).
+- `domains/access/repository.py` ganha
+  `serialize_access_events`/`deserialize_access_events` (inclui
+  `timestamp`, que `JobEvent` de lineage não tem) e
+  `read_access_events_cache`/`write_access_events_cache`/
+  `get_access_events_cached`, mesmo padrão de `domains/lineage/repository.py`
+  (sem import cross-domain — parsing/serialização duplicados de propósito).
+
+---
+
 ## Casos de borda
 
 | Cenário | Comportamento |
@@ -167,6 +193,23 @@ apps/backend/src/observability_hub/
 | `limit` fora do intervalo 1–100 | HTTP 422 (validação do `Query(ge=1, le=100)`) |
 | Job executado pela própria SA de runtime do Hub (`backend-run@<projeto-do-hub>.iam.gserviceaccount.com`) | Excluído da agregação — profiling/PII rodado pela UI usa essa SA pra consultar o BigQuery, não é um consumidor externo real (ver "Exclusão da SA do próprio Hub") |
 | Job de outra service account (ex: pipeline externo) | Conta normalmente, `is_service_account: true` |
+| Projeto nunca varrido pelo Job de refresh (cache miss) | Fallback síncrono (scan ao vivo), resultado gravado no cache pra próxima chamada — `cache_updated_at: null` só nesta resposta |
+
+---
+
+## Critérios de aceite
+
+| ID | Comportamento | Testado em |
+|---|---|---|
+| AC-001 | Cache hit não chama `client.list_entries` (Cloud Logging) | `test_get_access_events_cached_returns_cache_hit_without_calling_list_entries` |
+| AC-002 | Cache miss faz o scan ao vivo e grava o resultado no cache antes de retornar | `test_get_access_events_cached_falls_back_and_writes_cache_on_miss` |
+| AC-003 | Falha ao ler/gravar o cache (qualquer exceção, não só cache miss) nunca impede a resposta de conter o resultado do scan ao vivo | `test_get_access_events_cached_falls_back_to_live_scan_when_cache_read_fails`, `test_get_access_events_cached_returns_live_data_when_cache_write_fails` |
+
+## Suposições
+
+| ID | Suposição | Status |
+|---|---|---|
+| ASM-001 | Cache sempre elegível pra este endpoint (sem exceção por `lookback_days`, diferente de lineage/órfãs) — não há parâmetro variável aqui | confirmada |
 
 ---
 

@@ -50,6 +50,18 @@ class Settings(BaseSettings):
     # hardcoded, que quebra em projeto único (dev e prod têm SAs com nomes
     # diferentes no mesmo projeto: backend-dev-run vs backend-prod-run).
     runtime_sa_email: str
+    # Região do Cloud Run deste ambiente, injetada pelo Terraform (module
+    # cloud-run, env = { OBSERVABILITY_HUB_REGION = var.region }) — usada
+    # só pra montar o path da Cloud Run Admin API no gatilho manual de
+    # admin (domains/admin::trigger_event_cache_refresh), que precisa de
+    # project+region+job_name pra endereçar o Cloud Run Job de refresh do
+    # cache (ver infra/terraform/modules/cloud-run-job).
+    region: str
+    # Nome do bucket GCS dedicado ao cache de audit log (lineage/access),
+    # injetado pelo Terraform (google_storage_bucket.event_cache, ver
+    # environments/{dev,prod}/main.tf) — nunca hardcodado aqui porque o
+    # nome do bucket é globalmente único e prefixado por ambiente.
+    event_cache_bucket_name: str
 
     log_level: str = "INFO"
     region_discovery_max_workers: int = 8

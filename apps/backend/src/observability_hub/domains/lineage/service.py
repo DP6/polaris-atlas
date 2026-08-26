@@ -8,7 +8,7 @@ estas funções — CLAUDE.md proíbe lógica de negócio em api/.
 from datetime import UTC, datetime
 from typing import Literal
 
-from google.cloud import bigquery
+from google.cloud import bigquery, firestore, storage
 from google.cloud import logging as cloud_logging
 
 from observability_hub.core.bigquery import discover_regions, get_tables_metadata
@@ -104,20 +104,26 @@ def _neighbors(
 
 def _get_project_events(
     logging_client: cloud_logging.Client,
+    storage_client: storage.Client,
+    firestore_client: firestore.Client,
     project_id: str,
     events_cache: dict[str, list[JobEvent]],
     denied_projects: set[str],
 ) -> list[JobEvent] | None:
     """None => projeto sem acesso de Logging (soft-fail) — chamador não
     deve expandir a partir de nós desse projeto. No máximo uma chamada a
-    repository.list_job_events por projeto por requisição (events_cache/
-    denied_projects são compartilhados pelas duas direções da travessia)."""
+    repository.get_job_events_cached por projeto por requisição
+    (events_cache/denied_projects são compartilhados pelas duas direções
+    da travessia) — por sua vez lê o cache pré-computado quando existir,
+    só escaneando Cloud Logging ao vivo em cache miss."""
     if project_id in denied_projects:
         return None
     if project_id in events_cache:
         return events_cache[project_id]
     try:
-        events = repository.list_job_events(logging_client, project_id)
+        events, _ = repository.get_job_events_cached(
+            logging_client, storage_client, firestore_client, project_id
+        )
     except LoggingAccessDeniedError:
         denied_projects.add(project_id)
         return None
@@ -151,6 +157,8 @@ def _table_node(ref: TableRefTuple, hop_distance: int, access_denied: bool) -> L
 
 def _traverse(
     logging_client: cloud_logging.Client,
+    storage_client: storage.Client,
+    firestore_client: firestore.Client,
     root: TableRefTuple,
     root_events: list[JobEvent],
     direction: Literal["upstream", "downstream"],
@@ -209,7 +217,12 @@ def _traverse(
                         continue  # folha — nunca entra na frontier
 
                     neighbor_events = _get_project_events(
-                        logging_client, neighbor[0], events_cache, denied_projects
+                        logging_client,
+                        storage_client,
+                        firestore_client,
+                        neighbor[0],
+                        events_cache,
+                        denied_projects,
                     )
                     if neighbor_events is None:
                         nodes[neighbor] = _table_node(neighbor, sign * next_hop, access_denied=True)
@@ -227,22 +240,42 @@ def _traverse(
 def get_table_lineage(
     client: bigquery.Client,
     logging_client: cloud_logging.Client,
+    storage_client: storage.Client,
+    firestore_client: firestore.Client,
     project_id: str,
     dataset_id: str,
     table_id: str,
     max_hops: int = _MAX_HOPS_DEFAULT,
 ) -> LineageGraphResponse:
     root: TableRefTuple = (project_id, dataset_id, table_id)
-    root_events = repository.list_job_events(logging_client, project_id)
+    root_events, cache_updated_at = repository.get_job_events_cached(
+        logging_client, storage_client, firestore_client, project_id
+    )
 
     events_cache: dict[str, list[JobEvent]] = {project_id: root_events}
     denied_projects: set[str] = set()
 
     upstream_nodes, upstream_edges, upstream_truncated = _traverse(
-        logging_client, root, root_events, "upstream", max_hops, events_cache, denied_projects
+        logging_client,
+        storage_client,
+        firestore_client,
+        root,
+        root_events,
+        "upstream",
+        max_hops,
+        events_cache,
+        denied_projects,
     )
     downstream_nodes, downstream_edges, downstream_truncated = _traverse(
-        logging_client, root, root_events, "downstream", max_hops, events_cache, denied_projects
+        logging_client,
+        storage_client,
+        firestore_client,
+        root,
+        root_events,
+        "downstream",
+        max_hops,
+        events_cache,
+        denied_projects,
     )
 
     merged_nodes: dict[NodeRef, LineageNode] = dict(upstream_nodes)
@@ -266,19 +299,24 @@ def get_table_lineage(
         max_hops=max_hops,
         truncated=upstream_truncated or downstream_truncated,
         warning=_empty_result_warning(project_id) if not root_events else None,
+        cache_updated_at=cache_updated_at,
     )
 
 
 def get_orphans(
     client: bigquery.Client,
     logging_client: cloud_logging.Client,
+    storage_client: storage.Client,
+    firestore_client: firestore.Client,
     project_id: str,
     datasets: list[str] | None = None,
     lookback_days: int = repository.LOOKBACK_DAYS,
 ) -> OrphansResponse:
     regions = discover_regions(project_id, client=client)
     all_tables = repository.list_all_table_refs(client, project_id, regions, datasets=datasets)
-    events = repository.list_job_events(logging_client, project_id, lookback_days=lookback_days)
+    events, cache_updated_at = repository.get_job_events_cached(
+        logging_client, storage_client, firestore_client, project_id, lookback_days=lookback_days
+    )
 
     consumed: set[tuple[str, str]] = set()
     for event in events:
@@ -314,4 +352,5 @@ def get_orphans(
         orphans=orphan_tables,
         lookback_days=lookback_days,
         warning=_empty_result_warning(project_id) if not events else None,
+        cache_updated_at=cache_updated_at,
     )

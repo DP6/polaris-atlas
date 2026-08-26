@@ -1,5 +1,6 @@
-import { ChevronDown, ChevronRight, Plus, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, RotateCw, X } from 'lucide-react'
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { RefreshButton } from '@/components/RefreshButton'
 import { Badge } from '@/components/ui/badge'
@@ -10,6 +11,7 @@ import {
   useGrantProjectAccess,
   useHubProjects,
   useProjectUsers,
+  useRefreshEventCache,
   useRevokeProjectAccess,
   useUpsertHubProject,
 } from '@/features/admin/hooks'
@@ -23,8 +25,19 @@ import type { HubProject } from '@/types/admin'
 export function AdminProjectsTab() {
   const projectsQuery = useHubProjects()
   const upsertProjectMutation = useUpsertHubProject()
+  const refreshEventCacheMutation = useRefreshEventCache()
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [newProjectId, setNewProjectId] = useState('')
+
+  function refreshEventCache() {
+    refreshEventCacheMutation.mutate(undefined, {
+      onSuccess: () =>
+        toast.success(
+          'Atualização do cache de lineage/acesso disparada — pode levar alguns minutos.',
+        ),
+      onError: () => toast.error('Não foi possível disparar a atualização do cache.'),
+    })
+  }
 
   function toggleExpanded(projectId: string) {
     setExpanded((current) => {
@@ -58,6 +71,29 @@ export function AdminProjectsTab() {
         "Liberado a todos" vale pra qualquer usuário do Hub, inclusive quem ainda não tem cadastro —
         independente da lista de projetos de cada usuário na aba "Por usuário".
       </p>
+
+      <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+        <div>
+          <p className="text-sm font-medium">Cache de lineage/mapa de acesso/órfãs</p>
+          <p className="text-xs text-muted-foreground">
+            Atualizado automaticamente 1x/dia (D-1). Use o botão pra atualizar todos os projetos
+            agora, sem esperar o próximo ciclo.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={refreshEventCacheMutation.isPending}
+          onClick={refreshEventCache}
+        >
+          <RotateCw
+            size={14}
+            className={refreshEventCacheMutation.isPending ? 'animate-spin' : undefined}
+          />
+          Atualizar cache agora
+        </Button>
+      </div>
 
       <div className="flex items-center gap-2">
         <Input

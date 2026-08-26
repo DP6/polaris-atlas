@@ -1,4 +1,5 @@
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { CacheStalenessBadge } from '@/components/CacheStalenessBadge'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -96,9 +97,12 @@ export function AccessTab({ projectId, datasetId, tableId }: AccessTabProps) {
         </Table>
       )}
 
-      <p className="text-xs text-muted-foreground">
-        Baseado em audit logs dos últimos {data.lookback_days} dias.
-      </p>
+      <div className="flex items-center gap-2">
+        <p className="text-xs text-muted-foreground">
+          Baseado em audit logs dos últimos {data.lookback_days} dias.
+        </p>
+        <CacheStalenessBadge cacheUpdatedAt={data.cache_updated_at} />
+      </div>
     </div>
   )
 }

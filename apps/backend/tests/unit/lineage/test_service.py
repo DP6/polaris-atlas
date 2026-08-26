@@ -28,14 +28,16 @@ def _event(
 
 
 def _events_by_project(mapping, denied=frozenset()):
-    """Fake pra repository.list_job_events: despacha por project_id,
+    """Fake pra repository.get_job_events_cached: despacha por project_id,
     levantando LoggingAccessDeniedError pros projetos em `denied` — a
-    travessia multi-hop pode consultar mais de um projeto por request."""
+    travessia multi-hop pode consultar mais de um projeto por request.
+    Retorna (eventos, cache_updated_at) — cache_updated_at fixo em None
+    nos testes que não verificam explicitamente esse campo."""
 
-    def _fake(logging_client, project_id):
+    def _fake(logging_client, storage_client, firestore_client, project_id, lookback_days=30):
         if project_id in denied:
             raise LoggingAccessDeniedError(project_id)
-        return mapping.get(project_id, [])
+        return mapping.get(project_id, []), None
 
     return _fake
 
@@ -52,9 +54,13 @@ def test_get_table_lineage_finds_upstream_from_jobs_that_wrote_to_target(monkeyp
             destination=("proj", "GOLD", "leads_summary"),
         )
     ]
-    monkeypatch.setattr(service.repository, "list_job_events", _events_by_project({"proj": events}))
+    monkeypatch.setattr(
+        service.repository, "get_job_events_cached", _events_by_project({"proj": events})
+    )
 
-    result = service.get_table_lineage(client, logging_client, "proj", "GOLD", "leads_summary")
+    result = service.get_table_lineage(
+        client, logging_client, MagicMock(), MagicMock(), "proj", "GOLD", "leads_summary"
+    )
 
     assert {(n.dataset_id, n.table_id, n.hop_distance) for n in result.nodes} == {
         ("RAW", "crm_leads", -1),
@@ -73,9 +79,13 @@ def test_get_table_lineage_finds_downstream_from_jobs_that_read_target(monkeypat
             destination=("proj", "GOLD", "leads_summary"),
         )
     ]
-    monkeypatch.setattr(service.repository, "list_job_events", _events_by_project({"proj": events}))
+    monkeypatch.setattr(
+        service.repository, "get_job_events_cached", _events_by_project({"proj": events})
+    )
 
-    result = service.get_table_lineage(client, logging_client, "proj", "RAW", "crm_leads")
+    result = service.get_table_lineage(
+        client, logging_client, MagicMock(), MagicMock(), "proj", "RAW", "crm_leads"
+    )
 
     assert {(n.dataset_id, n.table_id, n.hop_distance) for n in result.nodes} == {
         ("GOLD", "leads_summary", 1),
@@ -90,9 +100,13 @@ def test_get_table_lineage_ignores_self_references(monkeypatch):
     events = [
         _event(referenced=[("proj", "RAW", "crm_leads")], destination=("proj", "RAW", "crm_leads"))
     ]
-    monkeypatch.setattr(service.repository, "list_job_events", _events_by_project({"proj": events}))
+    monkeypatch.setattr(
+        service.repository, "get_job_events_cached", _events_by_project({"proj": events})
+    )
 
-    result = service.get_table_lineage(client, logging_client, "proj", "RAW", "crm_leads")
+    result = service.get_table_lineage(
+        client, logging_client, MagicMock(), MagicMock(), "proj", "RAW", "crm_leads"
+    )
 
     assert result.nodes == []
     assert result.edges == []
@@ -101,9 +115,11 @@ def test_get_table_lineage_ignores_self_references(monkeypatch):
 def test_get_table_lineage_sets_warning_when_no_events(monkeypatch):
     client = MagicMock()
     logging_client = MagicMock()
-    monkeypatch.setattr(service.repository, "list_job_events", _events_by_project({}))
+    monkeypatch.setattr(service.repository, "get_job_events_cached", _events_by_project({}))
 
-    result = service.get_table_lineage(client, logging_client, "proj", "RAW", "crm_leads")
+    result = service.get_table_lineage(
+        client, logging_client, MagicMock(), MagicMock(), "proj", "RAW", "crm_leads"
+    )
 
     assert result.nodes == []
     assert result.warning is not None
@@ -126,9 +142,13 @@ def test_get_table_lineage_follows_transitive_chain(monkeypatch):
             job_id="job-sessions",
         ),
     ]
-    monkeypatch.setattr(service.repository, "list_job_events", _events_by_project({"proj": events}))
+    monkeypatch.setattr(
+        service.repository, "get_job_events_cached", _events_by_project({"proj": events})
+    )
 
-    result = service.get_table_lineage(client, logging_client, "proj", "GOLD", "daily_summary")
+    result = service.get_table_lineage(
+        client, logging_client, MagicMock(), MagicMock(), "proj", "GOLD", "daily_summary"
+    )
 
     assert {(n.dataset_id, n.table_id, n.hop_distance) for n in result.nodes} == {
         ("TRUSTED", "ga4_sessions", -1),
@@ -156,9 +176,13 @@ def test_get_table_lineage_join_fan_in_downstream(monkeypatch):
             referenced=[("proj", "TRUSTED", "c")], destination=("proj", "GOLD", "d"), job_id="job-d"
         ),
     ]
-    monkeypatch.setattr(service.repository, "list_job_events", _events_by_project({"proj": events}))
+    monkeypatch.setattr(
+        service.repository, "get_job_events_cached", _events_by_project({"proj": events})
+    )
 
-    result = service.get_table_lineage(client, logging_client, "proj", "RAW", "a")
+    result = service.get_table_lineage(
+        client, logging_client, MagicMock(), MagicMock(), "proj", "RAW", "a"
+    )
 
     assert {(n.dataset_id, n.table_id, n.hop_distance) for n in result.nodes} == {
         ("TRUSTED", "c", 1),
@@ -185,9 +209,13 @@ def test_get_table_lineage_join_fan_in_upstream(monkeypatch):
             referenced=[("proj", "TRUSTED", "c")], destination=("proj", "GOLD", "d"), job_id="job-d"
         ),
     ]
-    monkeypatch.setattr(service.repository, "list_job_events", _events_by_project({"proj": events}))
+    monkeypatch.setattr(
+        service.repository, "get_job_events_cached", _events_by_project({"proj": events})
+    )
 
-    result = service.get_table_lineage(client, logging_client, "proj", "GOLD", "d")
+    result = service.get_table_lineage(
+        client, logging_client, MagicMock(), MagicMock(), "proj", "GOLD", "d"
+    )
 
     assert {(n.dataset_id, n.table_id, n.hop_distance) for n in result.nodes} == {
         ("TRUSTED", "c", -1),
@@ -215,11 +243,13 @@ def test_get_table_lineage_cross_project_access_denied_soft_fails(monkeypatch):
     ]
     monkeypatch.setattr(
         service.repository,
-        "list_job_events",
+        "get_job_events_cached",
         _events_by_project({"proj-a": events_a}, denied={"proj-b"}),
     )
 
-    result = service.get_table_lineage(client, logging_client, "proj-a", "GOLD", "x")
+    result = service.get_table_lineage(
+        client, logging_client, MagicMock(), MagicMock(), "proj-a", "GOLD", "x"
+    )
 
     denied_nodes = [n for n in result.nodes if n.access_denied]
     assert len(denied_nodes) == 1
@@ -235,11 +265,13 @@ def test_get_table_lineage_root_project_access_denied_raises(monkeypatch):
     client = MagicMock()
     logging_client = MagicMock()
     monkeypatch.setattr(
-        service.repository, "list_job_events", _events_by_project({}, denied={"proj"})
+        service.repository, "get_job_events_cached", _events_by_project({}, denied={"proj"})
     )
 
     with pytest.raises(LoggingAccessDeniedError):
-        service.get_table_lineage(client, logging_client, "proj", "GOLD", "x")
+        service.get_table_lineage(
+            client, logging_client, MagicMock(), MagicMock(), "proj", "GOLD", "x"
+        )
 
 
 def test_get_table_lineage_handles_cycle_across_different_jobs(monkeypatch):
@@ -252,9 +284,13 @@ def test_get_table_lineage_handles_cycle_across_different_jobs(monkeypatch):
         _event(referenced=[("proj", "RAW", "a")], destination=("proj", "RAW", "b"), job_id="job1"),
         _event(referenced=[("proj", "RAW", "b")], destination=("proj", "RAW", "a"), job_id="job2"),
     ]
-    monkeypatch.setattr(service.repository, "list_job_events", _events_by_project({"proj": events}))
+    monkeypatch.setattr(
+        service.repository, "get_job_events_cached", _events_by_project({"proj": events})
+    )
 
-    result = service.get_table_lineage(client, logging_client, "proj", "RAW", "a")
+    result = service.get_table_lineage(
+        client, logging_client, MagicMock(), MagicMock(), "proj", "RAW", "a"
+    )
 
     assert len(result.nodes) == 1
     assert (result.nodes[0].dataset_id, result.nodes[0].table_id) == ("RAW", "b")
@@ -279,10 +315,19 @@ def test_get_table_lineage_respects_max_hops_and_sets_truncated(monkeypatch):
             job_id="job-sessions",
         ),
     ]
-    monkeypatch.setattr(service.repository, "list_job_events", _events_by_project({"proj": events}))
+    monkeypatch.setattr(
+        service.repository, "get_job_events_cached", _events_by_project({"proj": events})
+    )
 
     truncated_result = service.get_table_lineage(
-        client, logging_client, "proj", "GOLD", "daily_summary", max_hops=1
+        client,
+        logging_client,
+        MagicMock(),
+        MagicMock(),
+        "proj",
+        "GOLD",
+        "daily_summary",
+        max_hops=1,
     )
     assert {(n.dataset_id, n.table_id) for n in truncated_result.nodes} == {
         ("TRUSTED", "ga4_sessions")
@@ -290,7 +335,14 @@ def test_get_table_lineage_respects_max_hops_and_sets_truncated(monkeypatch):
     assert truncated_result.truncated is True
 
     full_result = service.get_table_lineage(
-        client, logging_client, "proj", "GOLD", "daily_summary", max_hops=8
+        client,
+        logging_client,
+        MagicMock(),
+        MagicMock(),
+        "proj",
+        "GOLD",
+        "daily_summary",
+        max_hops=8,
     )
     assert full_result.truncated is False
     assert {(n.dataset_id, n.table_id) for n in full_result.nodes} == {
@@ -315,9 +367,13 @@ def test_get_table_lineage_dedupes_repeated_job_edges(monkeypatch):
             referenced=[("proj", "RAW", "a")], destination=("proj", "GOLD", "b"), job_id="job-day3"
         ),
     ]
-    monkeypatch.setattr(service.repository, "list_job_events", _events_by_project({"proj": events}))
+    monkeypatch.setattr(
+        service.repository, "get_job_events_cached", _events_by_project({"proj": events})
+    )
 
-    result = service.get_table_lineage(client, logging_client, "proj", "GOLD", "b")
+    result = service.get_table_lineage(
+        client, logging_client, MagicMock(), MagicMock(), "proj", "GOLD", "b"
+    )
 
     assert len(result.edges) == 1
 
@@ -335,9 +391,13 @@ def test_get_table_lineage_finds_bucket_upstream_via_load(monkeypatch):
             source_buckets=["landing"],
         )
     ]
-    monkeypatch.setattr(service.repository, "list_job_events", _events_by_project({"proj": events}))
+    monkeypatch.setattr(
+        service.repository, "get_job_events_cached", _events_by_project({"proj": events})
+    )
 
-    result = service.get_table_lineage(client, logging_client, "proj", "RAW", "crm_leads_staging")
+    result = service.get_table_lineage(
+        client, logging_client, MagicMock(), MagicMock(), "proj", "RAW", "crm_leads_staging"
+    )
 
     assert len(result.nodes) == 1
     node = result.nodes[0]
@@ -362,9 +422,13 @@ def test_get_table_lineage_finds_bucket_downstream_via_extract(monkeypatch):
             destination_buckets=["processed"],
         )
     ]
-    monkeypatch.setattr(service.repository, "list_job_events", _events_by_project({"proj": events}))
+    monkeypatch.setattr(
+        service.repository, "get_job_events_cached", _events_by_project({"proj": events})
+    )
 
-    result = service.get_table_lineage(client, logging_client, "proj", "RAW", "crm_leads_staging")
+    result = service.get_table_lineage(
+        client, logging_client, MagicMock(), MagicMock(), "proj", "RAW", "crm_leads_staging"
+    )
 
     assert len(result.nodes) == 1
     node = result.nodes[0]
@@ -403,10 +467,19 @@ def test_get_table_lineage_bucket_node_never_expands_further(monkeypatch):
             job_id="load-job",
         ),
     ]
-    monkeypatch.setattr(service.repository, "list_job_events", _events_by_project({"proj": events}))
+    monkeypatch.setattr(
+        service.repository, "get_job_events_cached", _events_by_project({"proj": events})
+    )
 
     result = service.get_table_lineage(
-        client, logging_client, "proj", "RAW", "crm_leads_staging", max_hops=8
+        client,
+        logging_client,
+        MagicMock(),
+        MagicMock(),
+        "proj",
+        "RAW",
+        "crm_leads_staging",
+        max_hops=8,
     )
 
     node_ids = {n.id for n in result.nodes}
@@ -434,9 +507,13 @@ def test_get_table_lineage_bucket_root_side_ignores_unrelated_bucket_events(monk
             job_id="unrelated-job",
         ),
     ]
-    monkeypatch.setattr(service.repository, "list_job_events", _events_by_project({"proj": events}))
+    monkeypatch.setattr(
+        service.repository, "get_job_events_cached", _events_by_project({"proj": events})
+    )
 
-    result = service.get_table_lineage(client, logging_client, "proj", "RAW", "crm_leads_staging")
+    result = service.get_table_lineage(
+        client, logging_client, MagicMock(), MagicMock(), "proj", "RAW", "crm_leads_staging"
+    )
 
     assert {n.id for n in result.nodes} == {"bucket:landing"}
 
@@ -455,14 +532,15 @@ def test_get_orphans_returns_tables_never_referenced(monkeypatch):
     )
     monkeypatch.setattr(
         service.repository,
-        "list_job_events",
-        lambda *a, **kw: [
-            _event(referenced=[("proj", "RAW", "crm_leads")], destination=("proj", "GOLD", "x"))
-        ],
+        "get_job_events_cached",
+        lambda *a, **kw: (
+            [_event(referenced=[("proj", "RAW", "crm_leads")], destination=("proj", "GOLD", "x"))],
+            None,
+        ),
     )
     monkeypatch.setattr(service, "get_tables_metadata", lambda client, refs: {})
 
-    result = service.get_orphans(client, logging_client, "proj")
+    result = service.get_orphans(client, logging_client, MagicMock(), MagicMock(), "proj")
 
     orphan_keys = {(o.dataset_id, o.table_id) for o in result.orphans}
     assert orphan_keys == {("RAW", "crm_accounts"), ("GOLD", "unused_table")}
@@ -479,14 +557,18 @@ def test_get_orphans_passes_datasets_and_lookback_days_through(monkeypatch):
         captured["datasets"] = datasets
         return []
 
-    def fake_list_job_events(logging_client, project_id, lookback_days=30):
+    def fake_get_job_events_cached(
+        logging_client, storage_client, firestore_client, project_id, lookback_days=30
+    ):
         captured["lookback_days"] = lookback_days
-        return []
+        return [], None
 
     monkeypatch.setattr(service.repository, "list_all_table_refs", fake_list_all_table_refs)
-    monkeypatch.setattr(service.repository, "list_job_events", fake_list_job_events)
+    monkeypatch.setattr(service.repository, "get_job_events_cached", fake_get_job_events_cached)
 
-    result = service.get_orphans(client, logging_client, "proj", datasets=["RAW"], lookback_days=90)
+    result = service.get_orphans(
+        client, logging_client, MagicMock(), MagicMock(), "proj", datasets=["RAW"], lookback_days=90
+    )
 
     assert captured["datasets"] == ["RAW"]
     assert captured["lookback_days"] == 90
@@ -502,14 +584,15 @@ def test_get_orphans_ignores_referenced_tables_from_other_projects(monkeypatch):
     )
     monkeypatch.setattr(
         service.repository,
-        "list_job_events",
-        lambda *a, **kw: [
-            _event(referenced=[("other-proj", "RAW", "crm_leads")], destination=None)
-        ],
+        "get_job_events_cached",
+        lambda *a, **kw: (
+            [_event(referenced=[("other-proj", "RAW", "crm_leads")], destination=None)],
+            None,
+        ),
     )
     monkeypatch.setattr(service, "get_tables_metadata", lambda client, refs: {})
 
-    result = service.get_orphans(client, logging_client, "proj")
+    result = service.get_orphans(client, logging_client, MagicMock(), MagicMock(), "proj")
 
     assert {(o.dataset_id, o.table_id) for o in result.orphans} == {("RAW", "crm_leads")}
 
@@ -521,10 +604,10 @@ def test_get_orphans_sets_warning_when_no_events(monkeypatch):
     monkeypatch.setattr(
         service.repository, "list_all_table_refs", lambda *a, **kw: [("RAW", "crm_leads")]
     )
-    monkeypatch.setattr(service.repository, "list_job_events", lambda *a, **kw: [])
+    monkeypatch.setattr(service.repository, "get_job_events_cached", lambda *a, **kw: ([], None))
     monkeypatch.setattr(service, "get_tables_metadata", lambda client, refs: {})
 
-    result = service.get_orphans(client, logging_client, "proj")
+    result = service.get_orphans(client, logging_client, MagicMock(), MagicMock(), "proj")
 
     assert result.warning is not None
     assert len(result.orphans) == 1
@@ -538,7 +621,7 @@ def test_get_orphans_includes_estimated_storage_cost(monkeypatch):
     monkeypatch.setattr(
         service.repository, "list_all_table_refs", lambda *a, **kw: [("RAW", "crm_leads")]
     )
-    monkeypatch.setattr(service.repository, "list_job_events", lambda *a, **kw: [])
+    monkeypatch.setattr(service.repository, "get_job_events_cached", lambda *a, **kw: ([], None))
     monkeypatch.setattr(
         service,
         "get_tables_metadata",
@@ -547,7 +630,7 @@ def test_get_orphans_includes_estimated_storage_cost(monkeypatch):
         },
     )
 
-    result = service.get_orphans(client, logging_client, "proj")
+    result = service.get_orphans(client, logging_client, MagicMock(), MagicMock(), "proj")
 
     assert result.orphans[0].size_bytes == 1024**3
     assert (
@@ -563,10 +646,10 @@ def test_get_orphans_defaults_cost_to_zero_when_metadata_missing(monkeypatch):
     monkeypatch.setattr(
         service.repository, "list_all_table_refs", lambda *a, **kw: [("RAW", "crm_leads")]
     )
-    monkeypatch.setattr(service.repository, "list_job_events", lambda *a, **kw: [])
+    monkeypatch.setattr(service.repository, "get_job_events_cached", lambda *a, **kw: ([], None))
     monkeypatch.setattr(service, "get_tables_metadata", lambda client, refs: {})
 
-    result = service.get_orphans(client, logging_client, "proj")
+    result = service.get_orphans(client, logging_client, MagicMock(), MagicMock(), "proj")
 
     assert result.orphans[0].size_bytes == 0
     assert result.orphans[0].estimated_monthly_storage_cost_usd == 0.0

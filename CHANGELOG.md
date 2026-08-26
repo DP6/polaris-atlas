@@ -5,6 +5,122 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Cache pré-computado de audit log — resolve "Failed to fetch" em Lineage/Acesso/Órfãs
+
+Usuário relatou "failed to fetch" recorrente nas telas de Lineage, Mapa
+de Acesso e Tabelas sem consumidor. Diagnóstico: `list_job_events`/
+`list_access_events` escaneavam todo o audit log do Cloud Logging (até
+30 dias, sem limite de resultados) **a cada requisição**, sem cache —
+em projetos com volume real, isso estourava o timeout do Cloud Run
+(300s, sem override até agora) ou a memória do container, e o Cloud Run
+derruba a conexão TCP nesses casos em vez de devolver um erro HTTP
+normal, o que o browser reporta como `TypeError: Failed to fetch` sem
+nenhuma informação útil. Usuário pediu pra combinar 4 propostas
+discutidas (cache entre requisições, pré-computação via job periódico,
+timeout maior, mais memória) num plano único.
+
+### O que foi feito
+- **Cache compartilhado (GCS + Firestore)**: novo `core/event_cache.py`
+  — payload de eventos serializado vai pro GCS (Firestore tem limite de
+  1MiB/doc, facilmente ultrapassado em 30 dias de audit log de um
+  projeto com uso real), metadado pequeno (`cached_at`) vai pro
+  Firestore. `domains/lineage/repository.py` e `domains/access/repository.py`
+  ganham `get_job_events_cached`/`get_access_events_cached` — tentam o
+  cache primeiro, caem no scan ao vivo em cache miss e gravam o
+  resultado (auto-cura).
+- **Job diário (D-1, 03:00 UTC)**: novo pacote `jobs/refresh_event_cache.py`,
+  rodando como Cloud Run Job (`infra/terraform/modules/cloud-run-job`,
+  novo módulo) disparado por Cloud Scheduler — varre a união de
+  `hub_projects` (registro admin) com projetos "vistos" via cache miss
+  no request path (cobre acesso só-wildcard, que nunca ganha doc em
+  `hub_projects`). Roda com a **mesma SA de runtime** do Cloud Run
+  Service correspondente (nunca uma nova), pra não reabrir onboarding
+  manual de IAM cross-project de nenhum cliente já liberado.
+- **Gatilho manual de admin**: `POST /api/v1/admin/event-cache/refresh`
+  + botão "Atualizar cache agora" em Admin → Por projeto — dispara a
+  mesma execução completa do Job sob demanda via Cloud Run Admin API
+  (`core/run_client.py`). Cloud Run Jobs sempre exigem
+  `roles/run.invoker` (diferente do Service), então a SA de runtime do
+  backend só precisou desse IAM binding — sem segredo/token customizado.
+- **Timeout e memória do Cloud Run Service**: novo `timeout_seconds` no
+  módulo `cloud-run` (default 300, preserva os demais serviços);
+  `backend-{dev,prod}` sobem pra 600s/1Gi como rede de segurança do
+  fallback síncrono em cache miss.
+- Frontend: `cache_updated_at` nas 3 responses + badge "Cache atualizado
+  há Xh" (`CacheStalenessBadge.tsx`) em Lineage, Órfãs e Mapa de Acesso.
+- `docs/specs/lineage.md` bump pra v2.3 (primeira vez com seções
+  Critérios de aceite/Suposições/Perguntas em aberto); `docs/specs/access.md`
+  pra v1.1, referenciando o mecanismo compartilhado em vez de duplicá-lo.
+- Bootstrap (`infra/terraform/bootstrap/modules/wif-bootstrap`) ganhou
+  `cloudscheduler.googleapis.com` em `required_apis` e
+  `roles/storage.admin`/`roles/cloudscheduler.admin` nas roles do
+  deployer — **exige um `terraform apply` manual em
+  `infra/terraform/bootstrap` antes do próximo apply de
+  `environments/{dev,prod}`**, já que essas roles/APIs não existiam
+  antes desta mudança.
+
+### Mudanças de arquitetura
+- Decisão explícita (revisitada com o usuário durante a sessão):
+  descartada a alternativa de um Cloud Logging Sink no projeto-alvo
+  exportando pra BigQuery — violaria "o Hub nunca instala nada no
+  projeto alvo" (ADR-006) e trocaria a fonte de dados "custo $0"
+  documentada por queries BigQuery faturáveis. O cache faz o trabalho
+  inteiro dentro do projeto do próprio Hub, sem tocar em nenhum
+  projeto-alvo.
+- Cadência do job mudou de "a cada 15 min" (proposta inicial) para 1x/dia
+  D-1 — decisão do usuário, priorizando custo de execução sobre
+  frescor do dado; compensado pelo gatilho manual de admin pra quando
+  alguém precisar de um refresh imediato.
+
+### Erros cometidos e aprendizados
+- Primeira execução manual do Job em dev **derrubou o processo inteiro**
+  (`Container called exit(1)`) na primeira entrada de `hub_projects`/
+  "vistos" apontando pra um projeto inexistente (`inter-mta`, cliente
+  descontinuado) — `list_job_events` levantou `google.api_core.exceptions.NotFound`
+  (404), não `LoggingAccessDeniedError` (403), e `_refresh_project` só
+  tratava o segundo caso. Cloud Logging devolve 404 (não 403) quando a
+  SA do Hub não tem **nenhum** binding de IAM no projeto — caso
+  diferente de "tem algum acesso mas falta a role certa" (que já era
+  coberto). Corrigido capturando também `GoogleAPICallError` (cobre
+  `NotFound` e qualquer outro erro de API do Google) e, como rede de
+  segurança final, `Exception` genérica — nenhuma entrada obsoleta em
+  `hub_projects`/"vistos" pode voltar a derrubar o refresh dos demais
+  projetos. Adicionado teste de regressão rodando `main()` de ponta a
+  ponta com um projeto inexistente no meio da lista
+  (`test_main_processes_all_projects_even_when_one_does_not_exist`).
+- Segundo bug real, mais sério: usuário testou Lineage logo depois do
+  deploy e levou o **mesmo "Failed to fetch"** que esta mudança inteira
+  existe pra resolver — dessa vez em segundos, não minutos, e pra
+  qualquer projeto (inclusive `observability-hub-dev`, já consultado
+  com sucesso antes). Causa: `google_storage_bucket.event_cache` foi
+  criado, mas **nenhum IAM binding concedeu acesso a ele pra SA de
+  runtime do backend** — toda leitura/escrita do cache batia
+  `403 Forbidden`, e `event_cache.read_cache_bytes` só tratava
+  `NotFound` (cache miss legítimo), não `Forbidden`. A exceção não
+  tratada virava 500 sem headers de CORS (por isso `net::ERR_FAILED`
+  no browser, não um 500 "normal"). Pior: o Job de refresh **mascarou
+  esse mesmo bug** — a rede de segurança genérica adicionada no bug
+  anterior (`except GoogleAPICallError`/`except Exception`) capturou o
+  `Forbidden` de cada escrita e logou como aviso, então a execução do
+  Job aparecia como "Succeeded" no Console mesmo sem gravar nada de
+  verdade no cache. Corrigido em duas frentes: (1)
+  `google_storage_bucket_iam_member` concedendo `roles/storage.objectAdmin`
+  pra SA de runtime, nos dois ambientes (infra, causa raiz); (2)
+  `get_job_events_cached`/`get_access_events_cached` passaram a
+  capturar **qualquer** exceção ao ler/gravar o cache (não só
+  `NotFound`) e cair pro scan ao vivo — o cache nunca mais pode
+  transformar uma resposta que funcionaria em uma que quebra.
+  Aprendizado: ao adicionar um recurso de storage novo num
+  Terraform module, sempre conferir explicitamente se a SA que vai
+  *usá-lo em runtime* tem IAM sobre ele — criar o bucket não concede
+  acesso a ninguém por padrão, e um `except` genérico numa rede de
+  segurança de nível superior (o Job) pode esconder um bug de nível
+  inferior (a causa raiz) em vez de só conter danos, então esse tipo de
+  cobertura ampla não substitui monitorar o *conteúdo* dos logs, só a
+  ausência de crash.
+
+---
+
 ## Ajustes na aba "Uso do Hub" — remoção do ranking + funil em 4 estágios
 
 Dois ajustes pedidos pelo usuário depois de revisar a v1.7 em produção:

@@ -139,6 +139,14 @@ coberto em [`docs/onboarding-cliente.md`](../onboarding-cliente.md).
   `gh-deploy-prod`)
 - 1 bucket GCS de remote state do Terraform, isolado por `prefix`
   (`environments/dev`/`environments/prod`)
+- 1 bucket GCS de cache de audit log por ambiente (`{PROJETO}-hub-cache-dev`/
+  `-prod`, ver `docs/specs/lineage.md`) + 1 Cloud Run Job por ambiente
+  (`backend-{env}-refresh-cache`, mesma imagem do backend) + 1 Cloud
+  Scheduler job (1x/dia, D-1) que dispara o Job — tudo criado
+  automaticamente pelo `terraform apply` do passo 9, sem passo manual
+  adicional (a role do bucket pra SA de runtime do backend também é
+  Terraform, `google_storage_bucket_iam_member` em cada
+  `environments/{dev,prod}/main.tf`)
 
 ```
 GitHub (push) → GitHub Actions (WIF, sem chave) → Terraform apply
@@ -609,7 +617,9 @@ dele mesmo), siga [`docs/onboarding-cliente.md`](../onboarding-cliente.md).
     required reviewers (passo 8.1) — sem isso os deploys de app em prod
     não têm gate nenhum
 [ ] Primeiro apply de environments/dev confirmado com sucesso (cria
-    backend-dev, frontend-dev, repo apps, Firestore database "hub-dev")
+    backend-dev, frontend-dev, repo apps, Firestore database "hub-dev",
+    bucket de cache de audit log, Cloud Run Job de refresh e Cloud
+    Scheduler — os três últimos sem passo manual adicional)
 [ ] roles/datastore.user + roles/secretmanager.secretAccessor + roles/bigquery.jobUser
     concedidas às DUAS service accounts de backend (backend-dev-run,
     backend-prod-run)

@@ -14,6 +14,12 @@ export const ADMIN_PROJECTS_QUERY_KEY = ['admin-projects']
 export const ADMIN_GROUPS_QUERY_KEY = ['admin-groups']
 export const ADMIN_ACCESS_REQUESTS_QUERY_KEY = ['admin-access-requests']
 
+export function useRefreshEventCache() {
+  return useMutation({
+    mutationFn: adminApi.refreshEventCache,
+  })
+}
+
 export function useHubUsers() {
   return useQuery({
     queryKey: ADMIN_USERS_QUERY_KEY,

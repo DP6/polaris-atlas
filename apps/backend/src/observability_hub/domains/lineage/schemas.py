@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel
@@ -39,6 +40,10 @@ class LineageGraphResponse(BaseModel):
     max_hops: int
     truncated: bool
     warning: str | None = None
+    # None = dado veio ao vivo nesta chamada (cache miss); preenchido =
+    # veio do cache pré-computado (job periódico ou fallback de outra
+    # requisição), ver domains/lineage/repository.py::get_job_events_cached.
+    cache_updated_at: datetime | None = None
 
 
 class OrphanTable(BaseModel):
@@ -53,3 +58,4 @@ class OrphansResponse(BaseModel):
     orphans: list[OrphanTable]
     lookback_days: int
     warning: str | None = None
+    cache_updated_at: datetime | None = None

@@ -1,7 +1,8 @@
 # Spec — Domínio: Lineage e tabelas órfãs
 
-**Versão:** 2.2 (custo de storage estimado em /orphans, absorvendo
-"Tabelas sem uso" de `docs/specs/finops-waste-scanner.md`)
+**Versão:** 2.3 (cache pré-computado de audit log, job diário D-1 +
+gatilho manual de admin — resolve "Failed to fetch" recorrente nestas
+telas)
 **Status:** Aprovada
 **Fase:** 3 — Sprint 3.2 (lineage e órfãos)
 **Última atualização:** 2026-08-25
@@ -267,6 +268,80 @@ filtrando `ref[0] == project_id`.
 
 ---
 
+## Cache pré-computado de audit log (v2.3)
+
+**Motivação**: `list_job_events` (e o equivalente em `domains/access`)
+escaneava Cloud Logging **a cada requisição**, sem limite de resultados,
+para toda a janela de 30 dias — em projetos com volume real de audit log
+(uso de BigQuery numa organização inteira), isso podia estourar o
+timeout do Cloud Run (300s, sem override até esta versão) ou a memória
+do container, e o Cloud Run derruba a conexão TCP nesses casos em vez de
+devolver um erro HTTP — o browser reporta isso como `TypeError: Failed
+to fetch`, sem status e sem mensagem útil. Era o problema real por trás
+de "failed to fetch" recorrente em Lineage, Órfãs e Mapa de Acesso.
+
+**Mecanismo**: um Cloud Run Job (`apps/backend/src/observability_hub/jobs/refresh_event_cache.py`,
+infra em `infra/terraform/modules/cloud-run-job`) roda 1x/dia (D-1, cron
+`"0 3 * * *"` UTC via Cloud Scheduler) e, para cada projeto conhecido
+(`domains/admin` `hub_projects` ∪ projetos vistos via cache miss, ver
+`core/event_cache.py::list_seen_projects`), chama as mesmas funções de
+scan já existentes (`list_job_events`/`list_access_events`, inalteradas)
+e grava o resultado num cache compartilhado:
+- Payload grande (lista de eventos serializada) → bucket GCS dedicado
+  (`google_storage_bucket.event_cache`, `environments/{dev,prod}/main.tf`)
+  — Firestore tem limite de 1MiB/doc, facilmente ultrapassado em 30 dias
+  de audit log de um projeto com uso real. A SA de runtime do backend
+  precisa de `roles/storage.objectAdmin` **no bucket** (não vem de
+  graça por estarem no mesmo projeto —
+  `google_storage_bucket_iam_member.event_cache_runtime_access`, ver
+  ASM-006); sem isso, toda leitura/escrita levanta `Forbidden`.
+- Metadado pequeno (`cached_at`, contagem de eventos) → Firestore
+  (`core/event_cache.py`, mesmo padrão de dado derivado de
+  `domains/quality/history_repository.py`).
+
+O request path (`domains/lineage/repository.py::get_job_events_cached`,
+`domains/access/repository.py::get_access_events_cached`) tenta o cache
+primeiro; em **cache miss** (projeto nunca varrido ainda) faz o scan
+síncrono de hoje como fallback e grava o resultado — auto-cura: só a
+primeira consulta de um projeto novo continua exposta ao cenário antigo.
+Qualquer falha ao ler ou gravar o cache (não só cache miss — ex: bucket
+sem permissão, GCS fora do ar) é capturada e ignorada nesse ponto,
+sempre caindo pro scan ao vivo: o cache é uma otimização, nunca pode ser
+a causa de uma resposta quebrar (ver ASM-006, causa raiz de uma
+regressão real do "Failed to fetch" que esta mesma versão introduziu).
+
+`list_job_events` não carrega timestamp por evento — por isso o cache só
+é usado quando chamado com `lookback_days` igual ao default do módulo
+(30). `get_table_lineage`/BFS transitivo nunca variam esse parâmetro
+(sempre elegíveis ao cache); `/orphans?lookback_days=<custom>` ignora o
+cache e cai no scan síncrono.
+
+**Gatilho manual**: `POST /api/v1/admin/event-cache/refresh`
+(admin-only) dispara a mesma execução completa do Job sob demanda, sem
+esperar o ciclo diário — usado pelo botão "Atualizar cache agora" em
+Admin → Por projeto. Cloud Run Jobs exigem `roles/run.invoker` pra
+serem executados (diferente do Service, que usa
+`invoker_iam_disabled=true`); tanto a SA dedicada do Scheduler quanto a
+própria SA de runtime do backend têm essa role sobre o Job, então o
+gatilho manual não precisa de nenhum segredo/token customizado.
+
+O Job roda com a **mesma SA de runtime do Cloud Run Service**
+correspondente (`backend-dev-run`/`backend-prod-run`) — nunca uma SA
+nova, porque é essa identidade que já tem `roles/logging.privateLogViewer`
+concedida manualmente em cada projeto-alvo onboardado
+(`docs/onboarding-cliente.md`). Nenhum recurso novo é criado em nenhum
+projeto-alvo/cliente — bucket, Job e Scheduler vivem só no projeto do
+próprio Hub, preservando "o Hub nunca instala nada no projeto alvo"
+(ADR-006).
+
+`GET .../{dataset_id}/{table_id}`, `GET .../orphans` e
+`GET /api/v1/access/.../{table_id}` ganham `cache_updated_at: datetime | None`
+na resposta — `null` quando o dado veio ao vivo nesta própria chamada
+(cache miss), preenchido com o timestamp da última execução do Job (ou
+da última escrita via fallback) quando veio do cache.
+
+---
+
 ## Estrutura de arquivos
 
 ```
@@ -275,15 +350,22 @@ apps/backend/src/observability_hub/
 │   └── lineage.py         # GET /lineage/{project_id}/{dataset_id}/{table_id}, /orphans
 ├── core/
 │   ├── exceptions.py      # LoggingAccessDeniedError
-│   └── logging_client.py  # get_logging_client()
+│   ├── logging_client.py  # get_logging_client()
+│   ├── event_cache.py     # cache genérico (GCS + Firestore), compartilhado com domains/access
+│   └── run_client.py      # Cloud Run Admin API (gatilho manual de admin)
 ├── domains/lineage/
 │   ├── __init__.py
 │   ├── service.py         # BFS bidirecional, cache por projeto, merge
-│   ├── repository.py      # list_job_events(), list_all_table_refs() — inalterado
+│   ├── repository.py      # list_job_events() (scan ao vivo, inalterado) + get_job_events_cached()/write_job_events_cache()
 │   └── schemas.py         # LineageNode, LineageEdge, LineageGraphResponse, TableRef, OrphanTable, OrphansResponse
-└── tests/unit/lineage/
-    ├── test_service.py
-    └── test_repository.py
+├── jobs/
+│   └── refresh_event_cache.py  # entrypoint do Cloud Run Job (1x/dia + gatilho manual)
+└── tests/unit/
+    ├── core/test_event_cache.py
+    ├── jobs/test_refresh_event_cache.py
+    └── lineage/
+        ├── test_service.py
+        └── test_repository.py
 ```
 
 ---
@@ -302,6 +384,46 @@ apps/backend/src/observability_hub/
 | Job repetido diariamente na janela (mesma aresta) | Deduplicada — uma aresta por par `(source, target)`, não uma por job |
 | Nenhum evento de job no projeto raiz | `warning` populado (mesmo texto/causas da v1), `nodes`/`edges` vazios |
 | `max_hops` fora do intervalo 1–15 | HTTP 422 (validação do `Query(ge=1, le=15)`) |
+| Projeto nunca varrido pelo Job (cache miss) | Fallback síncrono (scan ao vivo), resultado gravado no cache pra próxima chamada — `cache_updated_at: null` só nesta resposta |
+| `lookback_days` custom em `/orphans` | Cache ignorado (sempre scan ao vivo) — `JobEvent` não carrega timestamp por evento, não dá pra recortar um cache de 30 dias pra outra janela |
+| Job falha num projeto (acesso negado, projeto inexistente/descontinuado, ou qualquer outro erro) | Logado e pulado — não derruba o refresh dos demais projetos conhecidos |
+| Admin dispara o gatilho manual enquanto o ciclo diário já está rodando | Duas execuções do Job em paralelo — sem deduplicação na v1, ambas terminam gravando o mesmo resultado (idempotente) |
+
+---
+
+## Critérios de aceite
+
+| ID | Comportamento | Testado em |
+|---|---|---|
+| AC-001 | Cache hit não chama `client.list_entries` (Cloud Logging) | `test_get_job_events_cached_returns_cache_hit_without_calling_list_entries` |
+| AC-002 | Cache miss faz o scan ao vivo e grava o resultado no cache antes de retornar | `test_get_job_events_cached_falls_back_and_writes_cache_on_miss` |
+| AC-003 | `lookback_days` diferente do default do módulo sempre ignora o cache | `test_get_job_events_cached_ignores_cache_for_non_default_lookback` |
+| AC-004 | O job de refresh cobre a união de `hub_projects` e projetos vistos via cache miss | `test_known_projects_unions_hub_projects_and_seen_projects` |
+| AC-005 | Falha em um projeto durante o refresh (acesso negado, projeto inexistente, ou qualquer erro inesperado) não interrompe os demais | `test_refresh_project_skips_project_without_logging_access`, `test_refresh_project_skips_project_that_does_not_exist`, `test_refresh_project_skips_project_on_unexpected_error`, `test_main_processes_all_projects_even_when_one_does_not_exist` |
+| AC-006 | Gatilho manual de admin chama a Cloud Run Admin API com o nome de Job do ambiente atual | `test_trigger_event_cache_refresh_calls_run_client_with_environment_job_name` |
+| AC-007 | Falha ao ler o cache (qualquer exceção, não só cache miss) cai pro scan ao vivo em vez de propagar | `test_get_job_events_cached_falls_back_to_live_scan_when_cache_read_fails` |
+| AC-008 | Falha ao gravar o cache não impede a resposta de conter o resultado do scan ao vivo já feito | `test_get_job_events_cached_returns_live_data_when_cache_write_fails` |
+
+---
+
+## Suposições
+
+| ID | Suposição | Status |
+|---|---|---|
+| ASM-001 | GCS (não Firestore) para o payload de eventos — Firestore tem limite de 1MiB/doc, facilmente ultrapassado por 30 dias de audit log num projeto com uso real de BigQuery numa org inteira | confirmada com o usuário durante a implementação |
+| ASM-002 | Job roda com a mesma SA de runtime do Cloud Run Service (nunca uma SA nova) — evita reabrir o onboarding manual de IAM cross-project (`docs/onboarding-cliente.md`) de todo cliente já liberado | confirmada |
+| ASM-003 | `hub_projects` não é uma lista exaustiva de projetos consultados (acesso via wildcard `"*"` não gera doc lá) — por isso o job também cobre projetos "vistos" via cache miss no request path | confirmada, documentado em `core/event_cache.py::list_seen_projects` |
+| ASM-004 | Gatilho manual de admin não precisa de deduplicação de execuções concorrentes na v1 — o resultado é idempotente (regrava o mesmo cache), então uma segunda execução em paralelo não corrompe nada, só desperdiça uma chamada a mais | confirmada |
+| ASM-005 | Cloud Logging devolve `404 NotFound` (não `403 Forbidden`) quando a SA do Hub não tem **nenhum** binding de IAM no projeto — diferente de "tem acesso mas falta a role certa" (`LoggingAccessDeniedError`). `hub_projects`/"vistos" podem conter entradas obsoletas (projeto descontinuado/renomeado); o job trata os dois casos (e qualquer outro erro de API) como "pula e segue" | confirmada em produção — causou `Container called exit(1)` na primeira execução real do job em dev, ver CHANGELOG |
+| ASM-006 | O bucket do cache não concede acesso a nenhuma SA por padrão só por estar no mesmo projeto — a SA de runtime do backend precisa de um `google_storage_bucket_iam_member` explícito (`roles/storage.objectAdmin`); sem ele, `read_cache_bytes`/`write_cache_bytes` levantam `Forbidden`, não capturado pelo `except NotFound` original. `get_job_events_cached`/`get_access_events_cached` passaram a capturar qualquer exceção (não só `NotFound`) ao redor do read/write do cache, caindo pro scan ao vivo | confirmada em produção — causou um "Failed to fetch" novo (mais rápido, HTTP 500 sem CORS) na primeira consulta real pós-deploy, ver CHANGELOG |
+
+## Perguntas em aberto
+
+| ID | Pergunta | Status | Resposta |
+|---|---|---|---|
+| Q-001 | Intervalo de refresh do job periódico? | respondida | 1x/dia (D-1), às 03:00 UTC — não 15 minutos como cogitado inicialmente, para manter o custo de execução baixo |
+| Q-002 | O gatilho manual de admin deve permitir escolher um projeto específico, ou sempre atualizar todos de uma vez? | respondida | Sempre todos de uma vez — mais simples de operar; refresh por projeto individual fica como possível extensão futura |
+| Q-003 | Vale adicionar um cap total de eventos (`max_results`) no scan ao vivo, como defesa adicional além do cache? | aberta | — |
 
 ---
 

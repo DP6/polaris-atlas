@@ -21,3 +21,4 @@ class TableAccessResponse(BaseModel):
     lookback_days: int
     users: list[TableAccessEntry]
     warning: str | None = None
+    cache_updated_at: datetime | None = None

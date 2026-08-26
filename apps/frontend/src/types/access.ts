@@ -15,4 +15,5 @@ export interface TableAccessResponse {
   lookback_days: number
   users: TableAccessEntry[]
   warning: string | null
+  cache_updated_at: string | null
 }

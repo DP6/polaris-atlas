@@ -16,6 +16,14 @@ module "backend_cloud_run" {
   # frontend-prod) reaproveitam via manage_artifact_registry = false.
   manage_artifact_registry = false
 
+  # Override do default do módulo (300s/512Mi): lineage/acesso/órfãs
+  # dependem de um fallback síncrono em cache miss (scan completo de
+  # audit log via Cloud Logging, ver docs/specs/lineage.md) que pode
+  # estourar o timeout/memória default do Cloud Run — causa raiz
+  # original do "Failed to fetch" nessas telas.
+  timeout_seconds = 600
+  memory          = "1Gi"
+
   # Ambiente de prod: protege o serviço contra destroy acidental.
   deletion_protection = true
   # Backend não fica atrás do IAP: o frontend chama via fetch() cross-site,
@@ -41,6 +49,12 @@ module "backend_cloud_run" {
     # indicada pela TI ao autorizar a delegação, ver
     # docs/onboarding-cliente.md (2026-08-25).
     OBSERVABILITY_HUB_WORKSPACE_IMPERSONATE_EMAIL = "admin.victoria@dp6.com.br"
+    # Usados só pelo gatilho manual de admin (domains/admin::
+    # trigger_event_cache_refresh, ver core/run_client.py) pra endereçar o
+    # Cloud Run Job de refresh do cache — e pelo cache em si
+    # (core/event_cache.py) pra saber onde gravar/ler o payload de eventos.
+    OBSERVABILITY_HUB_REGION                  = var.region
+    OBSERVABILITY_HUB_EVENT_CACHE_BUCKET_NAME = google_storage_bucket.event_cache.name
   }
 }
 
@@ -81,4 +95,69 @@ resource "google_firestore_database" "hub" {
   # Ambiente de prod: protege contra destroy acidental do banco inteiro.
   delete_protection_state = "DELETE_PROTECTION_ENABLED"
   deletion_policy         = "ABANDON"
+}
+
+# Bucket dedicado ao cache de audit log de lineage/access
+# (core/event_cache.py) — ver comentário equivalente em
+# environments/dev/main.tf. Dado 100% recomputável (o job de refresh
+# regrava do zero todo dia) — sem necessidade de deletion_protection,
+# mas force_destroy=false por padrão de prod (nada aqui depende de
+# destroy rápido/sem fricção como em dev).
+resource "google_storage_bucket" "event_cache" {
+  name                        = "${var.project_id}-hub-cache-prod"
+  project                     = var.project_id
+  location                    = var.region
+  uniform_bucket_level_access = true
+  force_destroy               = false
+
+  lifecycle_rule {
+    condition {
+      age = 2
+    }
+    action {
+      type = "Delete"
+    }
+  }
+
+  labels = {
+    environment = "prod"
+    managed-by  = "terraform"
+  }
+}
+
+# Bucket não concede acesso a nenhuma SA por padrão — a SA de runtime do
+# backend (mesma usada pelo Service e pelo Job, ver módulo cloud-run-job)
+# precisa desse binding explícito pra ler/escrever o cache
+# (core/event_cache.py). Faltou na v2.3 original: causou 403 Forbidden
+# não tratado (só NotFound era capturado) em toda leitura/escrita de
+# cache, um "Failed to fetch" novo e mais rápido que o original.
+resource "google_storage_bucket_iam_member" "event_cache_runtime_access" {
+  bucket = google_storage_bucket.event_cache.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${module.backend_cloud_run.runtime_service_account_email}"
+}
+
+# Job periódico (1x/dia, D-1) que popula o cache acima — ver
+# infra/terraform/modules/cloud-run-job e
+# apps/backend/src/observability_hub/jobs/refresh_event_cache.py.
+module "backend_event_cache_job" {
+  source = "../../modules/cloud-run-job"
+
+  project_id  = var.project_id
+  region      = var.region
+  environment = "prod"
+  job_name    = "backend-prod-refresh-cache"
+  image       = var.backend_image
+  command     = ["python", "-m", "observability_hub.jobs.refresh_event_cache"]
+
+  service_account               = module.backend_cloud_run.runtime_service_account_email
+  backend_service_account_email = module.backend_cloud_run.runtime_service_account_email
+  scheduler_service_account_id  = "backend-prod-cache-sched"
+
+  env = {
+    OBSERVABILITY_HUB_ENVIRONMENT             = "prod"
+    OBSERVABILITY_HUB_REGION                  = var.region
+    OBSERVABILITY_HUB_EVENT_CACHE_BUCKET_NAME = google_storage_bucket.event_cache.name
+    OBSERVABILITY_HUB_RUNTIME_SA_EMAIL        = module.backend_cloud_run.runtime_service_account_email
+  }
 }

@@ -2,6 +2,7 @@ import { Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { CacheStalenessBadge } from '@/components/CacheStalenessBadge'
 import { DatasetScopeGate } from '@/components/DatasetScopeGate'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SortableTableHead } from '@/components/SortableTableHead'
@@ -164,10 +165,13 @@ export function OrphansPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold">Tabelas sem consumidor</h1>
-          <p className="text-sm text-muted-foreground">
-            {data.orphans.length} tabelas sem consumidor conhecido nos últimos {data.lookback_days}{' '}
-            dias
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm text-muted-foreground">
+              {data.orphans.length} tabelas sem consumidor conhecido nos últimos{' '}
+              {data.lookback_days} dias
+            </p>
+            <CacheStalenessBadge cacheUpdatedAt={data.cache_updated_at} />
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setHasRun(false)}>

@@ -11,6 +11,9 @@ locals {
     "secretmanager.googleapis.com",
     "logging.googleapis.com",
     "firestore.googleapis.com",
+    # Cloud Scheduler dispara o Cloud Run Job de refresh do cache de audit
+    # log (lineage/access) 1x/dia — infra/terraform/modules/cloud-run-job.
+    "cloudscheduler.googleapis.com",
   ]
 
   # Papéis do SA de deploy: cobre exatamente os módulos já planejados em
@@ -40,6 +43,11 @@ locals {
     # (gcp-ci-polaris@dp6.com.br) em vez das SAs de deploy — faltava aqui e
     # causou falha em CI (Error 403 em Plan/Apply dev, PR #1).
     "roles/iap.admin",
+    # Necessário pro google_storage_bucket.event_cache (cache de audit log
+    # de lineage/access, ver environments/{dev,prod}/main.tf) e pelo
+    # google_cloud_scheduler_job do módulo cloud-run-job.
+    "roles/storage.admin",
+    "roles/cloudscheduler.admin",
   ]
 
   # Cada par (ambiente, role) vira uma google_project_iam_member — flatten

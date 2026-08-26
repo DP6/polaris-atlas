@@ -112,7 +112,7 @@ Nunca remova um sufixo de ambiente de um nome de recurso "pra simplificar" — s
 │       └── public/
 ├── infra/terraform/
 │   ├── bootstrap/                # Recursos fundacionais: bucket de state, pool WIF (apply manual, uma vez)
-│   ├── modules/                  # Módulos reutilizáveis (cloud-run, bigquery, artifact-registry, secret-manager, logging-sink)
+│   ├── modules/                  # Módulos reutilizáveis (cloud-run, cloud-run-job, bigquery, artifact-registry, secret-manager, logging-sink)
 │   └── environments/
 │       ├── dev/                  # Root module do ambiente dev, consome modules/
 │       └── prod/                 # Root module do ambiente prod, consome modules/
