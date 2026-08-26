@@ -140,6 +140,10 @@ def upsert_project(
     return HubProject(**raw)
 
 
+def delete_project(client: firestore.Client, project_id: str) -> None:
+    repository.delete_project(client, project_id)
+
+
 def get_project_users(client: firestore.Client, project_id: str) -> ProjectUsersResponse:
     project = repository.get_project(client, project_id)
     is_public = bool(project and project.get("is_public"))
@@ -234,20 +238,27 @@ def list_workspace_groups() -> WorkspaceGroupsListResponse:
 
 
 def create_access_requests(
-    client: firestore.Client, email: str, project_ids: list[str]
+    client: firestore.Client, email: str, project_ids: list[str], request_type: str = "access"
 ) -> AccessRequestsListResponse:
     """Pula project_id que o usuário já tem acesso (has_project_access)
-    e project_id com pedido pending já existente do mesmo usuário —
-    nunca cria pedido redundante."""
+    e project_id com pedido pending já existente do mesmo usuário e
+    mesmo request_type — nunca cria pedido redundante. request_type
+    "access" = pedir acesso a um projeto já onboardado no Hub;
+    "inclusion" = pedir que o projeto seja registrado no Hub (assume que
+    o onboarding real no GCP já foi feito fora daqui) — aprovar um
+    pedido "inclusion" também registra o projeto, ver
+    _resolve_access_request."""
     email = _normalize_email(email)
     now = datetime.now(UTC)
     created: list[dict] = []
     for project_id in project_ids:
         if has_project_access(client, email, project_id):
             continue
-        if repository.has_pending_request(client, email, project_id):
+        if repository.has_pending_request(client, email, project_id, request_type):
             continue
-        created.append(repository.create_access_request(client, email, project_id, now))
+        created.append(
+            repository.create_access_request(client, email, project_id, now, request_type)
+        )
     return AccessRequestsListResponse(requests=[AccessRequest(**r) for r in created])
 
 
@@ -266,6 +277,13 @@ def _resolve_access_request(
         raise AccessRequestNotFoundError(request_id)
 
     if status == "approved":
+        if existing.get("request_type", "access") == "inclusion":
+            # Pedido de inclusão: registra o projeto (assume que o admin
+            # já fez o onboarding real no GCP fora do Hub antes de
+            # aprovar) e libera o solicitante, os dois num clique só.
+            repository.upsert_project(
+                client, existing["project_id"], is_public=False, updated_by=resolved_by
+            )
         grant_project_to_user(client, existing["project_id"], existing["email"], resolved_by)
 
     raw = repository.update_access_request_status(

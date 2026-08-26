@@ -1,9 +1,10 @@
 # Spec — Domínio: Admin (controle de acesso por usuário × projeto)
 
-**Versão:** 1.8 (remoção do ranking de domínios, funil de retenção em 4 estágios)
+**Versão:** 1.9 (apagar projeto, checklist de onboarding best-effort,
+solicitação de inclusão de projeto novo — `request_type` em `access_requests`)
 **Status:** Aprovada
 **Fase:** Transversal (não faz parte do roadmap de observabilidade de `docs/prd.md`) — plataforma
-**Última atualização:** 2026-08-25
+**Última atualização:** 2026-08-26
 
 ---
 
@@ -137,6 +138,16 @@ coleção inteira) e marca cada resultado como `granted_via: "explicit"`
 ou `"wildcard"`. **Não inclui acesso concedido via grupo** (v1.4,
 abaixo) — só os dois eixos que já existiam quando este endpoint foi
 escrito; ver "Fora do escopo desta versão".
+
+### Apagar projeto (v1.9)
+
+`DELETE /api/v1/admin/projects/{project_id}` — remove só o doc
+`hub_projects/{project_id}` (`repository.delete_project`, mirror exato
+de `delete_group`). **Não cascateia**: `allowed_projects` de usuários e
+grupos que já citavam esse `project_id` continuam intactos até alguém
+revogar manualmente em "Por usuário"/"Grupos" — mesmo racional de "dois
+eixos independentes" do resto desta seção. Sem confirmação modal na UI,
+mesmo padrão do botão de revogar acesso em `ProjectUsersDetail`.
 
 ---
 
@@ -286,7 +297,7 @@ pra grupos — grupos não carregam status de admin, só acesso a projeto.
 
 ---
 
-## Solicitação de acesso (`access_requests`, v1.1)
+## Solicitação de acesso (`access_requests`, v1.1; `request_type` na v1.9)
 
 Qualquer usuário autenticado (não precisa ser admin) pode pedir acesso a
 uma lista de `project_id` — `POST /api/v1/access-requests` (fora do
@@ -299,6 +310,7 @@ de quem ainda não tem acesso a nada). Cria um doc por `project_id` em
   "request_id": "abc123",
   "email": "consultor.b@dp6.com.br",
   "project_id": "client-c-project",
+  "request_type": "access",
   "status": "pending",
   "requested_at": "2026-08-20T10:00:00Z",
   "resolved_at": null,
@@ -309,7 +321,9 @@ de quem ainda não tem acesso a nada). Cria um doc por `project_id` em
 `create_access_requests` filtra automaticamente: pula `project_id` que
 o usuário já tem acesso (`has_project_access`, já considera `hub_projects`
 e wildcard) e pula `project_id` com pedido `pending` já existente do
-mesmo usuário — nunca cria pedido redundante.
+mesmo usuário **e mesmo `request_type`** — nunca cria pedido redundante,
+mas um "access" e um "inclusion" pendentes pro mesmo projeto não se
+bloqueiam entre si (efeitos diferentes na aprovação, ver abaixo).
 
 Admin vê pendências na aba "Solicitações" de `/admin` (mais um badge
 discreto no ícone de admin do Topbar, com contador — `usePendingAccessRequests`
@@ -318,6 +332,59 @@ no frontend, `refetchInterval` de 60s, sem WebSocket) e aprova/nega:
 `grant_project_to_user` usada na aba "Por projeto") e marca
 `status="approved"`; negar só marca `status="denied"`, sem conceder
 nada.
+
+### `request_type` (v1.9): "access" vs. "inclusion"
+
+`request_type: "access"` (default — cobre também docs antigos no
+Firestore, gravados antes deste campo existir) é o fluxo original acima:
+o projeto já está onboardado no Hub, o usuário só precisa de um grant
+individual.
+
+`request_type: "inclusion"` cobre o caso em que o projeto **não está
+onboardado** — o seletor de projeto (`ProjectSelector.tsx`) oferece essa
+opção quando a validação (`GET /api/v1/projects/{id}/validate`) devolve
+`access_denied` (SA do Hub sem IAM no projeto-alvo) ou `project_not_found`
+(404) — os dois casos ganham a mesma CTA "Solicitar inclusão no Hub",
+já que o usuário comum não consegue diferenciá-los; o admin investiga
+qual é qual ao revisar o pedido (ver "Checklist de onboarding" abaixo).
+
+Aprovar (`_resolve_access_request`) um pedido `"inclusion"` faz **dois
+passos num clique só**: `repository.upsert_project(project_id, is_public=False)`
+(registra o projeto em `hub_projects`) seguido de `grant_project_to_user`
+(libera o solicitante) — pressupõe que o admin já fez o onboarding real
+no GCP (`docs/onboarding-cliente.md`) fora do Hub antes de clicar
+aprovar. Negar um pedido `"inclusion"` não registra nada, igual ao fluxo
+`"access"`.
+
+---
+
+## Checklist de onboarding (best-effort, v1.9)
+
+`GET /api/v1/admin/projects/{project_id}/checklist` (admin-only) —
+`domains/admin/checklist_service.py::check_project_checklist` — ajuda o
+admin a confirmar que um projeto está pronto **antes** de registrá-lo em
+"Por projeto" ou de aprovar um pedido de inclusão. Reaproveitado nos
+dois pontos de uso pelo mesmo componente de frontend
+(`ProjectChecklistPanel.tsx`).
+
+**Best-effort de propósito**: confirmar de verdade que uma role IAM foi
+concedida exigiria ler a IAM policy do projeto-alvo
+(`resourcemanager.projects.getIamPolicy`), permissão que **não faz
+parte** do checklist de onboarding hoje. Em vez disso, cada item tenta a
+operação real (probing) e reporta se funcionou:
+
+| Item | Como verifica | Limitação |
+|---|---|---|
+| `bigquery` | Reaproveita `core/bigquery.py::discover_regions` — o mesmo probe que `validate_project` já faz | Nenhuma além das já conhecidas de `discover_regions` |
+| `logging` | `list_entries(resource_names=[...], page_size=1)` | **Não detecta** `logging.privateLogViewer` faltando — a chamada não falha, só devolve vazio (mesma ambiguidade já documentada em lineage/access) |
+| `storage` | `list_buckets(project=...)` | — |
+| `audit_logs` | Não verificável — sempre `not_checked` | Não é uma permissão de leitura de dado, é config do projeto; `detail` traz o comando `gcloud projects get-iam-policy` manual já usado no onboarding |
+
+Cada item devolve `status: "ok" | "denied" | "not_found" | "not_checked"`
++ `detail` (texto explicativo, inclusive a ressalva do `privateLogViewer`
+sempre presente no item `logging`, mesmo quando `ok`). Disparado só sob
+demanda (botão "Verificar checklist"), nunca automático — cada chamada
+faz 2-3 leituras reais no GCP.
 
 ---
 
@@ -550,6 +617,14 @@ Lista `hub_projects`, ordenados por `project_id`.
 Upsert — cria o projeto (registra pra aparecer na aba "Por projeto") ou
 atualiza `is_public`. Body: `{"is_public": true}`.
 
+### DELETE /api/v1/admin/projects/{project_id} (v1.9)
+Remove o doc `hub_projects/{project_id}` (idempotente). **Não cascateia**
+pra `allowed_projects` de usuários/grupos que já citavam esse projeto.
+
+### GET /api/v1/admin/projects/{project_id}/checklist (v1.9)
+Checklist best-effort do onboarding (BigQuery/Logging/Storage, probing
+real, sem exigir role nova) — ver seção "Checklist de onboarding" acima.
+
 ### GET /api/v1/admin/projects/{project_id}/users
 Quem tem acesso a este projeto — `is_public` + lista de
 `{email, is_admin, granted_via}` (explícito ou wildcard). Não lista
@@ -597,6 +672,8 @@ Lista `access_requests`, mais recente primeiro. `status` opcional
 
 ### POST /api/v1/admin/access-requests/{request_id}/approve
 Concede o projeto (via `grant_project_to_user`) e marca `status="approved"`.
+Se `request_type == "inclusion"`, registra o projeto primeiro
+(`upsert_project`, `is_public=False`) — ver "`request_type`" acima.
 404 (`AccessRequestNotFoundError`) se `request_id` não existir.
 
 ### POST /api/v1/admin/access-requests/{request_id}/deny
@@ -670,9 +747,10 @@ apps/backend/src/observability_hub/
 │                                # LastAdminLockoutError, AccessRequestNotFoundError (v1.1)
 ├── domains/
 │   ├── admin/                  # schemas, repository, service — hub_users + hub_projects (v1.1)
-│   │                           # + access_requests (v1.1)
+│   │                           # + access_requests (v1.1, request_type na v1.9)
 │   │                           # + analytics_{schemas,repository,service}.py (v1.2, +3 funções v1.3)
 │   │                           # + hub_groups (v1.4) — service.list_workspace_groups (v1.6)
+│   │                           # + checklist_service.py (v1.9) — checklist best-effort de onboarding
 │   ├── quality/history_repository.py  # + project_id/dataset_id/table_id no run (v1.2)
 │   ├── pii/history_repository.py      # novo (v1.3) — pii_scan_history/{doc}/scans
 │   └── auth/schemas.py         # UserInfo + is_admin
@@ -757,6 +835,41 @@ apps/frontend/src/
 | Usuário com mais de 20 tabelas vistas/buscas | Só as 20 mais recentes entram na agregação de navegação — janela recente, não histórico completo |
 | Cache hit num scan de PII repetido | Não grava novo doc em `pii_scan_history` — não houve execução real |
 | `collection_group("runs")` (profiling) vs PII | Nomes de subcoleção diferentes (`runs` vs `scans`) — sem risco de mistura na agregação |
+| Apagar um projeto que ainda tem grants explícitos em `hub_users`/`hub_groups` | Grants continuam intactos — `DELETE /admin/projects/{id}` só remove o doc `hub_projects`, não cascateia (dois eixos independentes) |
+| Apagar um projeto que estava `is_public=true` | Quem tinha acesso só por esse eixo perde o acesso (`has_project_access` não encontra mais o doc); grants explícitos/wildcard continuam valendo |
+| Checklist verificado num projeto sem `logging.privateLogViewer` (só `logging.viewer`) | Item `logging` reporta `"ok"` — o probe não distingue disso de "sem atividade", `detail` sempre traz essa ressalva |
+| Pedido `"inclusion"` aprovado pra um `project_id` que já tinha doc em `hub_projects` (registrado por outro caminho nesse meio-tempo) | `upsert_project` é idempotente — sobrescreve `is_public=False` (comportamento normal de upsert), sem erro |
+| Pedido `"access"` e pedido `"inclusion"` pendentes ao mesmo tempo, mesmo usuário e projeto | Coexistem — dedupe é por `(project_id, request_type)`, não só `project_id` |
+
+---
+
+## Critérios de aceite
+
+| ID | Comportamento | Testado em |
+|---|---|---|
+| AC-001 | Apagar um projeto remove só o doc `hub_projects`, sem afetar `allowed_projects` de usuários/grupos | `test_delete_project_delegates_to_repository` |
+| AC-002 | Checklist reaproveita `discover_regions` pro item BigQuery (mesmo probe de `validate_project`) | `test_check_project_checklist_all_ok`, `test_check_project_checklist_bigquery_denied`, `test_check_project_checklist_bigquery_not_found` |
+| AC-003 | Item `logging` do checklist reporta `denied`/`not_found`/`ok` conforme o probe, sempre com a ressalva do `privateLogViewer` no `detail` | `test_check_project_checklist_logging_denied`, `test_check_project_checklist_logging_not_found` |
+| AC-004 | Item `audit_logs` do checklist é sempre `not_checked`, com o comando manual no `detail` | `test_check_project_checklist_audit_logs_always_not_checked_with_command_detail` |
+| AC-005 | Criar um pedido de acesso sem especificar tipo assume `"access"` (compatibilidade com o fluxo original) | `test_create_access_requests_creates_for_new_project` |
+| AC-006 | Criar um pedido `"inclusion"` propaga o tipo pro dedupe e pro doc criado | `test_create_access_requests_passes_inclusion_type_through` |
+| AC-007 | Aprovar um pedido `"inclusion"` registra o projeto (`upsert_project`) **antes** de liberar o solicitante (`grant_project_to_user`) | `test_approve_inclusion_request_registers_project_and_grants_access` |
+| AC-008 | Aprovar um pedido `"access"` (default, sem `request_type` no doc) nunca chama `upsert_project` — regressão do comportamento original | `test_approve_access_request_grants_project_and_marks_approved` |
+
+## Suposições
+
+| ID | Suposição | Status |
+|---|---|---|
+| ASM-001 | Checklist não detecta `logging.privateLogViewer` faltando — só `logging.viewer` (mesma ambiguidade de lineage/access) | confirmada |
+| ASM-002 | Checklist não lê a IAM policy do projeto-alvo (probing, não introspecção) — não exige nenhuma role nova da SA do Hub além do que já está em `docs/onboarding-cliente.md` | confirmada |
+| ASM-003 | Apagar `hub_projects/{id}` não cascateia pra `allowed_projects` de usuários/grupos — mesmo racional de eixos independentes já documentado nesta spec | confirmada |
+| ASM-004 | `access_denied` e `project_not_found` no seletor de projeto ganham a mesma CTA de inclusão — usuário comum não distingue os dois casos, admin investiga ao revisar o pedido | confirmada com o usuário |
+
+## Perguntas em aberto
+
+| ID | Pergunta | Status | Resposta |
+|---|---|---|---|
+| Q-001 | Vale um botão de "desfazer" ou histórico de projetos apagados? | aberta | — |
 
 ---
 

@@ -299,12 +299,13 @@ def test_create_access_request_uses_auto_generated_doc_id():
     requests_collection.document.return_value = doc_ref
 
     now = datetime(2026, 8, 20, tzinfo=UTC)
-    result = repository.create_access_request(client, "a@dp6.com.br", "proj-a", now)
+    result = repository.create_access_request(client, "a@dp6.com.br", "proj-a", now, "access")
 
     requests_collection.document.assert_called_once_with()
     assert result["request_id"] == "auto-id-123"
     assert result["email"] == "a@dp6.com.br"
     assert result["project_id"] == "proj-a"
+    assert result["request_type"] == "access"
     assert result["status"] == "pending"
     assert result["requested_at"] == now
     doc_ref.set.assert_called_once_with(result)
@@ -343,11 +344,11 @@ def test_has_pending_request_true_when_match_found():
     filtered_query = MagicMock()
     requests_collection.where.return_value = filtered_query
     filtered_query.stream.return_value = [
-        _doc({"project_id": "proj-a", "status": "pending"}, True),
-        _doc({"project_id": "proj-b", "status": "denied"}, True),
+        _doc({"project_id": "proj-a", "status": "pending", "request_type": "access"}, True),
+        _doc({"project_id": "proj-b", "status": "denied", "request_type": "access"}, True),
     ]
 
-    assert repository.has_pending_request(client, "a@dp6.com.br", "proj-a") is True
+    assert repository.has_pending_request(client, "a@dp6.com.br", "proj-a", "access") is True
 
 
 def test_has_pending_request_false_when_no_match():
@@ -356,10 +357,40 @@ def test_has_pending_request_false_when_no_match():
     filtered_query = MagicMock()
     requests_collection.where.return_value = filtered_query
     filtered_query.stream.return_value = [
-        _doc({"project_id": "proj-b", "status": "pending"}, True),
+        _doc({"project_id": "proj-b", "status": "pending", "request_type": "access"}, True),
     ]
 
-    assert repository.has_pending_request(client, "a@dp6.com.br", "proj-a") is False
+    assert repository.has_pending_request(client, "a@dp6.com.br", "proj-a", "access") is False
+
+
+def test_has_pending_request_false_when_same_project_different_type():
+    """Um pedido "inclusion" pendente não bloqueia um novo pedido
+    "access" pro mesmo projeto (e vice-versa) — são pedidos com efeitos
+    diferentes na aprovação, dedupe é por (project_id, request_type)."""
+    client, collections = _fake_multi_collection_client()
+    requests_collection = collections["access_requests"]
+    filtered_query = MagicMock()
+    requests_collection.where.return_value = filtered_query
+    filtered_query.stream.return_value = [
+        _doc({"project_id": "proj-a", "status": "pending", "request_type": "inclusion"}, True),
+    ]
+
+    assert repository.has_pending_request(client, "a@dp6.com.br", "proj-a", "access") is False
+
+
+def test_has_pending_request_defaults_missing_request_type_to_access():
+    """Docs antigos no Firestore, gravados antes do campo request_type
+    existir, contam como "access" (default), não como um tipo diferente
+    que nunca faria match."""
+    client, collections = _fake_multi_collection_client()
+    requests_collection = collections["access_requests"]
+    filtered_query = MagicMock()
+    requests_collection.where.return_value = filtered_query
+    filtered_query.stream.return_value = [
+        _doc({"project_id": "proj-a", "status": "pending"}, True),
+    ]
+
+    assert repository.has_pending_request(client, "a@dp6.com.br", "proj-a", "access") is True
 
 
 def test_get_access_request_returns_none_when_missing():

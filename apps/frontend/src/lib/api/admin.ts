@@ -15,6 +15,7 @@ import type {
   NavigationAnalyticsResponse,
   PiiScanActivityResponse,
   ProfilingActivityResponse,
+  ProjectChecklistResponse,
   ProjectUsersResponse,
   RetentionFunnelResponse,
   UpsertHubGroupRequest,
@@ -43,6 +44,17 @@ export const adminApi = {
 
   upsertProject: (projectId: string, request: UpsertHubProjectRequest) =>
     httpClient.put<HubProject>(`/api/v1/admin/projects/${encodeURIComponent(projectId)}`, request),
+
+  removeProject: (projectId: string) =>
+    httpClient.delete<undefined>(`/api/v1/admin/projects/${encodeURIComponent(projectId)}`),
+
+  // Checklist best-effort do onboarding (BigQuery/Logging/Storage) —
+  // probing real de cada API, sem exigir nenhuma role nova da SA do Hub.
+  // Ver docs/specs/admin.md, "Checklist de onboarding".
+  getProjectChecklist: (projectId: string) =>
+    httpClient.get<ProjectChecklistResponse>(
+      `/api/v1/admin/projects/${encodeURIComponent(projectId)}/checklist`,
+    ),
 
   getProjectUsers: (projectId: string) =>
     httpClient.get<ProjectUsersResponse>(

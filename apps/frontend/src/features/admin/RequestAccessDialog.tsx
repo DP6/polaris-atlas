@@ -11,6 +11,7 @@ import {
 import { useCreateAccessRequests } from '@/features/admin/hooks'
 import { ProjectChipEditor } from '@/features/admin/ProjectChipEditor'
 import { ApiError } from '@/lib/http-client'
+import type { AccessRequestType } from '@/types/admin'
 
 interface RequestAccessDialogProps {
   open: boolean
@@ -19,16 +20,36 @@ interface RequestAccessDialogProps {
   // acesso" do ProjectSelector — poupa o usuário de digitar de novo o
   // project_id que acabou de tentar (e falhou).
   initialProjectId?: string
+  // "access" (default) = pedir acesso a um projeto já onboardado no Hub.
+  // "inclusion" = pedir que o projeto seja registrado no Hub — aprovar
+  // também registra o projeto, não só libera o solicitante (ver
+  // docs/specs/admin.md).
+  requestType?: AccessRequestType
+}
+
+const DIALOG_COPY: Record<AccessRequestType, { title: string; description: string }> = {
+  access: {
+    title: 'Solicitar acesso a projetos',
+    description: 'Um administrador do Hub vai revisar e liberar (ou negar) cada projeto listado.',
+  },
+  inclusion: {
+    title: 'Solicitar inclusão de projeto novo no Hub',
+    description:
+      'Um administrador vai confirmar que o projeto está pronto no GCP (roles concedidas, ' +
+      'ver checklist de onboarding) antes de registrá-lo no Hub e liberar seu acesso.',
+  },
 }
 
 export function RequestAccessDialog({
   open,
   onOpenChange,
   initialProjectId,
+  requestType = 'access',
 }: RequestAccessDialogProps) {
   const [projectIds, setProjectIds] = useState<string[]>([])
   const [submitted, setSubmitted] = useState(false)
   const createMutation = useCreateAccessRequests()
+  const copy = DIALOG_COPY[requestType]
 
   // Reset ao abrir — mesmo motivo de todo outro dialog deste domínio
   // (mutations do TanStack Query não limpam sozinhas).
@@ -49,17 +70,15 @@ export function RequestAccessDialog({
 
   function handleSubmit() {
     if (projectIds.length === 0) return
-    createMutation.mutate(projectIds, { onSuccess: () => setSubmitted(true) })
+    createMutation.mutate({ projectIds, requestType }, { onSuccess: () => setSubmitted(true) })
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Solicitar acesso a projetos</DialogTitle>
-          <DialogDescription>
-            Um administrador do Hub vai revisar e liberar (ou negar) cada projeto listado.
-          </DialogDescription>
+          <DialogTitle>{copy.title}</DialogTitle>
+          <DialogDescription>{copy.description}</DialogDescription>
         </DialogHeader>
 
         {submitted ? (

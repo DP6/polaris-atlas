@@ -1,10 +1,14 @@
 from fastapi import APIRouter, Depends, Query
-from google.cloud import firestore, run_v2
+from google.cloud import bigquery, firestore, run_v2, storage
+from google.cloud import logging as cloud_logging
 
 from observability_hub.core.auth import require_admin
+from observability_hub.core.bigquery import get_client
 from observability_hub.core.firestore import get_firestore_client
+from observability_hub.core.logging_client import get_logging_client
 from observability_hub.core.run_client import get_run_client
-from observability_hub.domains.admin import analytics_service, service
+from observability_hub.core.storage_client import get_storage_client
+from observability_hub.domains.admin import analytics_service, checklist_service, service
 from observability_hub.domains.admin.analytics_schemas import (
     AccessRequestAnalyticsResponse,
     FavoritesAnalyticsResponse,
@@ -25,6 +29,7 @@ from observability_hub.domains.admin.schemas import (
     HubProjectsListResponse,
     HubUser,
     HubUsersListResponse,
+    ProjectChecklistResponse,
     ProjectUsersResponse,
     UpsertHubGroupRequest,
     UpsertHubProjectRequest,
@@ -74,6 +79,26 @@ def upsert_project(
     client: firestore.Client = Depends(get_firestore_client),
 ) -> HubProject:
     return service.upsert_project(client, project_id, request, updated_by=admin_user.email)
+
+
+@router.delete("/projects/{project_id}", status_code=204)
+def delete_project(
+    project_id: str,
+    client: firestore.Client = Depends(get_firestore_client),
+) -> None:
+    service.delete_project(client, project_id)
+
+
+@router.get("/projects/{project_id}/checklist", response_model=ProjectChecklistResponse)
+def get_project_checklist(
+    project_id: str,
+    bq_client: bigquery.Client = Depends(get_client),
+    logging_client: cloud_logging.Client = Depends(get_logging_client),
+    storage_client: storage.Client = Depends(get_storage_client),
+) -> ProjectChecklistResponse:
+    return checklist_service.check_project_checklist(
+        bq_client, logging_client, storage_client, project_id
+    )
 
 
 @router.get("/projects/{project_id}/users", response_model=ProjectUsersResponse)

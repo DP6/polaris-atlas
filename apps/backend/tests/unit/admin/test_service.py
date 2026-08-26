@@ -508,6 +508,15 @@ def test_upsert_project_delegates_to_repository(monkeypatch):
     assert result.is_public is True
 
 
+def test_delete_project_delegates_to_repository(monkeypatch):
+    delete_mock = MagicMock()
+    monkeypatch.setattr(service.repository, "delete_project", delete_mock)
+
+    service.delete_project(_fake_client(), "proj-a")
+
+    assert delete_mock.call_args[0][1] == "proj-a"
+
+
 def test_get_project_users_marks_wildcard_vs_explicit(monkeypatch):
     monkeypatch.setattr(
         service.repository, "get_project", lambda client, project_id: {"is_public": False}
@@ -673,7 +682,9 @@ def test_list_workspace_groups_empty_when_integration_not_configured(monkeypatch
 def test_create_access_requests_skips_already_accessible_project(monkeypatch):
     monkeypatch.setattr(service, "has_project_access", lambda client, email, project_id: True)
     monkeypatch.setattr(
-        service.repository, "has_pending_request", lambda client, email, project_id: False
+        service.repository,
+        "has_pending_request",
+        lambda client, email, project_id, request_type: False,
     )
     create_mock = MagicMock()
     monkeypatch.setattr(service.repository, "create_access_request", create_mock)
@@ -687,7 +698,9 @@ def test_create_access_requests_skips_already_accessible_project(monkeypatch):
 def test_create_access_requests_skips_duplicate_pending(monkeypatch):
     monkeypatch.setattr(service, "has_project_access", lambda client, email, project_id: False)
     monkeypatch.setattr(
-        service.repository, "has_pending_request", lambda client, email, project_id: True
+        service.repository,
+        "has_pending_request",
+        lambda client, email, project_id, request_type: True,
     )
     create_mock = MagicMock()
     monkeypatch.setattr(service.repository, "create_access_request", create_mock)
@@ -701,14 +714,17 @@ def test_create_access_requests_skips_duplicate_pending(monkeypatch):
 def test_create_access_requests_creates_for_new_project(monkeypatch):
     monkeypatch.setattr(service, "has_project_access", lambda client, email, project_id: False)
     monkeypatch.setattr(
-        service.repository, "has_pending_request", lambda client, email, project_id: False
+        service.repository,
+        "has_pending_request",
+        lambda client, email, project_id, request_type: False,
     )
 
-    def fake_create(client, email, project_id, now):
+    def fake_create(client, email, project_id, now, request_type):
         return {
             "request_id": "r1",
             "email": email,
             "project_id": project_id,
+            "request_type": request_type,
             "status": "pending",
             "requested_at": now,
             "resolved_at": None,
@@ -722,6 +738,40 @@ def test_create_access_requests_creates_for_new_project(monkeypatch):
     assert len(result.requests) == 1
     assert result.requests[0].email == "a@dp6.com.br"
     assert result.requests[0].status == "pending"
+    assert result.requests[0].request_type == "access"
+
+
+def test_create_access_requests_passes_inclusion_type_through(monkeypatch):
+    monkeypatch.setattr(service, "has_project_access", lambda client, email, project_id: False)
+    captured = {}
+
+    def fake_has_pending(client, email, project_id, request_type):
+        captured["has_pending_request_type"] = request_type
+        return False
+
+    def fake_create(client, email, project_id, now, request_type):
+        captured["create_request_type"] = request_type
+        return {
+            "request_id": "r1",
+            "email": email,
+            "project_id": project_id,
+            "request_type": request_type,
+            "status": "pending",
+            "requested_at": now,
+            "resolved_at": None,
+            "resolved_by": None,
+        }
+
+    monkeypatch.setattr(service.repository, "has_pending_request", fake_has_pending)
+    monkeypatch.setattr(service.repository, "create_access_request", fake_create)
+
+    result = service.create_access_requests(
+        _fake_client(), "a@dp6.com.br", ["proj-a"], request_type="inclusion"
+    )
+
+    assert captured["has_pending_request_type"] == "inclusion"
+    assert captured["create_request_type"] == "inclusion"
+    assert result.requests[0].request_type == "inclusion"
 
 
 def test_list_access_requests_builds_response(monkeypatch):
@@ -760,6 +810,8 @@ def test_approve_access_request_grants_project_and_marks_approved(monkeypatch):
     )
     grant_mock = MagicMock()
     monkeypatch.setattr(service, "grant_project_to_user", grant_mock)
+    upsert_mock = MagicMock()
+    monkeypatch.setattr(service.repository, "upsert_project", upsert_mock)
 
     def fake_update(client, request_id, status, resolved_by, now):
         return {
@@ -777,8 +829,66 @@ def test_approve_access_request_grants_project_and_marks_approved(monkeypatch):
     result = service.approve_access_request(_fake_client(), "r1", resolved_by="admin@dp6.com.br")
 
     assert grant_mock.call_args[0][1:] == ("proj-a", "a@dp6.com.br", "admin@dp6.com.br")
+    # Pedido "access" (default, sem request_type no doc) nunca registra o
+    # projeto — só um pedido "inclusion" faz isso, ver teste abaixo.
+    upsert_mock.assert_not_called()
     assert result.status == "approved"
     assert result.resolved_by == "admin@dp6.com.br"
+
+
+def test_approve_inclusion_request_registers_project_and_grants_access(monkeypatch):
+    monkeypatch.setattr(
+        service.repository,
+        "get_access_request",
+        lambda client, request_id: {
+            "request_id": request_id,
+            "email": "a@dp6.com.br",
+            "project_id": "proj-a",
+            "request_type": "inclusion",
+            "status": "pending",
+            "requested_at": datetime(2026, 1, 1, tzinfo=UTC),
+            "resolved_at": None,
+            "resolved_by": None,
+        },
+    )
+    calls = []
+    monkeypatch.setattr(
+        service.repository,
+        "upsert_project",
+        lambda client, project_id, is_public, updated_by: calls.append(
+            ("upsert_project", project_id, is_public, updated_by)
+        ),
+    )
+    monkeypatch.setattr(
+        service,
+        "grant_project_to_user",
+        lambda client, project_id, email, updated_by: calls.append(
+            ("grant_project_to_user", project_id, email, updated_by)
+        ),
+    )
+    monkeypatch.setattr(
+        service.repository,
+        "update_access_request_status",
+        lambda client, request_id, status, resolved_by, now: {
+            "request_id": request_id,
+            "email": "a@dp6.com.br",
+            "project_id": "proj-a",
+            "request_type": "inclusion",
+            "status": status,
+            "requested_at": datetime(2026, 1, 1, tzinfo=UTC),
+            "resolved_at": now,
+            "resolved_by": resolved_by,
+        },
+    )
+
+    result = service.approve_access_request(_fake_client(), "r1", resolved_by="admin@dp6.com.br")
+
+    # upsert_project (registra o projeto) roda ANTES de grant_project_to_user
+    # (libera o solicitante) — um clique resolve os dois lados.
+    assert [c[0] for c in calls] == ["upsert_project", "grant_project_to_user"]
+    assert calls[0] == ("upsert_project", "proj-a", False, "admin@dp6.com.br")
+    assert calls[1] == ("grant_project_to_user", "proj-a", "a@dp6.com.br", "admin@dp6.com.br")
+    assert result.status == "approved"
 
 
 def test_deny_access_request_does_not_grant_project(monkeypatch):

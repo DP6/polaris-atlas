@@ -89,10 +89,17 @@ export interface ProjectUsersResponse {
 
 export type AccessRequestStatus = 'pending' | 'approved' | 'denied'
 
+// "access" = pedir acesso a um projeto já onboardado no Hub (fluxo
+// original); "inclusion" = pedir que o projeto seja registrado no Hub —
+// aprovar também registra o projeto (hub_projects), não só libera o
+// solicitante.
+export type AccessRequestType = 'access' | 'inclusion'
+
 export interface AccessRequest {
   request_id: string
   email: string
   project_id: string
+  request_type: AccessRequestType
   status: AccessRequestStatus
   requested_at: string
   resolved_at: string | null
@@ -105,6 +112,21 @@ export interface AccessRequestsListResponse {
 
 export interface CreateAccessRequestsRequest {
   project_ids: string[]
+  request_type: AccessRequestType
+}
+
+export type ChecklistItemName = 'bigquery' | 'logging' | 'storage' | 'audit_logs'
+export type ChecklistItemStatus = 'ok' | 'denied' | 'not_found' | 'not_checked'
+
+export interface ChecklistItem {
+  item: ChecklistItemName
+  status: ChecklistItemStatus
+  detail: string
+}
+
+export interface ProjectChecklistResponse {
+  project_id: string
+  items: ChecklistItem[]
 }
 
 export interface LoginEvent {
