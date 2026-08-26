@@ -77,6 +77,17 @@ resource "google_cloud_run_v2_service" "service" {
           cpu    = var.cpu
           memory = var.memory
         }
+        # Declarado explicitamente (não é o default seguro assumir) —
+        # cpu_idle=false ("CPU sempre alocada", cobra pelo tempo de vida
+        # da instância inteira, não só durante o processamento da
+        # requisição) já foi encontrado ligado nos 4 serviços uma vez
+        # antes, mudado manualmente fora do Terraform, sem registro de
+        # quando ou por quê (ver CHANGELOG.md, "Diagnóstico de custo do
+        # Cloud Run") — sem estar no IaC, recorreu. Nenhum dos 4
+        # serviços (backend/frontend × dev/prod) faz trabalho depois de
+        # responder a requisição (sem BackgroundTasks, sem thread solta,
+        # sem streaming), então CPU só-durante-requisição é seguro.
+        cpu_idle = true
       }
 
       # E-mail da própria SA de runtime, injetado automaticamente (não fica a
