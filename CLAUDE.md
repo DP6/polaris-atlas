@@ -120,6 +120,11 @@ Nunca remova um sufixo de ambiente de um nome de recurso "pra simplificar" — s
 ├── docs/onboarding-cliente.md    # Como liberar acesso de leitura a um projeto GCP que o
 │                                 # Hub vai observar (APIs, IAM, audit logs) + registro vivo
 │                                 # de concessões já feitas
+├── docs/finops-labels.md         # Taxonomia de labels (environment/app/managed-by),
+│                                 # Billing Export pro BigQuery e como consultar/filtrar
+│                                 # custo depois — ver "Registro de componentes e labels FinOps"
+├── docs/gcp-components.md        # Registro vivo "recurso GCP → app/projeto" — formato
+│                                 # reaproveitável em futuros projetos do Hub
 ├── docs/playbooks/                # Roteiros operacionais de execução rápida — hoje só
 │                                   # hospedar o Hub em projetos novos (clonar, ajustar
 │                                   # variáveis, bootstrap)
@@ -131,9 +136,11 @@ Nunca remova um sufixo de ambiente de um nome de recurso "pra simplificar" — s
 │   │                               #   a tela); era docs/manual/ antes da unificação
 │   ├── tecnico/                   #   Guia técnico — funcionalidade por
 │   │                               #   funcionalidade, sidebar de navegação
-│   └── desenvolvimento-ia/        #   Processo de desenvolvimento com IA
-│                                   #   (spec-driven, riscos, gates) — doc interno
-│                                   #   da equipe, não material de produto
+│   ├── desenvolvimento-ia/        #   Processo de desenvolvimento com IA
+│   │                               #   (spec-driven, riscos, gates) — doc interno
+│   │                               #   da equipe, não material de produto
+│   └── componentes/               #   Vitrine do inventário de docs/gcp-components.md
+│                                   #   (não precisa ser cópia literal)
 ├── scripts/                      # Scripts de apoio (setup local, seed, etc.)
 ├── CLAUDE.md
 └── .gitignore
@@ -246,6 +253,23 @@ roles necessárias mudar (ex: um domínio novo passa a precisar de uma role
 que a lista atual não cobre), atualizar também a tabela de roles do
 próprio `docs/onboarding-cliente.md`, não só o log de concessões.
 
+## Registro de componentes e labels FinOps
+
+Este projeto GCP (`dp6-ci-polaris`) pode vir a hospedar mais de uma
+iniciativa do Polaris no mesmo projeto — a topologia single-project não
+separa custo por fronteira de projeto (ver "Projetos e ambientes GCP").
+`docs/finops-labels.md` define a taxonomia de label obrigatória
+(`environment`/`app`/`managed-by`) e `docs/gcp-components.md` é o
+registro vivo de qual recurso pertence a qual app/projeto.
+
+**Toda vez que uma sessão criar, renomear ou descobrir um recurso GCP
+relacionado ao Hub — via Terraform ou manualmente —, isso entra em
+`docs/gcp-components.md` e na aba "Componentes" de `docs/site/` antes de
+considerar a tarefa concluída.** Essa obrigação **não** se estende às
+outras 3 abas do site (`produto`, `tecnico`, `desenvolvimento-ia`) — elas
+dependem de print de tela real e não podem ser mantidas sincronizadas
+sozinhas numa sessão de código.
+
 ## Contextos de trabalho
 
 Dependendo do escopo da tarefa, assuma o contexto correspondente abaixo.
@@ -263,7 +287,9 @@ Antes de criar ou editar qualquer .tf:
 - Sempre rodar terraform fmt + terraform validate antes de commitar
 - Rodar terraform plan e apresentar o output para aprovação antes de apply
 - Confirmar que deletion_protection = true em recursos de prod
-- Labels obrigatórias em todos os recursos: environment, managed-by = terraform
+- Labels obrigatórias em todo recurso que suporte label: `environment`,
+  `app`, `managed-by` — taxonomia completa em `docs/finops-labels.md`,
+  nunca inventar valor novo sem checar lá primeiro
 
 Checklist de entrega:
 - [ ] terraform validate passou
@@ -273,6 +299,9 @@ Checklist de entrega:
 - [ ] Se o recurso concede acesso a um projeto alvo (IAM binding
       cross-project, API habilitada, audit config) — registrado em
       `docs/onboarding-cliente.md`, ver "Registro de acessos e configurações"
+- [ ] Labels completas aplicadas (`environment`/`app`/`managed-by`, ver
+      `docs/finops-labels.md`) **e** recurso novo/alterado registrado em
+      `docs/gcp-components.md` antes de marcar a tarefa como concluída
 
 ---
 
@@ -360,6 +389,12 @@ Ao criar uma spec de domínio (docs/specs/<domínio>.md), incluir obrigatoriamen
   nova lendo a spec meses depois.
 - Casos de borda e comportamento esperado
 - O que está fora do escopo desta spec
+- Se a spec introduz infraestrutura GCP nova (ex.: `storage.md`
+  introduzindo buckets) — citar `docs/finops-labels.md` e
+  `docs/gcp-components.md` como pré-requisito de implementação na seção
+  de "Fonte de dados" ou "O que está fora do escopo", pra garantir que
+  labels/registro de componente não fiquem de fora quando o domínio for
+  implementado
 
 Ao atualizar o CHANGELOG.md:
 - Registrar o que foi feito, erros cometidos e aprendizados
