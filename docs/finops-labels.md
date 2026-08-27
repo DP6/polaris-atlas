@@ -95,10 +95,15 @@ gcloud secrets update NOME_DO_SECRET \
   --update-labels=environment=prod,app=observability-hub,managed-by=manual
 ```
 
-Aplicar esta convenção nos recursos que já existem hoje é uma execução à
-parte, fora deste documento (ver decisão de não mexer em componentes
-existentes ainda) — este documento vale a partir de agora pra recurso
-**novo**.
+**Status:** ✅ aplicado via `default_labels` em dev e prod em 2026-08-26
+(dev confirmado via CI: `Apply complete! Resources: 0 added, 5 changed,
+0 destroyed.`; prod aplica no merge do PR correspondente). Cobre os 4
+serviços Cloud Run, os 2 Cloud Run Jobs, os 2 buckets de cache e o
+Artifact Registry — confirmado no `terraform plan` real. **Service
+accounts e Firestore não suportam `default_labels` neste provider**
+(não apareceram no plan) — ficam sem label até existir outro mecanismo;
+ver `docs/gcp-components.md` pra status por recurso. Secrets no Secret
+Manager continuam pendentes (comando manual acima, ainda não executado).
 
 ## 4. Billing Export pro BigQuery (passo manual, fora do que a SA do Hub alcança)
 
