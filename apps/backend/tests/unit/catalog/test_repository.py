@@ -33,7 +33,8 @@ def test_bytes_to_gb():
     assert repository._bytes_to_gb(2_075_443) == 0.0021
 
 
-def test_get_datasets_summary_runs_one_query_per_region_and_computes_gb():
+def test_get_datasets_summary_runs_one_query_per_region_and_computes_gb(monkeypatch):
+    monkeypatch.setattr(repository, "_datasets_summary_cache", {})
     rows_us = [
         _row(
             dataset_id="RAW",
@@ -55,6 +56,51 @@ def test_get_datasets_summary_runs_one_query_per_region_and_computes_gb():
     assert len(result) == 1
     assert result[0]["dataset_id"] == "RAW"
     assert result[0]["total_size_gb"] == 0.0021
+
+
+def test_get_datasets_summary_empty_regions_skips_query(monkeypatch):
+    monkeypatch.setattr(repository, "_datasets_summary_cache", {})
+    client = MagicMock()
+
+    result = repository.get_datasets_summary(client, "proj", [])
+
+    assert result == []
+    client.query.assert_not_called()
+
+
+def test_get_datasets_summary_caches_by_project_and_regions(monkeypatch):
+    monkeypatch.setattr(repository, "_datasets_summary_cache", {})
+    rows = [
+        _row(
+            dataset_id="RAW",
+            location="US",
+            creation_time="2026-06-03T19:40:00Z",
+            last_modified_time="2026-06-08T18:38:00Z",
+            total_tables=3,
+            total_views=0,
+            total_size_bytes=1000,
+            total_rows=10,
+        )
+    ]
+    client = _client_returning([rows])
+
+    first = repository.get_datasets_summary(client, "proj", ["US"])
+    second = repository.get_datasets_summary(client, "proj", ["US"])
+
+    assert first == second
+    assert client.query.call_count == 1
+
+
+def test_get_datasets_summary_cache_key_differs_by_project_and_regions(monkeypatch):
+    monkeypatch.setattr(repository, "_datasets_summary_cache", {})
+    rows: list = []
+    client = _client_returning([rows, rows, rows])
+
+    repository.get_datasets_summary(client, "proj-a", ["US"])
+    repository.get_datasets_summary(client, "proj-b", ["US"])
+    repository.get_datasets_summary(client, "proj-a", ["EU"])
+
+    assert client.query.call_count == 3
 
 
 def test_resolve_dataset_region_is_reexported_from_core_bigquery():
@@ -375,7 +421,8 @@ def test_get_partition_stats_caches_by_table_ref(monkeypatch):
     assert client.query.call_count == 1
 
 
-def test_get_table_partitions_queries_group_by_ordered_desc():
+def test_get_table_partitions_queries_group_by_ordered_desc(monkeypatch):
+    monkeypatch.setattr(repository, "_table_partitions_cache", {})
     rows = [
         _row(partition_value="2026-08-12", row_count=1800),
         _row(partition_value="2026-08-11", row_count=1500),
@@ -402,7 +449,8 @@ def test_get_table_partitions_queries_group_by_ordered_desc():
     ]
 
 
-def test_get_table_partitions_skips_null_partition_value():
+def test_get_table_partitions_skips_null_partition_value(monkeypatch):
+    monkeypatch.setattr(repository, "_table_partitions_cache", {})
     rows = [
         _row(partition_value=None, row_count=5),
         _row(partition_value="2026-08-12", row_count=1800),
@@ -412,6 +460,30 @@ def test_get_table_partitions_skips_null_partition_value():
     result = repository.get_table_partitions(client, "proj", "RAW", "events", "event_date")
 
     assert result == [{"value": "2026-08-12", "row_count": 1800}]
+
+
+def test_get_table_partitions_caches_by_table_ref_and_partition_field(monkeypatch):
+    monkeypatch.setattr(repository, "_table_partitions_cache", {})
+    rows = [_row(partition_value="2026-08-12", row_count=1800)]
+    client = _client_returning([rows])
+
+    first = repository.get_table_partitions(client, "proj", "RAW", "events", "event_date")
+    second = repository.get_table_partitions(client, "proj", "RAW", "events", "event_date")
+
+    assert first == second
+    assert client.query.call_count == 1
+
+
+def test_get_table_partitions_cache_key_differs_by_table_and_field(monkeypatch):
+    monkeypatch.setattr(repository, "_table_partitions_cache", {})
+    rows: list = []
+    client = _client_returning([rows, rows, rows])
+
+    repository.get_table_partitions(client, "proj", "RAW", "events", "event_date")
+    repository.get_table_partitions(client, "proj", "RAW", "other_table", "event_date")
+    repository.get_table_partitions(client, "proj", "RAW", "events", "other_field")
+
+    assert client.query.call_count == 3
 
 
 @pytest.mark.parametrize(

@@ -34,7 +34,8 @@ def test_sla_status_case_sql_guards_null_timestamp_before_comparisons():
     assert sql.index("IS NULL THEN NULL") < sql.index("<= 12")
 
 
-def test_get_freshness_summary_by_dataset_runs_one_query_per_region():
+def test_get_freshness_summary_by_dataset_runs_one_query_per_region(monkeypatch):
+    monkeypatch.setattr(repository, "_freshness_summary_cache", {})
     rows_us = [
         _row(
             dataset_id="RAW",
@@ -59,9 +60,10 @@ def test_get_freshness_summary_by_dataset_runs_one_query_per_region():
     assert result[0]["stale"] == 3
 
 
-def test_get_freshness_summary_by_dataset_query_joins_from_schemata():
+def test_get_freshness_summary_by_dataset_query_joins_from_schemata(monkeypatch):
     """JOIN precisa partir de SCHEMATA (não de TABLE_STORAGE) para um
     dataset vazio aparecer com total_tables=0 em vez de sumir da lista."""
+    monkeypatch.setattr(repository, "_freshness_summary_cache", {})
     captured = {}
 
     def fake_query(sql, job_config=None):
@@ -77,6 +79,52 @@ def test_get_freshness_summary_by_dataset_query_joins_from_schemata():
 
     assert "FROM `proj.region-US.INFORMATION_SCHEMA.SCHEMATA` s" in captured["sql"]
     assert "LEFT JOIN `proj.region-US.INFORMATION_SCHEMA.TABLE_STORAGE` ts" in captured["sql"]
+
+
+def test_get_freshness_summary_by_dataset_empty_regions_skips_query(monkeypatch):
+    monkeypatch.setattr(repository, "_freshness_summary_cache", {})
+    client = MagicMock()
+
+    result = repository.get_freshness_summary_by_dataset(client, "proj", [])
+
+    assert result == []
+    client.query.assert_not_called()
+
+
+def test_get_freshness_summary_by_dataset_caches_by_project_and_regions(monkeypatch):
+    monkeypatch.setattr(repository, "_freshness_summary_cache", {})
+    rows = [
+        _row(
+            dataset_id="RAW",
+            location="US",
+            total_tables=1,
+            ok=1,
+            warning_12_24=0,
+            warning_24_48=0,
+            warning_48_7d=0,
+            warning_7d_1m=0,
+            stale=0,
+        )
+    ]
+    client = _client_returning([rows])
+
+    first = repository.get_freshness_summary_by_dataset(client, "proj", ["US"])
+    second = repository.get_freshness_summary_by_dataset(client, "proj", ["US"])
+
+    assert first == second
+    assert client.query.call_count == 1
+
+
+def test_get_freshness_summary_by_dataset_cache_key_differs_by_project_and_regions(monkeypatch):
+    monkeypatch.setattr(repository, "_freshness_summary_cache", {})
+    rows: list = []
+    client = _client_returning([rows, rows, rows])
+
+    repository.get_freshness_summary_by_dataset(client, "proj-a", ["US"])
+    repository.get_freshness_summary_by_dataset(client, "proj-b", ["US"])
+    repository.get_freshness_summary_by_dataset(client, "proj-a", ["EU"])
+
+    assert client.query.call_count == 3
 
 
 def test_get_table_freshness_fetches_metadata_via_get_table_and_classifies_sla():

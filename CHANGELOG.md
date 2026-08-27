@@ -5,6 +5,31 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Cache TTL em 3 endpoints sem cache de Catalog/Freshness
+
+Continuação da mesma investigação de custo de Cloud Run (ver item
+seguinte). Achados #2 a #4, mais leves que o de storage (loop
+sequencial por região sem paralelizar / drill-down sem TTL nenhum, não
+scan de Cloud Logging) — resolvidos com o mesmo padrão de TTL de 5min
+já usado por `get_partition_stats`/`get_table_cached`, sem job nem
+cache compartilhado novo.
+
+### O que foi feito
+- `domains/catalog/repository.py::get_datasets_summary` — loop
+  sequencial por região virou `ThreadPoolExecutor` (mesma técnica de
+  `search_tables`) + cache TTL 5min por `(project_id, regions)`.
+  Chamada por 3 endpoints (`validate_project`, `list_datasets`,
+  `search(mode=not_contains)`), inclusive a tela de entrada do produto.
+- `domains/freshness/repository.py::get_freshness_summary_by_dataset` —
+  mesmo tratamento (paralelização + TTL 5min).
+- `domains/catalog/repository.py::get_table_partitions` — não tinha
+  cache nenhum (diferente da função irmã `get_partition_stats`, já
+  cacheada); ganhou o mesmo TTL 5min por `(table_ref, partition_field)`.
+- `docs/specs/catalog.md` bump pra v1.7, `docs/specs/freshness.md` pra
+  v1.3, documentando os TTLs novos.
+
+---
+
 ## Waste scanner do Storage passa a usar o cache pré-computado de audit log
 
 Usuário investigou custo de Cloud Run com o Claude Code (cobrança de
