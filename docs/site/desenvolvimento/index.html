@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Observability Hub — desenvolvimento com IA</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Ubuntu:wght@300;400;700&display=swap');
 
@@ -223,6 +224,91 @@
     color: var(--color-text-muted);
   }
 
+  /* --- Colaboradores --- */
+
+  .collab-list {
+    list-style: none;
+    margin: 16px 0 24px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .collab-card {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+
+  .collab-card .avatar {
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    color: var(--color-text-inverse);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.9375rem;
+  }
+
+  .collab-card strong { display: block; margin-bottom: 2px; }
+  .collab-card span.role { color: var(--color-text-muted); font-size: 0.875rem; }
+  .collab-card p { margin: 6px 0 0; font-size: 0.9375rem; }
+
+  /* --- Antes / depois --- */
+
+  .before-after {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 16px 0 24px;
+  }
+
+  .before-after .col {
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 16px 18px;
+  }
+
+  .before-after .col.before { background: var(--color-bg-surface); }
+  .before-after .col.depois { background: #FFFDF7; border-color: var(--color-primary); }
+
+  .before-after .col-label {
+    display: block;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 10px;
+    color: var(--color-text-muted);
+  }
+
+  .before-after .col.depois .col-label { color: var(--color-warn); }
+  .before-after ol { margin: 0; padding-left: 18px; }
+  .before-after li { margin-bottom: 8px; font-size: 0.9375rem; }
+
+  @media (max-width: 640px) {
+    .before-after { grid-template-columns: 1fr; }
+  }
+
+  /* --- Diagrama --- */
+
+  .diagram-wrap {
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 20px;
+    margin: 16px 0 24px;
+    overflow-x: auto;
+    background: var(--color-bg-surface);
+  }
+
   @media (max-width: 900px) {
     .toc { display: none; }
     .content { padding: 24px 20px 80px; }
@@ -238,18 +324,23 @@
       <span class="site-tabs-brand"><span class="dot"></span> Observability Hub</span>
       <a href="../produto/">Demonstrativo do produto</a>
       <a href="../tecnico/">Guia técnico</a>
-      <a href="../desenvolvimento-ia/" class="active">Desenvolvimento com IA</a>
       <a href="../componentes/">Componentes</a>
+      <a href="../desenvolvimento/" class="active">Desenvolvimento</a>
     </header>
 
     <div class="layout">
       <nav class="toc" id="toc">
         <div class="toc-group-label">Neste documento</div>
         <a href="#introducao">Introdução</a>
-        <a href="#diferenca">Claude Code vs. IA conversacional</a>
-        <a href="#riscos">Riscos de IA agêntica</a>
-        <a href="#spec-driven">Spec-driven development</a>
-        <a href="#gates">Exemplos de gates</a>
+        <a href="#colaboradores">Colaboradores do projeto</a>
+        <a href="#spec-driven">Framework: spec-driven</a>
+        <a href="#antes-depois">Agêntica vs. conversacional</a>
+        <a href="#boas-praticas">Boas práticas</a>
+        <a href="#riscos">Riscos e mitigação</a>
+        <a href="#gates">Gates reais</a>
+        <a href="#iac">IaC com Terraform</a>
+        <a href="#cicd">CI/CD com GitHub Actions</a>
+        <a href="#diagrama">Fluxo completo dev → prod</a>
         <a href="#licoes">Lições e próximos passos</a>
       </nav>
 
@@ -283,8 +374,126 @@
           </p>
         </section>
 
-        <section class="doc-section" id="diferenca">
-          <h2>Diferença entre Claude Code e uma IA conversacional</h2>
+        <section class="doc-section" id="colaboradores">
+          <h2>Colaboradores do projeto</h2>
+          <ul class="collab-list">
+            <li class="collab-card">
+              <span class="avatar">MF</span>
+              <div>
+                <strong>Matheus Fuzati</strong>
+                <span class="role">Responsável técnico e de produto</span>
+                <p>
+                  Define o que cada spec deve resolver, revisa e decide toda
+                  mudança de escopo ou de comportamento ambíguo, e aprova
+                  explicitamente cada push, merge e deploy em produção — a
+                  IA nunca decide sozinha o que é "certo" pro produto.
+                </p>
+              </div>
+            </li>
+            <li class="collab-card">
+              <span class="avatar">CC</span>
+              <div>
+                <strong>Claude Code (Anthropic)</strong>
+                <span class="role">Agente de IA — escreve o código</span>
+                <p>
+                  Lê specs, implementa backend, frontend e infraestrutura,
+                  roda testes/lint/<code>terraform plan</code> reais, e itera
+                  até o resultado passar — mas nunca aprova sua própria
+                  mudança pra produção nem decide uma ambiguidade de produto
+                  sem perguntar antes.
+                </p>
+              </div>
+            </li>
+          </ul>
+        </section>
+
+        <section class="doc-section" id="spec-driven">
+          <h2>Framework de desenvolvimento: spec-driven</h2>
+          <div class="exec-summary">
+            <strong class="label">Resumo executivo</strong>
+            Spec-driven development significa que nenhuma mudança de
+            comportamento de um domínio entra no código sem antes existir,
+            revisada, uma especificação escrita descrevendo objetivo, fonte de
+            dado, endpoints, custo de query e critérios de aceite numerados. A
+            especificação vira o contrato contra o qual o próprio código e os
+            testes são cobrados — inclusive pela IA que escreveu o código.
+          </div>
+          <h3 class="sub-title">Estrutura de uma spec (<code>docs/specs/&lt;domínio&gt;.md</code>)</h3>
+          <ul>
+            <li><strong>Objetivo e fonte de dados</strong> — qual API/tabela/log
+              alimenta a funcionalidade.</li>
+            <li><strong>Endpoints da API</strong> — método, path, parâmetros,
+              schema de resposta.</li>
+            <li><strong>Critérios de aceite numerados</strong> (<code>AC-xxx</code>)
+              — uma frase clara de comportamento esperado, cada um apontando
+              pro teste que o comprova.</li>
+            <li><strong>Suposições</strong> (<code>ASM-xxx</code>) e
+              <strong>perguntas em aberto</strong> (<code>Q-xxx</code>) — cada
+              decisão de produto esclarecida com o usuário durante a
+              implementação fica registrada aqui, com status
+              (aberta/confirmada/invalidada; aberta/respondida) — não só na
+              conversa, que não sobrevive a uma sessão nova.</li>
+            <li><strong>Casos de borda</strong> e <strong>o que fica fora do
+              escopo</strong> — delimita o que a spec propositalmente não
+              resolve.</li>
+          </ul>
+          <h3 class="sub-title">Fluxo, do pedido ao código</h3>
+          <ol>
+            <li>Uma funcionalidade nova ou mudança de comportamento é descrita
+              como spec (nova ou atualização de uma existente) — objetivo,
+              fonte de dado, endpoints, critérios de aceite.</li>
+            <li>Qualquer decisão de produto ambígua na spec vira pergunta ao
+              usuário antes de implementar, nunca suposição — a resposta entra
+              na própria spec como <code>ASM</code>/<code>Q</code> respondida.</li>
+            <li>O código é implementado contra os critérios de aceite —
+              backend, frontend e infraestrutura juntos, quando a mudança
+              atravessa camadas.</li>
+            <li>Testes, lint e (quando aplicável) <code>terraform plan</code>
+              rodam de verdade antes de qualquer commit ser considerado pronto.</li>
+            <li>Uma decisão arquitetural relevante (não um detalhe de
+              domínio) vira um ADR em <code>docs/adr/</code>, referenciando
+              decisões anteriores em vez de apagá-las.</li>
+          </ol>
+          <h3 class="sub-title">Por que este framework foi escolhido</h3>
+          <p>
+            Três propriedades, todas verificáveis por fora, sem precisar
+            confiar na "boa vontade" do agente:
+          </p>
+          <ol>
+            <li><strong>Rastreabilidade</strong> — toda funcionalidade tem um
+              documento anterior ao código que explica por que ela existe e o
+              que ela deveria fazer; qualquer divergência entre spec e código é
+              detectável por qualquer pessoa lendo os dois, sem precisar
+              reconstituir a conversa que gerou o código.</li>
+            <li><strong>Verificação objetiva</strong> — critério de aceite
+              numerado + teste referenciando o número transforma "a IA disse
+              que funciona" em "existe um teste automatizado passando que prova
+              isso", rodado a cada mudança futura (inclusive por outra sessão de
+              IA, meses depois).</li>
+            <li><strong>Decisão de produto nunca fica implícita</strong> — a
+              convenção deste projeto (ver <code>CLAUDE.md</code>, seção
+              "Colaboração": <em>"perguntar mais, presumir menos"</em>) exige
+              que qualquer ambiguidade de nome, escopo, comportamento ou
+              formato de dado seja perguntada ao usuário antes de implementar,
+              e a resposta entra na spec como <code>ASM</code>/<code>Q</code>
+              respondida — não fica só na cabeça de quem perguntou.</li>
+          </ol>
+          <div class="example">
+            <strong class="tag">Exemplo real deste projeto</strong>
+            <p>
+              As specs de <code>lineage</code>, <code>access</code> e
+              <code>admin</code> ganharam suas primeiras seções de AC/ASM/Q
+              formal justamente durante mudanças recentes de comportamento
+              (cache de lineage/acesso; apagar projeto, checklist de
+              onboarding, solicitação de inclusão) — a própria estrutura da
+              spec evoluiu junto com a regra do <code>CLAUDE.md</code> que a
+              exige, em vez de ser escrita solta e esquecida.
+            </p>
+          </div>
+        </section>
+
+        <section class="doc-section" id="antes-depois">
+          <h2>IA agêntica vs. IA conversacional</h2>
           <div class="exec-summary">
             <strong class="label">Resumo executivo</strong>
             Uma IA conversacional (ex: ChatGPT numa aba do navegador) responde
@@ -298,6 +507,38 @@
             profundidade de contexto; o custo é que erros também viram ação de
             verdade, não só texto errado numa tela — daí todo o resto deste
             documento.
+          </div>
+          <h3 class="sub-title">O fluxo de trabalho mudou de forma</h3>
+          <div class="before-after">
+            <div class="col before">
+              <span class="col-label">Antes — IA conversacional</span>
+              <ol>
+                <li>Brainstorm solto numa aba de chat, sem repositório
+                  conectado.</li>
+                <li>Pede código arquivo por arquivo, cola manualmente no
+                  editor.</li>
+                <li>Roda teste/lint por conta própria, depois de colar.</li>
+                <li>Nenhum registro formal de por que uma decisão foi tomada
+                  — fica só no histórico da conversa, se sobrar.</li>
+                <li>Decisão de arquitetura raramente documentada antes do
+                  código existir.</li>
+              </ol>
+            </div>
+            <div class="col depois">
+              <span class="col-label">Depois — IA agêntica + spec-driven</span>
+              <ol>
+                <li>Spec escrita e revisada primeiro (<code>docs/specs/</code>),
+                  descrevendo objetivo e critérios de aceite.</li>
+                <li>O agente lê o repositório inteiro e edita backend,
+                  frontend e infraestrutura na mesma tarefa.</li>
+                <li>Testes, lint e <code>terraform plan</code> rodam de
+                  verdade, e o agente corrige sozinho o que falhar.</li>
+                <li>Decisão de produto ambígua vira pergunta registrada
+                  (<code>ASM</code>/<code>Q</code>) antes de implementar.</li>
+                <li>Decisão arquitetural relevante vira ADR — motivo, ver
+                  <a href="#spec-driven">spec-driven</a>.</li>
+              </ol>
+            </div>
           </div>
           <h3 class="sub-title">Na prática, neste projeto</h3>
           <p>
@@ -316,8 +557,60 @@
             mas porque, tecnicamente, nada o impede de rodar <code>git push
             --force</code> ou <code>terraform apply</code> em produção do
             mesmo jeito que roda <code>pytest</code>. É exatamente esse ponto
-            que os gates da seção <a href="#gates">Exemplos de gates</a> abaixo
+            que os gates da seção <a href="#gates">Gates reais</a> abaixo
             existem para cobrir.
+          </p>
+        </section>
+
+        <section class="doc-section" id="boas-praticas">
+          <h2>Boas práticas de desenvolvimento</h2>
+          <div class="exec-summary">
+            <strong class="label">Resumo executivo</strong>
+            Nenhuma dessas práticas depende de a IA "se lembrar" delas numa
+            conversa — todas vivem em arquivo versionado no próprio
+            repositório, lidas no início de qualquer sessão nova (humana ou de
+            IA), sobrevivendo a reset de contexto, troca de sessão ou troca de
+            pessoa.
+          </div>
+          <h3 class="sub-title"><code>CLAUDE.md</code> — fonte única de verdade</h3>
+          <p>
+            Convenções de código, estrutura de pastas, regras de Git, contexto
+            por área (backend, frontend, IaC, CI/CD) e guardrails de segurança
+            — tudo num único arquivo na raiz do repo, lido obrigatoriamente no
+            início de qualquer sessão. Se uma convenção muda, o próprio
+            <code>CLAUDE.md</code> é atualizado no mesmo PR da mudança — nunca
+            fica desatualizado "pra depois".
+          </p>
+          <h3 class="sub-title"><code>docs/specs/&lt;domínio&gt;.md</code> — contrato por domínio</h3>
+          <p>
+            Ver <a href="#spec-driven">seção anterior</a> — uma spec por
+            domínio de negócio, nunca implementação sem spec aprovada.
+          </p>
+          <h3 class="sub-title"><code>docs/adr/</code> — decisões arquiteturais</h3>
+          <p>
+            Decisões que atravessam mais de um domínio ou mudam um padrão
+            estrutural do projeto (ex: modelo de acesso cross-project, ACL de
+            usuário × projeto) viram um Architecture Decision Record —
+            contexto, decisão, alternativas consideradas, consequências. Um
+            ADR nunca é apagado; se a decisão muda, um ADR novo é criado
+            referenciando o anterior, preservando o histórico de por que a
+            decisão antiga fazia sentido no seu momento.
+          </p>
+          <h3 class="sub-title"><code>CHANGELOG.md</code> — o que foi feito e por quê</h3>
+          <p>
+            Registra o que foi entregue, erros cometidos e o aprendizado
+            tirado deles, e qualquer mudança de arquitetura com sua
+            justificativa — não é um changelog de release pro usuário final,
+            é a memória de engenharia do projeto.
+          </p>
+          <h3 class="sub-title"><code>SESSIONLOG.md</code> — continuidade entre sessões</h3>
+          <p>
+            Sessões de IA têm janela de contexto finita — uma conversa longa
+            eventualmente é resumida ou reiniciada. O <code>SESSIONLOG.md</code>
+            registra status atual, próximo passo exato, decisões tomadas e
+            estado da infraestrutura antes de qualquer reset previsto, pra uma
+            sessão nova retomar o trabalho sem precisar reconstruir contexto
+            perdido a partir do zero.
           </p>
         </section>
 
@@ -395,74 +688,6 @@
           </p>
         </section>
 
-        <section class="doc-section" id="spec-driven">
-          <h2>O que é spec-driven, como trabalhar com ela e como ela garante segurança</h2>
-          <div class="exec-summary">
-            <strong class="label">Resumo executivo</strong>
-            Spec-driven development significa que nenhuma mudança de
-            comportamento de um domínio entra no código sem antes existir,
-            revisada, uma especificação escrita descrevendo objetivo, fonte de
-            dado, endpoints, custo de query e critérios de aceite numerados. A
-            especificação vira o contrato contra o qual o próprio código e os
-            testes são cobrados — inclusive pela IA que escreveu o código.
-          </div>
-          <h3 class="sub-title">Estrutura de uma spec (<code>docs/specs/&lt;domínio&gt;.md</code>)</h3>
-          <ul>
-            <li><strong>Objetivo e fonte de dados</strong> — qual API/tabela/log
-              alimenta a funcionalidade.</li>
-            <li><strong>Endpoints da API</strong> — método, path, parâmetros,
-              schema de resposta.</li>
-            <li><strong>Critérios de aceite numerados</strong> (<code>AC-xxx</code>)
-              — uma frase clara de comportamento esperado, cada um apontando
-              pro teste que o comprova.</li>
-            <li><strong>Suposições</strong> (<code>ASM-xxx</code>) e
-              <strong>perguntas em aberto</strong> (<code>Q-xxx</code>) — cada
-              decisão de produto esclarecida com o usuário durante a
-              implementação fica registrada aqui, com status
-              (aberta/confirmada/invalidada; aberta/respondida) — não só na
-              conversa, que não sobrevive a uma sessão nova.</li>
-            <li><strong>Casos de borda</strong> e <strong>o que fica fora do
-              escopo</strong> — delimita o que a spec propositalmente não
-              resolve.</li>
-          </ul>
-          <h3 class="sub-title">Por que isso garante segurança</h3>
-          <p>
-            Três propriedades, todas verificáveis por fora, sem precisar
-            confiar na "boa vontade" do agente:
-          </p>
-          <ol>
-            <li><strong>Rastreabilidade</strong> — toda funcionalidade tem um
-              documento anterior ao código que explica por que ela existe e o
-              que ela deveria fazer; qualquer divergência entre spec e código é
-              detectável por qualquer pessoa lendo os dois, sem precisar
-              reconstituir a conversa que gerou o código.</li>
-            <li><strong>Verificação objetiva</strong> — critério de aceite
-              numerado + teste referenciando o número transforma "a IA disse
-              que funciona" em "existe um teste automatizado passando que prova
-              isso", rodado a cada mudança futura (inclusive por outra sessão de
-              IA, meses depois).</li>
-            <li><strong>Decisão de produto nunca fica implícita</strong> — a
-              convenção deste projeto (ver <code>CLAUDE.md</code>, seção
-              "Colaboração": <em>"perguntar mais, presumir menos"</em>) exige
-              que qualquer ambiguidade de nome, escopo, comportamento ou
-              formato de dado seja perguntada ao usuário antes de implementar,
-              e a resposta entra na spec como <code>ASM</code>/<code>Q</code>
-              respondida — não fica só na cabeça de quem perguntou.</li>
-          </ol>
-          <div class="example">
-            <strong class="tag">Exemplo real deste projeto</strong>
-            <p>
-              As specs de <code>lineage</code>, <code>access</code> e
-              <code>admin</code> ganharam suas primeiras seções de AC/ASM/Q
-              formal justamente durante mudanças recentes de comportamento
-              (cache de lineage/acesso; apagar projeto, checklist de
-              onboarding, solicitação de inclusão) — a própria estrutura da
-              spec evoluiu junto com a regra do <code>CLAUDE.md</code> que a
-              exige, em vez de ser escrita solta e esquecida.
-            </p>
-          </div>
-        </section>
-
         <section class="doc-section" id="gates">
           <h2>Exemplos de gates</h2>
           <div class="exec-summary">
@@ -470,7 +695,8 @@
             "Gate" aqui significa qualquer ponto do processo em que uma ação só
             avança com confirmação humana explícita — não uma aprovação geral
             dada uma vez, mas uma checagem repetida a cada ocorrência. A tabela
-            abaixo lista os gates realmente em vigor neste projeto, com um
+            abaixo lista os gates realmente em vigor neste projeto — a maioria
+            vive como instrução direta no <code>CLAUDE.md</code> —, com um
             exemplo concreto de cada um.
           </div>
           <table class="gate-table">
@@ -551,6 +777,109 @@
           </table>
         </section>
 
+        <section class="doc-section" id="iac">
+          <h2>IaC com Terraform</h2>
+          <div class="exec-summary">
+            <strong class="label">Resumo executivo</strong>
+            Toda a infraestrutura GCP deste projeto (Cloud Run, Artifact
+            Registry, IAM, Secret Manager, WIF) é declarada em Terraform,
+            nunca criada manualmente no console — o agente de IA lê e edita
+            esse código do mesmo jeito que edita backend/frontend, mas nunca
+            aplica uma mudança em produção sem <code>plan</code> revisado
+            primeiro.
+          </div>
+          <h3 class="sub-title">Módulos e ambientes</h3>
+          <ul>
+            <li><strong><code>infra/terraform/modules/</code></strong> — módulos
+              reutilizáveis (Cloud Run, BigQuery, Artifact Registry, Secret
+              Manager) consumidos pelos dois ambientes.</li>
+            <li><strong><code>infra/terraform/environments/{dev,prod}</code></strong>
+              — raízes de execução <em>independentes</em>, cada uma com seu
+              próprio state — nunca Terraform workspaces, pra evitar qualquer
+              ambiguidade sobre qual ambiente um <code>apply</code> afeta.</li>
+            <li><strong><code>infra/terraform/bootstrap/</code></strong> —
+              bucket de state e pool de Workload Identity Federation,
+              aplicado manualmente, uma única vez, fora do CI (não pode
+              depender de um backend remoto que ainda não existe).</li>
+          </ul>
+          <h3 class="sub-title">Como o agente trabalha com isso</h3>
+          <p>
+            Nenhum valor sensível em <code>.tfvars</code> commitado, labels
+            obrigatórias (<code>environment</code>, <code>managed-by</code>)
+            em todo recurso, e — o ponto mais relevante pra segurança —
+            <code>terraform plan</code> sempre roda e é apresentado antes de
+            qualquer <code>apply</code>, mesmo quando o agente tem alta
+            confiança de que a mudança é trivial.
+          </p>
+        </section>
+
+        <section class="doc-section" id="cicd">
+          <h2>CI/CD com GitHub Actions</h2>
+          <div class="exec-summary">
+            <strong class="label">Resumo executivo</strong>
+            Autenticação no GCP exclusivamente via Workload Identity
+            Federation — nenhuma chave de service account em segredo do
+            GitHub. Dev é rápido e automático; produção tem gate de aprovação
+            manual só no deploy de app (que sobe imagem nova sem revisão no
+            meio), não na infraestrutura (que já passa por
+            <code>terraform plan</code> revisado no PR).
+          </div>
+          <h3 class="sub-title">Gatilhos por ambiente</h3>
+          <ul>
+            <li><strong>Push em qualquer branch, exceto <code>main</code></strong>
+              → build + deploy automático em <strong>dev</strong>, sem
+              aprovação — ambiente de teste rápido.</li>
+            <li><strong>Merge em <code>main</code></strong> → <code>terraform
+              apply</code> em prod roda automático (decisão consciente: a
+              mudança de infra já foi revisada via <code>plan</code> antes do
+              merge); o <strong>deploy de app</strong> (backend/frontend) usa
+              um GitHub Environment "production" com <em>required reviewers</em>
+              — fica em "Waiting" até um humano aprovar.</li>
+          </ul>
+          <h3 class="sub-title">Workflows separados por app e ambiente</h3>
+          <p>
+            <code>backend-deploy-dev.yml</code>, <code>backend-deploy-prod.yml</code>,
+            <code>frontend-deploy-dev.yml</code>, <code>frontend-deploy-prod.yml</code>,
+            <code>terraform-plan.yml</code>, <code>terraform-apply-dev.yml</code>,
+            <code>terraform-apply-prod.yml</code> — cada um com
+            <code>permissions:</code> explícito (menor privilégio possível) e
+            <code>actions/checkout</code> fixado por versão.
+          </p>
+        </section>
+
+        <section class="doc-section" id="diagrama">
+          <h2>Fluxo completo — desenvolvimento até deploy em produção</h2>
+          <div class="exec-summary">
+            <strong class="label">Resumo executivo</strong>
+            Da spec ao ar em produção, os únicos pontos onde o fluxo
+            <em>para</em> esperando um humano são: confirmar o push, aprovar o
+            merge do PR, e aprovar o gate de deploy de app em produção — tudo
+            o mais roda de ponta a ponta sem intervenção manual.
+          </div>
+          <div class="diagram-wrap">
+            <pre class="mermaid">
+flowchart TD
+    A["Spec escrita/atualizada<br/>docs/specs/&lt;domínio&gt;.md"] --> B["Nova branch<br/>feature/fix/chore"]
+    B --> C["Implementação<br/>backend + frontend + infra"]
+    C --> D["Testes locais reais<br/>pytest · ruff · biome · tsc · terraform plan"]
+    D -- falha --> C
+    D -- passa --> E["Commit local"]
+    E --> F{{"Push?<br/>confirmação humana"}}
+    F -- não --> E
+    F -- sim --> G["Push + Pull Request"]
+    G --> H["CI: lint, testes,<br/>CodeQL, terraform plan (dev)"]
+    H -- falha --> C
+    H -- passa --> I{{"Merge?<br/>confirmação humana"}}
+    I -- sim --> J["Merge em main"]
+    J --> K["Terraform apply — dev<br/>automático"]
+    J --> L["Terraform apply — prod<br/>automático (plan já revisado)"]
+    J --> M{{"Deploy de app em prod?"}}
+    M --> N["GitHub Environment production<br/>required reviewers"]
+    N -- aprovado --> O["Deploy backend/frontend em prod"]
+            </pre>
+          </div>
+        </section>
+
         <section class="doc-section" id="licoes">
           <h2>Lições e próximos passos</h2>
           <p>
@@ -575,6 +904,19 @@
   </div>
 
   <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'base',
+      themeVariables: {
+        primaryColor: '#FFFDF7',
+        primaryBorderColor: '#FFB302',
+        primaryTextColor: '#1D1D1B',
+        lineColor: '#5B626C',
+        fontFamily: 'Ubuntu, Verdana, system-ui, sans-serif',
+        fontSize: '14px',
+      },
+    });
+
     const sections = document.querySelectorAll('section.doc-section[id]');
     const tocLinks = document.querySelectorAll('.toc a');
     const linkById = {};

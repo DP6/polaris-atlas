@@ -128,19 +128,21 @@ Nunca remova um sufixo de ambiente de um nome de recurso "pra simplificar" — s
 ├── docs/playbooks/                # Roteiros operacionais de execução rápida — hoje só
 │                                   # hospedar o Hub em projetos novos (clonar, ajustar
 │                                   # variáveis, bootstrap)
-├── docs/site/                     # Site GitHub Pages com 3 abas superiores
+├── docs/site/                     # Site GitHub Pages com 4 abas superiores
 │                                   # compartilhadas (workflow pages-site.yml, só
-│                                   # este subdiretório de docs/):
+│                                   # este subdiretório de docs/), nesta ordem:
 │   ├── produto/                   #   Descritivo de produto/portfólio — slide deck
 │   │                               #   HTML autocontido (prints + descrição, tela
 │   │                               #   a tela); era docs/manual/ antes da unificação
 │   ├── tecnico/                   #   Guia técnico — funcionalidade por
 │   │                               #   funcionalidade, sidebar de navegação
-│   ├── desenvolvimento-ia/        #   Processo de desenvolvimento com IA
-│   │                               #   (spec-driven, riscos, gates) — doc interno
-│   │                               #   da equipe, não material de produto
-│   └── componentes/               #   Vitrine do inventário de docs/gcp-components.md
-│                                   #   (não precisa ser cópia literal)
+│   ├── componentes/               #   Vitrine do inventário de docs/gcp-components.md
+│   │                               #   (não precisa ser cópia literal)
+│   └── desenvolvimento/           #   Processo de desenvolvimento com IA
+│                                   #   (spec-driven, riscos, gates, IaC, CI/CD) —
+│                                   #   doc interno da equipe, não material de
+│                                   #   produto; era desenvolvimento-ia/ antes de
+│                                   #   virar a última aba (2026-08-26)
 ├── scripts/                      # Scripts de apoio (setup local, seed, etc.)
 ├── CLAUDE.md
 └── .gitignore
@@ -266,9 +268,9 @@ registro vivo de qual recurso pertence a qual app/projeto.
 relacionado ao Hub — via Terraform ou manualmente —, isso entra em
 `docs/gcp-components.md` e na aba "Componentes" de `docs/site/` antes de
 considerar a tarefa concluída.** Essa obrigação **não** se estende às
-outras 3 abas do site (`produto`, `tecnico`, `desenvolvimento-ia`) — elas
-dependem de print de tela real e não podem ser mantidas sincronizadas
-sozinhas numa sessão de código.
+outras 3 abas do site (`produto`, `tecnico`, `desenvolvimento`) — elas
+dependem de print de tela real ou de curadoria manual do processo, e não
+podem ser mantidas sincronizadas sozinhas numa sessão de código.
 
 ## Contextos de trabalho
 
