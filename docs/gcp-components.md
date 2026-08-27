@@ -38,6 +38,15 @@ mais fica fácil esquecer de registrar.
 App hoje: **`observability-hub`** (único app neste projeto até o
 momento — ver `docs/finops-labels.md` sobre o valor da label `app`).
 
+**Status da label `app`/`environment`/`managed-by`:** ✅ aplicada de
+fato via `default_labels` em 2026-08-26 (confirmado via `terraform
+plan`/apply real) em: Cloud Run — serviços, Cloud Run — Job de cache,
+Cloud Storage (buckets), Artifact Registry. **Não suportam
+`default_labels` neste provider** (não apareceram no `plan`, ficam sem
+label): service accounts, Firestore — marcado em cada tabela abaixo.
+Secrets do Secret Manager e recursos de bootstrap/CI continuam
+pendentes (comando manual documentado em `docs/finops-labels.md`).
+
 ### Cloud Run — serviços
 
 | Recurso | Tipo | App | Ambiente | Gerenciado por | Observações |
@@ -48,6 +57,11 @@ momento — ver `docs/finops-labels.md` sobre o valor da label `app`).
 | `frontend-prod` | Cloud Run service | observability-hub | prod | terraform (`environments/prod/main.tf`) | `deletion_protection = true` |
 
 ### Cloud Run — service accounts de runtime
+
+⚠️ Service accounts não suportam `default_labels` neste provider
+(confirmado via `terraform plan` em 2026-08-26) — ficam sem label
+`app`/`environment`/`managed-by`, mesmo com a taxonomia já aplicada em
+todo o resto.
 
 | Recurso | Tipo | App | Ambiente | Gerenciado por | Observações |
 |---|---|---|---|---|---|
@@ -68,6 +82,9 @@ momento — ver `docs/finops-labels.md` sobre o valor da label `app`).
 | `backend-prod-cache-sched@dp6-ci-polaris.iam.gserviceaccount.com` | Service Account | observability-hub | prod | terraform | |
 
 ### Firestore
+
+⚠️ Também não suporta `default_labels` neste provider (não apareceu no
+`terraform plan`) — sem label por enquanto.
 
 | Recurso | Tipo | App | Ambiente | Gerenciado por | Observações |
 |---|---|---|---|---|---|
