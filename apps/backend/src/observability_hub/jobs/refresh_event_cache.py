@@ -1,14 +1,18 @@
 """Entrypoint do Cloud Run Job de refresh do cache de audit log
-(lineage + access) — roda 1x/dia (D-1) via Cloud Scheduler
+(lineage + access + storage) — roda 1x/dia (D-1) via Cloud Scheduler
 (infra/terraform/modules/cloud-run-job) ou sob demanda via o gatilho
 manual de admin (domains/admin::trigger_event_cache_refresh). Mesma
 imagem Docker do backend, comando/entrypoint diferente (ver módulo
 Terraform cloud-run-job) — `python -m observability_hub.jobs.refresh_event_cache`.
 
-Não é um domínio — orquestra lineage, access e admin (fonte da lista de
-projetos), mesma posição arquitetural de main.py. Reaproveita as funções
-de scan já existentes (list_job_events/list_access_events) sem duplicar
-parsing; só adiciona a escrita no cache compartilhado (core/event_cache.py).
+Não é um domínio — orquestra lineage, access, storage e admin (fonte da
+lista de projetos), mesma posição arquitetural de main.py. Reaproveita as
+funções de scan já existentes (list_job_events/list_access_events/
+list_read_object_keys) sem duplicar parsing; só adiciona a escrita no
+cache compartilhado (core/event_cache.py). O refresh de storage é
+best-effort e isolado do de lineage/access (ver
+_refresh_storage_read_keys) porque Data Access audit logs do GCS podem
+não estar habilitados no projeto (docs/specs/storage.md seção 6.2).
 """
 
 import json
@@ -26,6 +30,7 @@ from observability_hub.core.storage_client import get_storage_client
 from observability_hub.domains.access import repository as access_repository
 from observability_hub.domains.admin import repository as admin_repository
 from observability_hub.domains.lineage import repository as lineage_repository
+from observability_hub.domains.storage import repository as storage_repository
 
 logger = std_logging.getLogger("observability_hub.jobs.refresh_event_cache")
 
@@ -38,6 +43,35 @@ def _known_projects(firestore_client: firestore.Client) -> list[str]:
     from_admin = {p["project_id"] for p in admin_repository.list_projects(firestore_client)}
     from_seen = set(event_cache.list_seen_projects(firestore_client))
     return sorted(from_admin | from_seen)
+
+
+def _refresh_storage_read_keys(
+    logging_client: cloud_logging.Client,
+    storage_client: storage.Client,
+    firestore_client: firestore.Client,
+    project_id: str,
+) -> int:
+    """Best-effort, isolado do try/except principal de _refresh_project:
+    Data Access audit logs (DATA_READ) do GCS podem não estar habilitados
+    no projeto (ver docs/specs/storage.md seção 6.2 — ainda não habilitado
+    em prod hoje), o que não deveria impedir o refresh de lineage/access
+    do mesmo projeto. Retorna 0 nesses casos (mesmo efeito de cache vazio
+    já tratado com grace pelo domains/storage/service.py)."""
+    try:
+        keys = storage_repository.list_read_object_keys(
+            logging_client, project_id, storage_repository.LOOKBACK_DAYS
+        )
+    except LoggingAccessDeniedError:
+        return 0
+    except GoogleAPICallError as exc:
+        logger.warning(
+            json.dumps({"project_id": project_id, "status": "storage_api_error", "error": str(exc)})
+        )
+        return 0
+    storage_repository.write_read_object_keys_cache(
+        storage_client, firestore_client, project_id, keys
+    )
+    return len(keys)
 
 
 def _refresh_project(
@@ -55,6 +89,10 @@ def _refresh_project(
         access_events = access_repository.list_access_events(logging_client, project_id)
         access_repository.write_access_events_cache(
             storage_client, firestore_client, project_id, access_events
+        )
+
+        read_object_keys_count = _refresh_storage_read_keys(
+            logging_client, storage_client, firestore_client, project_id
         )
     except LoggingAccessDeniedError:
         logger.warning(json.dumps({"project_id": project_id, "status": "access_denied"}))
@@ -83,6 +121,7 @@ def _refresh_project(
                 "status": "ok",
                 "job_events": len(job_events),
                 "access_events": len(access_events),
+                "storage_read_object_keys": read_object_keys_count,
             }
         )
     )

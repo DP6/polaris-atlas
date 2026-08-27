@@ -14,18 +14,29 @@ domains/access usam pra job do BigQuery — confirmado ao vivo em dev
 diferente o bastante que não dá pra reaproveitar o parser deles.
 """
 
+import json
+import logging as std_logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime, timedelta
 
 from google.api_core.exceptions import Forbidden
+from google.cloud import firestore, storage
 from google.cloud import logging as cloud_logging
-from google.cloud import storage
 
+from observability_hub.core import event_cache
+from observability_hub.core.config import settings
 from observability_hub.core.exceptions import LoggingAccessDeniedError, StorageAccessDeniedError
 from observability_hub.core.storage_client import list_bucket_objects_cached
 
 _OBJECT_READ_METHOD = "storage.objects.get"
 _LOGGING_PAGE_SIZE = 1000
+# Janela do scanner 6.2 (objeto sem leitura recente) — ver
+# docs/specs/storage.md seção 6.2. Único valor de referência: service.py
+# e jobs/refresh_event_cache.py importam daqui em vez de duplicar.
+LOOKBACK_DAYS = 90
+_CACHE_KIND = "storage_read_keys"
+
+logger = std_logging.getLogger(__name__)
 
 
 def list_buckets(client: storage.Client, project_id: str) -> list[storage.Bucket]:
@@ -192,3 +203,87 @@ def list_read_object_keys(
         return keys
     except Forbidden as exc:
         raise LoggingAccessDeniedError(project_id) from exc
+
+
+# --- Cache de audit log (job periódico + fallback do request path) ---------
+#
+# Antes desta seção, o endpoint de waste-candidates chamava
+# list_read_object_keys() direto no request path — um scan síncrono de 90
+# dias de audit log a cada chamada, mesmo problema estrutural que
+# domains/lineage/domains/access já tinham e resolveram com este mesmo
+# padrão (job diário + core/event_cache.py). Ver CHANGELOG.md,
+# "Diagnóstico de custo do Cloud Run".
+
+
+def _serialize_read_object_keys(keys: set[tuple[str, str]]) -> bytes:
+    return json.dumps([list(key) for key in sorted(keys)]).encode("utf-8")
+
+
+def _deserialize_read_object_keys(data: bytes) -> set[tuple[str, str]]:
+    return {tuple(pair) for pair in json.loads(data.decode("utf-8"))}
+
+
+def _cache_blob_path(project_id: str) -> str:
+    return f"{_CACHE_KIND}/{project_id}.json"
+
+
+def read_read_object_keys_cache(
+    storage_client: storage.Client, project_id: str
+) -> set[tuple[str, str]] | None:
+    """None em cache miss."""
+    data = event_cache.read_cache_bytes(
+        storage_client, settings.event_cache_bucket_name, _cache_blob_path(project_id)
+    )
+    if data is None:
+        return None
+    return _deserialize_read_object_keys(data)
+
+
+def write_read_object_keys_cache(
+    storage_client: storage.Client,
+    firestore_client: firestore.Client,
+    project_id: str,
+    keys: set[tuple[str, str]],
+) -> None:
+    event_cache.write_cache_bytes(
+        storage_client,
+        settings.event_cache_bucket_name,
+        _cache_blob_path(project_id),
+        _serialize_read_object_keys(keys),
+    )
+    event_cache.set_cache_metadata(firestore_client, _CACHE_KIND, project_id, len(keys))
+
+
+def get_read_object_keys_cached(
+    logging_client: cloud_logging.Client,
+    storage_client: storage.Client,
+    firestore_client: firestore.Client,
+    project_id: str,
+) -> set[tuple[str, str]]:
+    """Lê o cache pré-computado (job periódico ou fallback de outra
+    requisição); em cache miss, escaneia ao vivo e grava pra próxima
+    chamada (auto-cura) — mesmo racional de
+    domains/access/repository.py::get_access_events_cached. Levanta
+    LoggingAccessDeniedError (não capturada aqui) quando o scan ao vivo
+    falha por falta de roles/logging.viewer — quem chama decide como
+    comunicar isso (domains/storage/service.py)."""
+    try:
+        cached = read_read_object_keys_cache(storage_client, project_id)
+    except Exception:
+        logger.exception(
+            "Falha ao ler cache de storage read-keys para %s — caindo pro scan ao vivo",
+            project_id,
+        )
+    else:
+        if cached is not None:
+            return cached
+
+    keys = list_read_object_keys(logging_client, project_id, LOOKBACK_DAYS)
+
+    try:
+        write_read_object_keys_cache(storage_client, firestore_client, project_id, keys)
+        event_cache.record_project_seen(firestore_client, project_id)
+    except Exception:
+        logger.exception("Falha ao gravar cache de storage read-keys para %s", project_id)
+
+    return keys

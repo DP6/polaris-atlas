@@ -7,6 +7,64 @@ from observability_hub.domains.lineage.repository import JobEvent
 from observability_hub.jobs import refresh_event_cache
 
 
+def test_refresh_storage_read_keys_writes_cache_and_returns_count(monkeypatch):
+    write_calls = []
+    monkeypatch.setattr(
+        refresh_event_cache.storage_repository,
+        "list_read_object_keys",
+        lambda client, project_id, lookback_days: {("landing", "a.csv"), ("landing", "b.csv")},
+    )
+    monkeypatch.setattr(
+        refresh_event_cache.storage_repository,
+        "write_read_object_keys_cache",
+        lambda *a, **kw: write_calls.append((a, kw)),
+    )
+
+    count = refresh_event_cache._refresh_storage_read_keys(
+        MagicMock(), MagicMock(), MagicMock(), "proj"
+    )
+
+    assert count == 2
+    assert len(write_calls) == 1
+
+
+def test_refresh_storage_read_keys_returns_zero_without_logging_access(monkeypatch):
+    def _raise(*a, **kw):
+        raise LoggingAccessDeniedError("proj")
+
+    monkeypatch.setattr(refresh_event_cache.storage_repository, "list_read_object_keys", _raise)
+    write_calls = []
+    monkeypatch.setattr(
+        refresh_event_cache.storage_repository,
+        "write_read_object_keys_cache",
+        lambda *a, **kw: write_calls.append(1),
+    )
+
+    count = refresh_event_cache._refresh_storage_read_keys(
+        MagicMock(), MagicMock(), MagicMock(), "proj"
+    )
+
+    assert count == 0
+    assert write_calls == []
+
+
+def test_refresh_storage_read_keys_returns_zero_on_api_error(monkeypatch):
+    """GCS Data Access audit logs (DATA_READ) podem não estar habilitados
+    no projeto (docs/specs/storage.md seção 6.2) — não deve derrubar o
+    refresh de lineage/access do mesmo projeto."""
+
+    def _raise(*a, **kw):
+        raise NotFound("some api error")
+
+    monkeypatch.setattr(refresh_event_cache.storage_repository, "list_read_object_keys", _raise)
+
+    count = refresh_event_cache._refresh_storage_read_keys(
+        MagicMock(), MagicMock(), MagicMock(), "proj"
+    )
+
+    assert count == 0
+
+
 def test_known_projects_unions_hub_projects_and_seen_projects(monkeypatch):
     monkeypatch.setattr(
         refresh_event_cache.admin_repository,
@@ -27,6 +85,7 @@ def test_known_projects_unions_hub_projects_and_seen_projects(monkeypatch):
 def test_refresh_project_writes_lineage_and_access_caches(monkeypatch):
     write_job_calls = []
     write_access_calls = []
+    write_storage_calls = []
     monkeypatch.setattr(
         refresh_event_cache.lineage_repository,
         "list_job_events",
@@ -52,11 +111,22 @@ def test_refresh_project_writes_lineage_and_access_caches(monkeypatch):
         "write_access_events_cache",
         lambda *a, **kw: write_access_calls.append((a, kw)),
     )
+    monkeypatch.setattr(
+        refresh_event_cache.storage_repository,
+        "list_read_object_keys",
+        lambda client, project_id, lookback_days: set(),
+    )
+    monkeypatch.setattr(
+        refresh_event_cache.storage_repository,
+        "write_read_object_keys_cache",
+        lambda *a, **kw: write_storage_calls.append((a, kw)),
+    )
 
     refresh_event_cache._refresh_project(MagicMock(), MagicMock(), MagicMock(), "proj")
 
     assert len(write_job_calls) == 1
     assert len(write_access_calls) == 1
+    assert len(write_storage_calls) == 1
 
 
 def test_refresh_project_skips_project_without_logging_access(monkeypatch):
@@ -163,6 +233,16 @@ def test_main_processes_all_projects_even_when_one_does_not_exist(monkeypatch):
         lambda storage_client, firestore_client, project_id, events: processed_access.append(
             project_id
         ),
+    )
+    monkeypatch.setattr(
+        refresh_event_cache.storage_repository,
+        "list_read_object_keys",
+        lambda client, project_id, lookback_days: set(),
+    )
+    monkeypatch.setattr(
+        refresh_event_cache.storage_repository,
+        "write_read_object_keys_cache",
+        lambda *a, **kw: None,
     )
 
     refresh_event_cache.main()  # não deve levantar
