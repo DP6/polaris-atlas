@@ -5,6 +5,72 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Cache TTL em 3 endpoints sem cache de Catalog/Freshness
+
+Continuação da mesma investigação de custo de Cloud Run (ver item
+seguinte). Achados #2 a #4, mais leves que o de storage (loop
+sequencial por região sem paralelizar / drill-down sem TTL nenhum, não
+scan de Cloud Logging) — resolvidos com o mesmo padrão de TTL de 5min
+já usado por `get_partition_stats`/`get_table_cached`, sem job nem
+cache compartilhado novo.
+
+### O que foi feito
+- `domains/catalog/repository.py::get_datasets_summary` — loop
+  sequencial por região virou `ThreadPoolExecutor` (mesma técnica de
+  `search_tables`) + cache TTL 5min por `(project_id, regions)`.
+  Chamada por 3 endpoints (`validate_project`, `list_datasets`,
+  `search(mode=not_contains)`), inclusive a tela de entrada do produto.
+- `domains/freshness/repository.py::get_freshness_summary_by_dataset` —
+  mesmo tratamento (paralelização + TTL 5min).
+- `domains/catalog/repository.py::get_table_partitions` — não tinha
+  cache nenhum (diferente da função irmã `get_partition_stats`, já
+  cacheada); ganhou o mesmo TTL 5min por `(table_ref, partition_field)`.
+- `docs/specs/catalog.md` bump pra v1.7, `docs/specs/freshness.md` pra
+  v1.3, documentando os TTLs novos.
+
+---
+
+## Waste scanner do Storage passa a usar o cache pré-computado de audit log
+
+Usuário investigou custo de Cloud Run com o Claude Code (cobrança de
+CPU-segundos por request) e pediu pra levantar quais domínios ainda
+faziam trabalho síncrono caro dentro do request-response cycle,
+seguindo o mesmo racional que já resolveu esse problema em
+lineage/access (ver "Cache pré-computado de audit log" acima).
+Achado mais grave: `GET /api/v1/storage/{project}/waste-candidates`
+(checagem 6.2, "objeto sem leitura recente") chamava
+`list_read_object_keys` **direto no request path** — scan síncrono de
+90 dias de audit log do GCS a cada chamada, estruturalmente idêntico ao
+bug que lineage/access já tinham.
+
+### O que foi feito
+- `domains/storage/repository.py` ganhou o mesmo trio já usado por
+  `domains/access`: `write_read_object_keys_cache`/
+  `read_read_object_keys_cache`/`get_read_object_keys_cached`, sobre o
+  mesmo `core/event_cache.py` compartilhado (GCS + Firestore) — nenhum
+  recurso Terraform novo, reaproveita bucket/Firestore já existentes.
+- `jobs/refresh_event_cache.py` (o mesmo Job diário D-1) agora também
+  varre `list_read_object_keys` pra cada projeto conhecido, numa função
+  isolada (`_refresh_storage_read_keys`) com seu próprio try/except —
+  Data Access audit logs do GCS podem não estar habilitados no projeto
+  (ainda o caso em prod), e isso não pode derrubar o refresh de
+  lineage/access do mesmo projeto.
+- `domains/storage/service.py`/`api/v1/storage.py`: endpoint passou a
+  receber `firestore_client` via `Depends` e ler do cache em vez de
+  escanear ao vivo.
+- `docs/specs/storage.md` bump pra v1.3 (seção 6.2 documenta o
+  mecanismo, seção 11 nova com Critérios de aceite AC-009 a AC-015).
+
+### Não fez parte desta mudança
+Outros 3 endpoints sem cache identificados na mesma investigação
+(`catalog.get_datasets_summary`, `freshness.get_freshness_summary_by_dataset`,
+`catalog.get_table_partitions`) — mais leves (loop sequencial por
+região sem paralelizar / falta de TTL curto, não scan de Cloud Logging)
+e resolvidos um de cada vez em sessões seguintes, não com o padrão
+pesado de Job+cache.
+
+---
+
 ## Cloud Run com CPU sempre alocada de novo — recorrência do diagnóstico anterior, agora fixado no Terraform
 
 Usuário reportou custo de Cloud Run de ~R$5/dia com uso quase só de

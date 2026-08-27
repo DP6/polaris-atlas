@@ -9,10 +9,23 @@ INFORMATION_SCHEMA.TABLE_STORAGE (custo $0, lag de até 24h). get_table_freshnes
 client.get_table() (tempo real, sem lag, custo $0) — ver core/bigquery.py.
 """
 
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+
 from google.cloud import bigquery
 
 from observability_hub.core.bigquery import get_tables_metadata
 from observability_hub.core.sla import hours_since, sla_status
+
+# get_freshness_summary_by_dataset é só metadado (custo $0), mas roda na
+# tela de entrada do domínio a cada refresh, um JOIN por região sem
+# cache — mesmo padrão de TTL já usado em
+# domains/catalog/repository.py::get_datasets_summary. Chave
+# (project_id, regions).
+_FRESHNESS_SUMMARY_CACHE_TTL_SECONDS = 300
+_freshness_summary_cache: dict[tuple[str, tuple[str, ...]], tuple[float, list[dict]]] = {}
+_freshness_summary_cache_lock = threading.Lock()
 
 # TABLE_STORAGE.table_type usa os mesmos valores brutos de TABLES ("BASE
 # TABLE", "MATERIALIZED VIEW" com espaço); a API expõe os valores
@@ -45,15 +58,25 @@ def _sla_status_case_sql(timestamp_expr: str) -> str:
 
 
 def get_freshness_summary_by_dataset(
-    client: bigquery.Client, project_id: str, regions: list[str]
+    client: bigquery.Client, project_id: str, regions: list[str], max_workers: int = 8
 ) -> list[dict]:
     """Visão por projeto (GET /freshness/{project_id}), rodada uma vez por
     região — INFORMATION_SCHEMA é region-qualified. LEFT JOIN a partir de
     SCHEMATA (não de TABLE_STORAGE) para datasets vazios aparecerem com
-    total_tables=0 em vez de sumirem da lista (spec, casos de borda)."""
+    total_tables=0 em vez de sumirem da lista (spec, casos de borda).
+    Uma query por região, em paralelo (mesma técnica de
+    domains/catalog/repository.py::search_tables), cacheada 5min por
+    (project_id, regions)."""
+    cache_key = (project_id, tuple(regions))
+    now = time.monotonic()
+    with _freshness_summary_cache_lock:
+        cached = _freshness_summary_cache.get(cache_key)
+    if cached is not None and now - cached[0] < _FRESHNESS_SUMMARY_CACHE_TTL_SECONDS:
+        return cached[1]
+
     sla_status_sql = _sla_status_case_sql("ts.storage_last_modified_time")
-    datasets: list[dict] = []
-    for region in regions:
+
+    def _query_region(region: str) -> list[dict]:
         query = f"""
             WITH per_table AS (
               SELECT
@@ -80,20 +103,30 @@ def get_freshness_summary_by_dataset(
             ORDER BY dataset_id
         """
         rows = client.query(query).result()
-        for row in rows:
-            datasets.append(
-                {
-                    "dataset_id": row.dataset_id,
-                    "location": row.location,
-                    "total_tables": row.total_tables,
-                    "ok": row.ok,
-                    "warning_12_24": row.warning_12_24,
-                    "warning_24_48": row.warning_24_48,
-                    "warning_48_7d": row.warning_48_7d,
-                    "warning_7d_1m": row.warning_7d_1m,
-                    "stale": row.stale,
-                }
-            )
+        return [
+            {
+                "dataset_id": row.dataset_id,
+                "location": row.location,
+                "total_tables": row.total_tables,
+                "ok": row.ok,
+                "warning_12_24": row.warning_12_24,
+                "warning_24_48": row.warning_24_48,
+                "warning_48_7d": row.warning_48_7d,
+                "warning_7d_1m": row.warning_7d_1m,
+                "stale": row.stale,
+            }
+            for row in rows
+        ]
+
+    if not regions:
+        datasets: list[dict] = []
+    else:
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            results = list(pool.map(_query_region, regions))
+        datasets = [row for region_rows in results for row in region_rows]
+
+    with _freshness_summary_cache_lock:
+        _freshness_summary_cache[cache_key] = (now, datasets)
     return datasets
 
 

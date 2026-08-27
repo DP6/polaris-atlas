@@ -1,9 +1,9 @@
 # Spec — Domínio: Catálogo (catalog)
 
-**Versão:** 1.6 (descoberta automática de projetos alcançáveis pela SA)
+**Versão:** 1.7 (cache TTL em get_datasets_summary/get_table_partitions)
 **Status:** Aprovada
 **Fase:** 2 — MVP v1 (Sprint 2.2/2.3)
-**Última atualização:** 2026-08-21 (v1.6)
+**Última atualização:** 2026-08-26 (v1.7)
 
 ---
 
@@ -31,7 +31,14 @@ Metadados do INFORMATION_SCHEMA — **custo $0**:
 `GET /catalog/{project_id}/datasets` (resumo por dataset) continua lendo
 `num_rows`/`total_size_bytes` de `TABLE_STORAGE` (lag de até 24h, mas uma
 única query agregada por região — evita uma chamada de API por tabela do
-projeto inteiro).
+projeto inteiro). **Revisado em 2026-08-26**: uma query por região, em
+paralelo (`ThreadPoolExecutor`, mesma técnica da busca reversa abaixo), e
+cacheada em memória por 5min por `(project_id, regions)`
+(`domains/catalog/repository.py::_datasets_summary_cache`) — chamado
+também por `validate_project` e por `search(mode=not_contains)`, sem
+cache cada navegação reexecutava o JOIN de 3 `INFORMATION_SCHEMA` do
+zero (identificado como fonte de custo real de Cloud Run, request-based
+billing cobra pelo tempo de CPU segurando a query).
 
 `GET /catalog/{project_id}/datasets/{dataset_id}/tables` (listagem de
 tabelas de um dataset) lê `num_rows`/`size_bytes`/`last_modified_time` via
@@ -57,6 +64,13 @@ resultado é cacheado em memória por 5min por tabela
 (`domains/catalog/repository.py::_partition_stats_cache`, TTL local ao
 domínio catalog, mesmo padrão do `get_table_cached` de `core/bigquery.py`
 mas não compartilhado com ele).
+
+`GET /catalog/{project_id}/datasets/{dataset_id}/tables/{table_id}/partitions`
+(listagem das partições distintas, drill-down) também é uma query real de
+dados (`GROUP BY`/`COUNT(*)` sobre a tabela inteira, não metadado) — ao
+contrário de `get_partition_stats` acima, não tinha nenhum cache até
+2026-08-26. Passou a usar o mesmo padrão, cacheada 5min por
+`(table_ref, partition_field)` (`_table_partitions_cache`).
 
 `GET /catalog/{project_id}/search` (busca reversa) consulta
 `INFORMATION_SCHEMA.TABLES` de todas as regiões descobertas via

@@ -36,6 +36,23 @@ _PARTITION_STATS_CACHE_TTL_SECONDS = 300
 _partition_stats_cache: dict[str, tuple[float, dict]] = {}
 _partition_stats_cache_lock = threading.Lock()
 
+# get_table_partitions roda uma query real (custo != $0, lê a tabela
+# inteira) — ao contrário da função irmã get_partition_stats, não tinha
+# cache nenhum: cada clique no drill-down de partições reprocessava do
+# zero. Mesmo padrão de TTL, chave (table_ref, partition_field).
+_TABLE_PARTITIONS_CACHE_TTL_SECONDS = 300
+_table_partitions_cache: dict[tuple[str, str], tuple[float, list[dict]]] = {}
+_table_partitions_cache_lock = threading.Lock()
+
+# get_datasets_summary é só metadado (custo $0), mas roda na tela de
+# entrada do produto (list_datasets) e é chamada de novo por
+# validate_project/search(mode=not_contains) — sem cache, cada
+# navegação reexecuta o JOIN de 3 INFORMATION_SCHEMA por região. Mesmo
+# padrão de TTL de _partition_stats_cache, chave (project_id, regions).
+_DATASETS_SUMMARY_CACHE_TTL_SECONDS = 300
+_datasets_summary_cache: dict[tuple[str, tuple[str, ...]], tuple[float, list[dict]]] = {}
+_datasets_summary_cache_lock = threading.Lock()
+
 # Usado por derive_search_prefix — tabelas com sufixo numérico (ex:
 # events_20260812, sharded/particionadas por nome) tratadas como uma série;
 # o prefixo sem o sufixo identifica a série (events_).
@@ -49,12 +66,22 @@ def _bytes_to_gb(size_bytes: int | None) -> float | None:
 
 
 def get_datasets_summary(
-    client: bigquery.Client, project_id: str, regions: list[str]
+    client: bigquery.Client, project_id: str, regions: list[str], max_workers: int = 8
 ) -> list[dict]:
-    """Query 2 da spec, rodada uma vez por região — INFORMATION_SCHEMA.SCHEMATA
-    é region-qualified, não dá pra combinar regiões numa única query."""
-    datasets: list[dict] = []
-    for region in regions:
+    """Query 2 da spec, rodada uma vez por região (INFORMATION_SCHEMA.SCHEMATA
+    é region-qualified, não dá pra combinar regiões numa única query), em
+    paralelo — mesma técnica de search_tables. Cacheada 5min por
+    (project_id, regions), mesmo padrão de get_partition_stats: chamada por
+    validate_project/list_datasets/search(mode=not_contains), sem cache
+    cada uma reexecutaria o JOIN de 3 INFORMATION_SCHEMA do zero."""
+    cache_key = (project_id, tuple(regions))
+    now = time.monotonic()
+    with _datasets_summary_cache_lock:
+        cached = _datasets_summary_cache.get(cache_key)
+    if cached is not None and now - cached[0] < _DATASETS_SUMMARY_CACHE_TTL_SECONDS:
+        return cached[1]
+
+    def _query_region(region: str) -> list[dict]:
         query = f"""
             SELECT
               s.schema_name                                          AS dataset_id,
@@ -75,20 +102,30 @@ def get_datasets_summary(
             ORDER BY total_size_bytes DESC
         """
         rows = client.query(query).result()
-        for row in rows:
-            datasets.append(
-                {
-                    "dataset_id": row.dataset_id,
-                    "location": row.location,
-                    "creation_time": row.creation_time,
-                    "last_modified_time": row.last_modified_time,
-                    "total_tables": row.total_tables,
-                    "total_views": row.total_views,
-                    "total_size_bytes": row.total_size_bytes,
-                    "total_size_gb": _bytes_to_gb(row.total_size_bytes) or 0.0,
-                    "total_rows": row.total_rows,
-                }
-            )
+        return [
+            {
+                "dataset_id": row.dataset_id,
+                "location": row.location,
+                "creation_time": row.creation_time,
+                "last_modified_time": row.last_modified_time,
+                "total_tables": row.total_tables,
+                "total_views": row.total_views,
+                "total_size_bytes": row.total_size_bytes,
+                "total_size_gb": _bytes_to_gb(row.total_size_bytes) or 0.0,
+                "total_rows": row.total_rows,
+            }
+            for row in rows
+        ]
+
+    if not regions:
+        datasets: list[dict] = []
+    else:
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            results = list(pool.map(_query_region, regions))
+        datasets = [row for region_rows in results for row in region_rows]
+
+    with _datasets_summary_cache_lock:
+        _datasets_summary_cache[cache_key] = (now, datasets)
     return datasets
 
 
@@ -360,19 +397,32 @@ def get_table_partitions(
     """Lista as partições distintas de uma tabela particionada com a
     contagem de linhas de cada uma — query real de dados (não metadado),
     ordenada da mais recente pra mais antiga. GROUP BY já garante um valor
-    distinto por linha, sem precisar de DISTINCT."""
+    distinto por linha, sem precisar de DISTINCT. Cacheada 5min por
+    (table_ref, partition_field), mesmo padrão de get_partition_stats —
+    diferente dela, esta não tinha cache nenhum antes."""
+    table_ref = f"{project_id}.{dataset_id}.{table_id}"
+    cache_key = (table_ref, partition_field)
+    now = time.monotonic()
+    with _table_partitions_cache_lock:
+        cached = _table_partitions_cache.get(cache_key)
+    if cached is not None and now - cached[0] < _TABLE_PARTITIONS_CACHE_TTL_SECONDS:
+        return cached[1]
+
     query = f"""
         SELECT `{partition_field}` AS partition_value, COUNT(*) AS row_count
-        FROM `{project_id}.{dataset_id}.{table_id}`
+        FROM `{table_ref}`
         GROUP BY 1
         ORDER BY 1 DESC
     """
     rows = client.query(query).result()
-    return [
+    result = [
         {"value": str(row.partition_value), "row_count": row.row_count}
         for row in rows
         if row.partition_value is not None
     ]
+    with _table_partitions_cache_lock:
+        _table_partitions_cache[cache_key] = (now, result)
+    return result
 
 
 def get_table_columns(

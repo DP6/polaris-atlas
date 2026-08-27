@@ -7,7 +7,7 @@ extensão do lineage) completos, testados e confirmados em
 via PR #25 e deployada em `observability-hub-prod` no mesmo dia,
 infraestrutura (IAM, buckets mock, dados) promovida antes do merge (ver
 `docs/onboarding-cliente.md`)
-**Versão:** v1.2 (navegar dentro de um bucket)
+**Versão:** v1.3 (cache pré-computado do scanner 6.2, ver seção 6.2)
 **Depende de:** `domains/lineage` (extensão, não substituição)
 
 ---
@@ -205,6 +205,35 @@ tráfego intenso. Antes de habilitar em prod, medir volume esperado.
 Registrar em `docs/onboarding-cliente.md` como item de atenção antes de
 replicar a config de dev.
 
+**Revisado em 2026-08-26 — cache pré-computado, mesmo padrão de
+`domains/lineage`/`domains/access`**: até esta revisão, `GET
+.../waste-candidates` chamava `list_read_object_keys` **direto no
+request path** — um scan síncrono de 90 dias de audit log a cada
+chamada, segurando CPU alocada do Cloud Run Service pelo tempo real da
+consulta ao Cloud Logging. Diagnosticado como uma fonte real de custo
+(mesmo problema estrutural que lineage/access já tinham e resolveram,
+ver `CHANGELOG.md`, "Diagnóstico de custo do Cloud Run").
+
+**Mecanismo** (idêntico ao já documentado em `docs/specs/lineage.md`
+seção "Cache pré-computado"): `jobs/refresh_event_cache.py` (o mesmo
+Cloud Run Job diário, D-1, sem recurso Terraform novo) agora também
+chama `domains/storage/repository.py::list_read_object_keys` pra cada
+projeto conhecido e grava o resultado no mesmo cache compartilhado
+(`core/event_cache.py`: payload no bucket GCS `event_cache_bucket_name`,
+metadado no Firestore). O endpoint passa a ler
+`get_read_object_keys_cached()` — cache hit não toca Cloud Logging;
+cache miss cai pro scan ao vivo e grava pra próxima chamada (auto-cura),
+mesmo racional de `get_access_events_cached`.
+
+**Isolamento deliberado**: o refresh de storage dentro do Job é
+best-effort e isolado do de lineage/access (`_refresh_storage_read_keys`
+em `refresh_event_cache.py`) — como GCS `DATA_READ` pode não estar
+habilitado no projeto (ainda o caso em prod hoje), uma falha aqui nunca
+deve impedir o refresh de lineage/access do mesmo projeto. Nenhuma
+mudança de infraestrutura: reaproveita 100% do bucket/Firestore/Job já
+existentes, então não há novo recurso GCP pra registrar em
+`docs/gcp-components.md`.
+
 ### 6.3 Estimativa de economia
 
 Nunca um valor único — faixa (mesmo padrão do scanner de particionamento
@@ -390,6 +419,18 @@ consciente de adiar validação de freshness/waste com idade real até uma
 sessão futura (ver seção 2, fora do escopo por ora quanto a esse teste
 específico, mas a regra do scanner já está desenhada pra suportar quando
 o mock existir).
+
+## 11. Critérios de aceite — cache do scanner 6.2 (v1.3)
+
+| ID | Comportamento | Teste |
+|---|---|---|
+| AC-009 | Cache hit não chama `logging_client.list_entries` | `test_get_read_object_keys_cached_returns_cache_hit_without_scanning` |
+| AC-010 | Cache miss faz o scan ao vivo e grava o resultado no cache antes de retornar | `test_get_read_object_keys_cached_falls_back_and_writes_cache_on_miss` |
+| AC-011 | Falha ao ler o cache (qualquer exceção, não só cache miss) cai pro scan ao vivo em vez de propagar | `test_get_read_object_keys_cached_falls_back_to_live_scan_when_cache_read_fails` |
+| AC-012 | Falha ao gravar o cache não impede a resposta de conter o resultado do scan ao vivo já feito | `test_get_read_object_keys_cached_returns_live_data_when_cache_write_fails` |
+| AC-013 | Falta de acesso ao Cloud Logging no scan ao vivo propaga (quem chama decide como comunicar) | `test_get_read_object_keys_cached_propagates_logging_access_denied_from_live_scan` |
+| AC-014 | O Job diário grava o cache de storage pra cada projeto conhecido, sem depender do request path | `test_refresh_project_writes_lineage_and_access_caches` |
+| AC-015 | Falha no refresh de storage (audit log desabilitado ou erro de API) não interrompe o refresh de lineage/access do mesmo projeto | `test_refresh_storage_read_keys_returns_zero_without_logging_access`, `test_refresh_storage_read_keys_returns_zero_on_api_error` |
 
 ## 10. Abertos para decisão antes de implementar
 

@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 
+from google.cloud import firestore, storage
 from google.cloud import logging as cloud_logging
-from google.cloud import storage
 
 from observability_hub.core.config import settings
 from observability_hub.core.exceptions import LoggingAccessDeniedError
@@ -14,8 +14,6 @@ from observability_hub.domains.storage.schemas import (
     WasteCandidate,
     WasteCandidatesResponse,
 )
-
-_USAGE_CHECK_LOOKBACK_DAYS = 90
 
 _SAVINGS_DISCLAIMER = (
     "Faixa calculada sobre bytes reais armazenados nos objetos elegíveis "
@@ -97,6 +95,7 @@ def browse_bucket(
 def get_waste_candidates(
     client: storage.Client,
     logging_client: cloud_logging.Client,
+    firestore_client: firestore.Client,
     project_id: str,
     min_days_unused: int,
 ) -> WasteCandidatesResponse:
@@ -115,7 +114,9 @@ def get_waste_candidates(
     }
     eligible_by_bucket = {name: blobs for name, blobs in eligible_by_bucket.items() if blobs}
 
-    read_keys, usage_check_warning = _read_object_keys_or_warning(logging_client, project_id)
+    read_keys, usage_check_warning = _read_object_keys_or_warning(
+        client, logging_client, firestore_client, project_id
+    )
 
     candidates = []
     for bucket_name, eligible in eligible_by_bucket.items():
@@ -155,20 +156,26 @@ def get_waste_candidates(
 
 
 def _read_object_keys_or_warning(
-    logging_client: cloud_logging.Client, project_id: str
+    storage_client: storage.Client,
+    logging_client: cloud_logging.Client,
+    firestore_client: firestore.Client,
+    project_id: str,
 ) -> tuple[set[tuple[str, str]], str | None]:
     """Nunca propaga erro pra get_waste_candidates — a checagem 6.2 é
     best-effort, degradando pra "config_based" em vez de derrubar a
     requisição inteira (falta de acesso a Cloud Logging não deveria
-    esconder o resultado, já útil, da checagem 6.1)."""
+    esconder o resultado, já útil, da checagem 6.1). Lê do cache
+    pré-computado pelo job diário (jobs/refresh_event_cache.py) em vez de
+    escanear Cloud Logging a cada request — ver
+    repository.py::get_read_object_keys_cached."""
     try:
-        keys = repository.list_read_object_keys(
-            logging_client, project_id, _USAGE_CHECK_LOOKBACK_DAYS
+        keys = repository.get_read_object_keys_cached(
+            logging_client, storage_client, firestore_client, project_id
         )
     except LoggingAccessDeniedError:
         return set(), _USAGE_CHECK_FORBIDDEN_WARNING
     if not keys:
-        return set(), _USAGE_CHECK_EMPTY_WARNING.format(days=_USAGE_CHECK_LOOKBACK_DAYS)
+        return set(), _USAGE_CHECK_EMPTY_WARNING.format(days=repository.LOOKBACK_DAYS)
     return keys, None
 
 

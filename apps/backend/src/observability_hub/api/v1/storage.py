@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, Query
+from google.cloud import firestore, storage
 from google.cloud import logging as cloud_logging
-from google.cloud import storage
 
 from observability_hub.core.auth import require_project_access
+from observability_hub.core.firestore import get_firestore_client
 from observability_hub.core.logging_client import get_logging_client
 from observability_hub.core.storage_client import get_storage_client
 from observability_hub.domains.storage import service
@@ -41,5 +42,8 @@ def get_waste_candidates(
     min_days_unused: int = Query(default=60, ge=1),
     client: storage.Client = Depends(get_storage_client),
     logging_client: cloud_logging.Client = Depends(get_logging_client),
+    firestore_client: firestore.Client = Depends(get_firestore_client),
 ) -> WasteCandidatesResponse:
-    return service.get_waste_candidates(client, logging_client, project_id, min_days_unused)
+    return service.get_waste_candidates(
+        client, logging_client, firestore_client, project_id, min_days_unused
+    )

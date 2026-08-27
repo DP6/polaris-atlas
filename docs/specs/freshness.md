@@ -1,9 +1,9 @@
 # Spec — Domínio: Freshness com SLA
 
-**Versão:** 1.2 (freshness por tabela em tempo real via client.get_table())
+**Versão:** 1.3 (cache TTL em get_freshness_summary_by_dataset)
 **Status:** Aprovada
 **Fase:** 2 — MVP v1
-**Última atualização:** 2026-08-11
+**Última atualização:** 2026-08-26
 
 ---
 
@@ -129,6 +129,14 @@ FROM `<project>.region-<region>.INFORMATION_SCHEMA.TABLE_STORAGE`
 ORDER BY hours_since_update DESC
 ```
 Custo: $0
+
+**Revisado em 2026-08-26**: uma query por região, em paralelo
+(`ThreadPoolExecutor`, mesma técnica de `domains/catalog`), e cacheada em
+memória por 5min por `(project_id, regions)`
+(`domains/freshness/repository.py::_freshness_summary_cache`) — sem
+cache, cada refresh da tela de entrada do domínio reexecutava o JOIN do
+zero (mesmo diagnóstico de custo de Cloud Run que motivou o cache
+equivalente em `domains/catalog::get_datasets_summary`).
 
 ### Visão de dataset — `GET /freshness/{project_id}/datasets/{dataset_id}`
 

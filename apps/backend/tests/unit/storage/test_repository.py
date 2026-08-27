@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 from google.api_core.exceptions import Forbidden
 
+from observability_hub.core import event_cache as event_cache_module
 from observability_hub.core.exceptions import LoggingAccessDeniedError, StorageAccessDeniedError
 from observability_hub.domains.storage import repository
 
@@ -237,3 +238,129 @@ def test_list_read_object_keys_raises_logging_access_denied_on_forbidden():
 
     with pytest.raises(LoggingAccessDeniedError):
         repository.list_read_object_keys(client, _PROJECT_ID, 90)
+
+
+# --- serialize/deserialize_read_object_keys ---------------------------------
+
+
+def test_serialize_deserialize_read_object_keys_round_trips():
+    keys = {("landing", "crm_leads/part-0001.csv"), ("processed", "exports/a.csv")}
+
+    round_tripped = repository._deserialize_read_object_keys(
+        repository._serialize_read_object_keys(keys)
+    )
+
+    assert round_tripped == keys
+
+
+def test_serialize_read_object_keys_empty_set_round_trips():
+    round_tripped = repository._deserialize_read_object_keys(
+        repository._serialize_read_object_keys(set())
+    )
+
+    assert round_tripped == set()
+
+
+# --- get_read_object_keys_cached --------------------------------------------
+
+
+def test_get_read_object_keys_cached_returns_cache_hit_without_scanning(monkeypatch):
+    logging_client = MagicMock()
+    storage_client = MagicMock()
+    firestore_client = MagicMock()
+    cached_keys = {("landing", "a.csv")}
+    monkeypatch.setattr(repository, "read_read_object_keys_cache", lambda *a, **kw: cached_keys)
+
+    result = repository.get_read_object_keys_cached(
+        logging_client, storage_client, firestore_client, _PROJECT_ID
+    )
+
+    assert result == cached_keys
+    logging_client.list_entries.assert_not_called()
+
+
+def test_get_read_object_keys_cached_falls_back_and_writes_cache_on_miss(monkeypatch):
+    logging_client = MagicMock()
+    logging_client.list_entries.return_value = []
+    storage_client = MagicMock()
+    firestore_client = MagicMock()
+    monkeypatch.setattr(repository, "read_read_object_keys_cache", lambda *a, **kw: None)
+    write_calls = []
+    monkeypatch.setattr(
+        repository, "write_read_object_keys_cache", lambda *a, **kw: write_calls.append((a, kw))
+    )
+    seen_calls = []
+    monkeypatch.setattr(
+        event_cache_module, "record_project_seen", lambda *a, **kw: seen_calls.append((a, kw))
+    )
+
+    result = repository.get_read_object_keys_cached(
+        logging_client, storage_client, firestore_client, _PROJECT_ID
+    )
+
+    assert result == set()
+    logging_client.list_entries.assert_called_once()
+    assert len(write_calls) == 1
+    assert len(seen_calls) == 1
+
+
+def test_get_read_object_keys_cached_falls_back_to_live_scan_when_cache_read_fails(monkeypatch):
+    """Falha ao LER o cache (ex: Forbidden no bucket) nunca deve impedir
+    o scan ao vivo — mesmo racional de
+    domains/access/repository.py::get_access_events_cached."""
+    logging_client = MagicMock()
+    logging_client.list_entries.return_value = []
+    storage_client = MagicMock()
+    firestore_client = MagicMock()
+    monkeypatch.setattr(
+        repository,
+        "read_read_object_keys_cache",
+        lambda *a, **kw: (_ for _ in ()).throw(Forbidden("no access to bucket")),
+    )
+    monkeypatch.setattr(repository, "write_read_object_keys_cache", lambda *a, **kw: None)
+
+    result = repository.get_read_object_keys_cached(
+        logging_client, storage_client, firestore_client, _PROJECT_ID
+    )
+
+    assert result == set()
+    logging_client.list_entries.assert_called_once()
+
+
+def test_get_read_object_keys_cached_returns_live_data_when_cache_write_fails(monkeypatch):
+    """Falha ao GRAVAR o cache não pode impedir a resposta de conter o
+    resultado do scan ao vivo que já foi feito."""
+    logging_client = MagicMock()
+    logging_client.list_entries.return_value = []
+    storage_client = MagicMock()
+    firestore_client = MagicMock()
+    live_keys = {("landing", "a.csv")}
+    monkeypatch.setattr(repository, "read_read_object_keys_cache", lambda *a, **kw: None)
+    monkeypatch.setattr(repository, "list_read_object_keys", lambda *a, **kw: live_keys)
+
+    def _raise_write(*a, **kw):
+        raise Forbidden("no access to bucket")
+
+    monkeypatch.setattr(repository, "write_read_object_keys_cache", _raise_write)
+
+    result = repository.get_read_object_keys_cached(
+        logging_client, storage_client, firestore_client, _PROJECT_ID
+    )
+
+    assert result == live_keys
+
+
+def test_get_read_object_keys_cached_propagates_logging_access_denied_from_live_scan(monkeypatch):
+    """Diferente de falha ao ler/gravar cache (engolida), falta de acesso
+    ao Cloud Logging no scan ao vivo deve propagar — quem chama
+    (domains/storage/service.py) decide como comunicar isso."""
+    logging_client = MagicMock()
+    logging_client.list_entries.side_effect = Forbidden("denied")
+    storage_client = MagicMock()
+    firestore_client = MagicMock()
+    monkeypatch.setattr(repository, "read_read_object_keys_cache", lambda *a, **kw: None)
+
+    with pytest.raises(LoggingAccessDeniedError):
+        repository.get_read_object_keys_cached(
+            logging_client, storage_client, firestore_client, _PROJECT_ID
+        )
