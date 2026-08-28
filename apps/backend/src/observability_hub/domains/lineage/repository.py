@@ -29,13 +29,12 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
-from google.api_core.exceptions import Forbidden, TooManyRequests
 from google.cloud import bigquery, firestore, storage
 from google.cloud import logging as cloud_logging
 
 from observability_hub.core import event_cache
 from observability_hub.core.config import settings
-from observability_hub.core.exceptions import LoggingAccessDeniedError, LoggingQuotaExceededError
+from observability_hub.core.logging_client import list_entries_with_retry
 
 LOOKBACK_DAYS = 30
 _PAGE_SIZE = 1000
@@ -151,27 +150,29 @@ def list_job_events(
     client: cloud_logging.Client, project_id: str, lookback_days: int = LOOKBACK_DAYS
 ) -> list[JobEvent]:
     """Levanta LoggingAccessDeniedError se a SA de runtime não tiver
-    roles/logging.viewer no projeto. Lista vazia (sem erro) é o resultado
-    tanto de "nenhum job rodou na janela" quanto de "Data Access audit
-    logs desabilitados" — os dois casos são indistinguíveis por aqui, ver
-    aviso estático em domains/lineage/service.py. lookback_days ajustável
-    só usado por get_orphans — get_table_lineage/upstream/downstream
-    continuam no default do módulo (LOOKBACK_DAYS)."""
+    roles/logging.viewer no projeto, e LoggingQuotaExceededError se a cota
+    read_requests/min do projeto persistir estourada após o retry (ver
+    core/logging_client.py::list_entries_with_retry). Lista vazia (sem
+    erro) é o resultado tanto de "nenhum job rodou na janela" quanto de
+    "Data Access audit logs desabilitados" — os dois casos são
+    indistinguíveis por aqui, ver aviso estático em
+    domains/lineage/service.py. lookback_days ajustável só usado por
+    get_orphans — get_table_lineage/upstream/downstream continuam no
+    default do módulo (LOOKBACK_DAYS)."""
     cutoff = (datetime.now(UTC) - timedelta(days=lookback_days)).strftime("%Y-%m-%dT%H:%M:%SZ")
     filter_ = (
         'resource.type="bigquery_resource" '
         'protoPayload.methodName="jobservice.jobcompleted" '
         f'timestamp>="{cutoff}"'
     )
-    try:
-        entries = client.list_entries(
-            resource_names=[f"projects/{project_id}"],
-            filter_=filter_,
-            page_size=_PAGE_SIZE,
-        )
-        return [event for entry in entries if (event := _parse_entry(entry)) is not None]
-    except Forbidden as exc:
-        raise LoggingAccessDeniedError(project_id) from exc
+    entries = list_entries_with_retry(
+        client,
+        resource_names=[f"projects/{project_id}"],
+        filter_=filter_,
+        page_size=_PAGE_SIZE,
+        project_id=project_id,
+    )
+    return [event for entry in entries if (event := _parse_entry(entry)) is not None]
 
 
 def list_all_table_refs(
@@ -308,14 +309,11 @@ def get_job_events_cached(
             if cached is not None:
                 return cached
 
-    try:
-        events = list_job_events(client, project_id, lookback_days=lookback_days)
-    except TooManyRequests as exc:
-        # Cota read_requests/min do projeto estourada (dev+prod compartilham
-        # o balde). Transitória -> LoggingQuotaExceededError -> HTTP 503 +
-        # Retry-After, nunca um 500 "Failed to fetch". Retry com backoff em
-        # core/logging_client.py::list_entries_with_retry (ver CHANGELOG).
-        raise LoggingQuotaExceededError(project_id) from exc
+    # list_job_events já mapeia Forbidden -> LoggingAccessDeniedError e 429
+    # persistente -> LoggingQuotaExceededError (via
+    # core/logging_client.py::list_entries_with_retry); as duas propagam,
+    # main.py mapeia pra 403/503.
+    events = list_job_events(client, project_id, lookback_days=lookback_days)
 
     if lookback_days == LOOKBACK_DAYS:
         try:

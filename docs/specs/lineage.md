@@ -385,7 +385,7 @@ apps/backend/src/observability_hub/
 | Nenhum evento de job no projeto raiz | `warning` populado (mesmo texto/causas da v1), `nodes`/`edges` vazios |
 | `max_hops` fora do intervalo 1–15 | HTTP 422 (validação do `Query(ge=1, le=15)`) |
 | Projeto nunca varrido pelo Job (cache miss) | Fallback síncrono (scan ao vivo), resultado gravado no cache pra próxima chamada — `cache_updated_at: null` só nesta resposta |
-| `429 TooManyRequests` no fallback ao vivo (cota `read_requests`/min do projeto, dev+prod compartilham) | `LoggingQuotaExceededError` → HTTP **503 + `Retry-After: 60`**, não um 500 "Failed to fetch". Retry com backoff antes disso: `core/logging_client.py::list_entries_with_retry` (fix seguinte) |
+| `429 TooManyRequests` no fallback ao vivo (cota `read_requests`/min do projeto, dev+prod compartilham) | `LoggingQuotaExceededError` → HTTP **503 + `Retry-After: 60`**, não um 500 "Failed to fetch". Antes disso, `core/logging_client.py::list_entries_with_retry` faz retry exponencial (backoff, deadline 30s) no 429/503 — a maioria dos picos nem chega ao 503 |
 | `lookback_days` custom em `/orphans` | Cache ignorado (sempre scan ao vivo) — `JobEvent` não carrega timestamp por evento, não dá pra recortar um cache de 30 dias pra outra janela |
 | Job falha num projeto (acesso negado, projeto inexistente/descontinuado, ou qualquer outro erro) | Logado e pulado — não derruba o refresh dos demais projetos conhecidos |
 | Admin dispara o gatilho manual enquanto o ciclo diário já está rodando | Duas execuções do Job em paralelo — sem deduplicação na v1, ambas terminam gravando o mesmo resultado (idempotente) |

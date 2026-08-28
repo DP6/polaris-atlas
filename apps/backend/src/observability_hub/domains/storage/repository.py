@@ -19,17 +19,14 @@ import logging as std_logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime, timedelta
 
-from google.api_core.exceptions import Forbidden, TooManyRequests
+from google.api_core.exceptions import Forbidden
 from google.cloud import firestore, storage
 from google.cloud import logging as cloud_logging
 
 from observability_hub.core import event_cache
 from observability_hub.core.config import settings
-from observability_hub.core.exceptions import (
-    LoggingAccessDeniedError,
-    LoggingQuotaExceededError,
-    StorageAccessDeniedError,
-)
+from observability_hub.core.exceptions import StorageAccessDeniedError
+from observability_hub.core.logging_client import list_entries_with_retry
 from observability_hub.core.storage_client import list_bucket_objects_cached
 
 _OBJECT_READ_METHOD = "storage.objects.get"
@@ -176,8 +173,11 @@ def list_read_object_keys(
     """Conjunto de (bucket_name, object_name) com pelo menos uma leitura de
     conteúdo (`storage.objects.get`) nos últimos `lookback_days` dias.
     Levanta LoggingAccessDeniedError se a SA não tiver roles/
-    logging.viewer no projeto — mesma classe de erro que domains/lineage/
-    domains/access já usam pra Cloud Logging.
+    logging.viewer no projeto, e LoggingQuotaExceededError se a cota
+    read_requests/min do projeto persistir estourada após o retry (ver
+    core/logging_client.py::list_entries_with_retry) — as duas mesmas
+    classes de erro que domains/lineage/domains/access usam pra Cloud
+    Logging.
 
     Conjunto vazio (sem erro) é ambíguo por natureza — pode significar
     "nenhuma leitura na janela" ou "Data Access audit log DATA_READ do
@@ -190,23 +190,22 @@ def list_read_object_keys(
         f'protoPayload.methodName="{_OBJECT_READ_METHOD}" '
         f'timestamp>="{cutoff}"'
     )
-    try:
-        entries = logging_client.list_entries(
-            resource_names=[f"projects/{project_id}"],
-            filter_=filter_,
-            page_size=_LOGGING_PAGE_SIZE,
-        )
-        keys = set()
-        for entry in entries:
-            payload = entry.payload if isinstance(entry.payload, dict) else None
-            if payload is None:
-                continue
-            key = _parse_resource_name(payload.get("resourceName"))
-            if key is not None:
-                keys.add(key)
-        return keys
-    except Forbidden as exc:
-        raise LoggingAccessDeniedError(project_id) from exc
+    entries = list_entries_with_retry(
+        logging_client,
+        resource_names=[f"projects/{project_id}"],
+        filter_=filter_,
+        page_size=_LOGGING_PAGE_SIZE,
+        project_id=project_id,
+    )
+    keys = set()
+    for entry in entries:
+        payload = entry.payload if isinstance(entry.payload, dict) else None
+        if payload is None:
+            continue
+        key = _parse_resource_name(payload.get("resourceName"))
+        if key is not None:
+            keys.add(key)
+    return keys
 
 
 # --- Cache de audit log (job periódico + fallback do request path) ---------
@@ -267,10 +266,11 @@ def get_read_object_keys_cached(
     """Lê o cache pré-computado (job periódico ou fallback de outra
     requisição); em cache miss, escaneia ao vivo e grava pra próxima
     chamada (auto-cura) — mesmo racional de
-    domains/access/repository.py::get_access_events_cached. Levanta
-    LoggingAccessDeniedError (não capturada aqui) quando o scan ao vivo
-    falha por falta de roles/logging.viewer — quem chama decide como
-    comunicar isso (domains/storage/service.py)."""
+    domains/access/repository.py::get_access_events_cached. list_read_object_keys
+    levanta LoggingAccessDeniedError (falta de roles/logging.viewer) ou
+    LoggingQuotaExceededError (429 persistente após o retry) — nenhuma das
+    duas é capturada aqui; quem chama (domains/storage/service.py) degrada
+    ambas pra warning "best-effort" em vez de derrubar a requisição."""
     try:
         cached = read_read_object_keys_cache(storage_client, project_id)
     except Exception:
@@ -282,14 +282,7 @@ def get_read_object_keys_cached(
         if cached is not None:
             return cached
 
-    try:
-        keys = list_read_object_keys(logging_client, project_id, LOOKBACK_DAYS)
-    except TooManyRequests as exc:
-        # Cota read_requests/min do projeto estourada. Transitória ->
-        # LoggingQuotaExceededError; quem chama (domains/storage/service.py)
-        # decide degradar pra warning "best-effort" em vez de derrubar a
-        # requisição inteira, mesmo tratamento de LoggingAccessDeniedError.
-        raise LoggingQuotaExceededError(project_id) from exc
+    keys = list_read_object_keys(logging_client, project_id, LOOKBACK_DAYS)
 
     try:
         write_read_object_keys_cache(storage_client, firestore_client, project_id, keys)

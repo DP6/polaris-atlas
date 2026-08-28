@@ -19,13 +19,12 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from google.api_core.exceptions import Forbidden, TooManyRequests
 from google.cloud import firestore, storage
 from google.cloud import logging as cloud_logging
 
 from observability_hub.core import event_cache
 from observability_hub.core.config import settings
-from observability_hub.core.exceptions import LoggingAccessDeniedError, LoggingQuotaExceededError
+from observability_hub.core.logging_client import list_entries_with_retry
 
 LOOKBACK_DAYS = 30
 _PAGE_SIZE = 1000
@@ -105,10 +104,12 @@ def _parse_entry(entry: cloud_logging.LogEntry) -> AccessEvent | None:
 
 def list_access_events(client: cloud_logging.Client, project_id: str) -> list[AccessEvent]:
     """Levanta LoggingAccessDeniedError se a SA de runtime não tiver
-    roles/logging.viewer no projeto. Lista vazia (sem erro) é o resultado
-    tanto de "nenhum job rodou na janela" quanto de "Data Access audit
-    logs desabilitados" — indistinguível por aqui, ver aviso estático em
-    domains/access/service.py.
+    roles/logging.viewer no projeto, e LoggingQuotaExceededError se a cota
+    read_requests/min do projeto persistir estourada após o retry (ver
+    core/logging_client.py::list_entries_with_retry). Lista vazia (sem
+    erro) é o resultado tanto de "nenhum job rodou na janela" quanto de
+    "Data Access audit logs desabilitados" — indistinguível por aqui, ver
+    aviso estático em domains/access/service.py.
 
     Só cobre acessos originados por jobs que rodaram NESTE projeto — um
     job rodando em outro projeto que referencia uma tabela deste projeto
@@ -121,15 +122,14 @@ def list_access_events(client: cloud_logging.Client, project_id: str) -> list[Ac
         'protoPayload.methodName="jobservice.jobcompleted" '
         f'timestamp>="{cutoff}"'
     )
-    try:
-        entries = client.list_entries(
-            resource_names=[f"projects/{project_id}"],
-            filter_=filter_,
-            page_size=_PAGE_SIZE,
-        )
-        return [event for entry in entries if (event := _parse_entry(entry)) is not None]
-    except Forbidden as exc:
-        raise LoggingAccessDeniedError(project_id) from exc
+    entries = list_entries_with_retry(
+        client,
+        resource_names=[f"projects/{project_id}"],
+        filter_=filter_,
+        page_size=_PAGE_SIZE,
+        project_id=project_id,
+    )
+    return [event for entry in entries if (event := _parse_entry(entry)) is not None]
 
 
 # --- Cache de audit log (job periódico + fallback do request path) ---------
@@ -218,15 +218,11 @@ def get_access_events_cached(
         if cached is not None:
             return cached
 
-    try:
-        events = list_access_events(client, project_id)
-    except TooManyRequests as exc:
-        # Cota read_requests/min do projeto estourada (dev+prod compartilham
-        # o balde). Transitória -> LoggingQuotaExceededError -> HTTP 503 +
-        # Retry-After, nunca um 500 "Failed to fetch". O retry com backoff
-        # que suaviza a maioria dos 429 antes daqui entra em
-        # core/logging_client.py::list_entries_with_retry (ver CHANGELOG).
-        raise LoggingQuotaExceededError(project_id) from exc
+    # list_access_events já mapeia Forbidden -> LoggingAccessDeniedError e
+    # 429 persistente -> LoggingQuotaExceededError (via
+    # core/logging_client.py::list_entries_with_retry); as duas propagam,
+    # main.py mapeia pra 403/503.
+    events = list_access_events(client, project_id)
 
     try:
         write_access_events_cache(storage_client, firestore_client, project_id, events)

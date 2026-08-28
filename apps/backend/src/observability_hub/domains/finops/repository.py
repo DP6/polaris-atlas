@@ -22,17 +22,14 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from google.api_core.exceptions import Forbidden, TooManyRequests
+from google.api_core.exceptions import Forbidden
 from google.cloud import bigquery, firestore, storage
 from google.cloud import logging as cloud_logging
 
 from observability_hub.core import event_cache
 from observability_hub.core.config import settings
-from observability_hub.core.exceptions import (
-    LoggingAccessDeniedError,
-    LoggingQuotaExceededError,
-    ProjectAccessDeniedError,
-)
+from observability_hub.core.exceptions import ProjectAccessDeniedError
+from observability_hub.core.logging_client import list_entries_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -149,10 +146,12 @@ def list_scan_events(
     client: cloud_logging.Client, project_id: str, lookback_days: int
 ) -> list[ScanEvent]:
     """Levanta LoggingAccessDeniedError se a SA de runtime não tiver
-    roles/logging.viewer no projeto. Lista vazia (sem erro) é o resultado
-    tanto de "nenhum job rodou na janela" quanto de "Data Access audit
-    logs desabilitados" — indistinguível por aqui, ver aviso estático em
-    domains/finops/service.py.
+    roles/logging.viewer no projeto, e LoggingQuotaExceededError se a cota
+    read_requests/min do projeto persistir estourada após o retry (ver
+    core/logging_client.py::list_entries_with_retry). Lista vazia (sem
+    erro) é o resultado tanto de "nenhum job rodou na janela" quanto de
+    "Data Access audit logs desabilitados" — indistinguível por aqui, ver
+    aviso estático em domains/finops/service.py.
 
     lookback_days > 30 esbarra na retenção padrão dos audit logs do Cloud
     Logging (30 dias, salvo bucket/sink customizado) — ver
@@ -163,15 +162,14 @@ def list_scan_events(
         'protoPayload.methodName="jobservice.jobcompleted" '
         f'timestamp>="{cutoff}"'
     )
-    try:
-        entries = client.list_entries(
-            resource_names=[f"projects/{project_id}"],
-            filter_=filter_,
-            page_size=_PAGE_SIZE,
-        )
-        return [event for entry in entries if (event := _parse_entry(entry)) is not None]
-    except Forbidden as exc:
-        raise LoggingAccessDeniedError(project_id) from exc
+    entries = list_entries_with_retry(
+        client,
+        resource_names=[f"projects/{project_id}"],
+        filter_=filter_,
+        page_size=_PAGE_SIZE,
+        project_id=project_id,
+    )
+    return [event for entry in entries if (event := _parse_entry(entry)) is not None]
 
 
 # --- Cache de audit log (job periódico + fallback do request path) ---------
@@ -265,12 +263,10 @@ def get_scan_events_cached(
 
     cached_at None = dado veio ao vivo nesta chamada. Falha ao ler/gravar o
     cache é logada e ignorada (otimização, nunca derruba a resposta).
-    LoggingAccessDeniedError (scan ao vivo sem roles/logging.viewer)
-    propaga — main.py mapeia. TooManyRequests (429, cota
-    ReadRequestsPerMinutePerProject do projeto — dev+prod compartilham)
-    vira LoggingQuotaExceededError -> HTTP 503; o retry com backoff que
-    suavizaria a maioria dos 429 antes disso entra depois em
-    core/logging_client.py::list_entries_with_retry (ver CHANGELOG)."""
+    LoggingAccessDeniedError (scan ao vivo sem roles/logging.viewer) e
+    LoggingQuotaExceededError (429 persistente após o retry de
+    core/logging_client.py::list_entries_with_retry) propagam — main.py
+    mapeia pra 403 e 503 respectivamente."""
     try:
         cached = read_scan_events_cache(storage_client, firestore_client, project_id)
     except Exception:
@@ -281,10 +277,7 @@ def get_scan_events_cached(
         if cached is not None:
             return cached
 
-    try:
-        events = list_scan_events(logging_client, project_id, LOOKBACK_DAYS)
-    except TooManyRequests as exc:
-        raise LoggingQuotaExceededError(project_id) from exc
+    events = list_scan_events(logging_client, project_id, LOOKBACK_DAYS)
 
     try:
         write_scan_events_cache(storage_client, firestore_client, project_id, events)

@@ -81,13 +81,13 @@ Logging; cache miss cai pro scan ao vivo e grava pra próxima chamada
 (janela fixa de 30d) quanto `budget` (recorte month-to-date por filtro no
 service, ver `finops-budget.md`).
 
-**429 residual** (cache miss durante pico, ou o Job): o scan ao vivo em
-`get_scan_events_cached` mapeia `TooManyRequests` → `LoggingQuotaExceededError`
-→ HTTP **503 + `Retry-After`** (não um 500, não um resultado vazio). O
-retry com backoff que suaviza a maioria dos 429 antes disso entra num fix
-seguinte (`core/logging_client.py::list_entries_with_retry`, ver
-`CHANGELOG.md`). O refresh no Job herda o `except GoogleAPICallError` já
-existente — um 429 num projeto não interrompe os demais.
+**429 residual** (cache miss durante pico, ou o Job): `list_scan_events`
+usa `core/logging_client.py::list_entries_with_retry`, que faz retry
+exponencial (backoff, deadline 30s) no 429/503 — a maioria dos picos nem
+chega ao 503. O 429 que persistir vira `LoggingQuotaExceededError` → HTTP
+**503 + `Retry-After`** (não um 500, não um resultado vazio). No Job,
+`_refresh_project` captura `LoggingQuotaExceededError` (status
+`quota_exceeded` no log) — um 429 num projeto não interrompe os demais.
 
 **Fica no `try` principal do Job** (não isolado como storage): finops lê a
 mesma fonte que lineage (`jobservice.jobcompleted`, mesmo filtro) — se
@@ -236,7 +236,7 @@ Cobre `get_scan_events_cached` (usado por `partition-candidates` **e**
 | AC-001 | Cache hit não chama `logging_client.list_entries` e devolve `cache_updated_at` do metadado | `test_get_scan_events_cached_returns_cache_hit_without_calling_list_entries` |
 | AC-002 | Cache miss faz o scan ao vivo, grava o blob + `record_project_seen`, e retorna `cache_updated_at = None` | `test_get_scan_events_cached_falls_back_and_writes_cache_on_miss` |
 | AC-003 | Falha ao ler o cache (qualquer exceção, não só miss) cai pro scan ao vivo em vez de propagar | `test_get_scan_events_cached_falls_back_to_live_scan_when_cache_read_fails` |
-| AC-004 | `429 TooManyRequests` no scan ao vivo vira `LoggingQuotaExceededError` (mapeada pra HTTP 503 + `Retry-After` em `main.py`) | `test_get_scan_events_cached_raises_quota_exceeded_on_too_many_requests`, `test_handle_logging_quota_exceeded_returns_503_with_retry_after` |
+| AC-004 | `429 TooManyRequests` no scan ao vivo é re-tentado com backoff exponencial (`list_entries_with_retry`, deadline 30s); o que persistir vira `LoggingQuotaExceededError` (HTTP 503 + `Retry-After` em `main.py`) | `test_retries_on_too_many_requests_then_succeeds`, `test_persistent_too_many_requests_raises_quota_exceeded`, `test_get_scan_events_cached_raises_quota_exceeded_on_too_many_requests`, `test_handle_logging_quota_exceeded_returns_503_with_retry_after` |
 | AC-005 | Falta de `roles/logging.viewer` no scan ao vivo propaga como `LoggingAccessDeniedError` | `test_get_scan_events_cached_propagates_access_denied` |
 | AC-006 | `ScanEvent` sobrevive a serialize→deserialize (com e sem `timestamp`/`query_text`) | `test_serialize_deserialize_scan_events_round_trips`, `test_deserialize_scan_events_handles_no_timestamp_and_no_query_text` |
 | AC-007 | O Job diário grava o cache de `finops_scan_events` pra cada projeto conhecido, no `try` principal (junto de lineage/access) | `test_refresh_project_writes_lineage_access_finops_and_storage_caches` |

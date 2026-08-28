@@ -5,6 +5,58 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Retry com backoff no scan de audit log (core/logging_client.py::list_entries_with_retry)
+
+Terceira e última parte da frente do 429 do Cloud Logging (depois do
+cache de finops e do mapeamento 429 → 503 nos 4 domínios). Os fixes
+anteriores tornavam o 429 um 503 limpo; este faz a **maioria** dos 429
+nem chegar lá.
+
+### O que foi feito
+
+- Novo `core/logging_client.py::list_entries_with_retry(client, *,
+  resource_names, filter_, page_size, project_id)` — materializa a
+  paginação de `client.list_entries` numa lista com
+  `google.api_core.retry.Retry` (backoff exponencial, `initial=1s`,
+  `max=10s`, `timeout=30s`) em `TooManyRequests`/`ResourceExhausted`
+  (429) e `ServiceUnavailable` (503). Mapeia `Forbidden` →
+  `LoggingAccessDeniedError` e 429 persistente (após o deadline) →
+  `LoggingQuotaExceededError`.
+- Os 4 call sites (`finops.list_scan_events`, `lineage.list_job_events`,
+  `access.list_access_events`, `storage.list_read_object_keys`) passaram
+  a usar o helper — some o `try/except Forbidden` copiado em cada um e o
+  `except TooManyRequests` naked que os fixes anteriores tinham colocado
+  nos `get_*_cached`.
+- `jobs/refresh_event_cache.py`: `_refresh_project` e
+  `_refresh_storage_read_keys` ganharam `except LoggingQuotaExceededError`
+  (agora que `list_*` pode levantá-la em vez de um `GoogleAPICallError`
+  cru) — status `quota_exceeded` no log, não derruba os demais projetos.
+- `tests/conftest.py`: fixture autouse `_fast_logging_retry` zera
+  `_RETRY_TIMEOUT_SECONDS` — nenhum teste unitário exercita backoff real
+  (sem isso o suite ia de 3s pra ~110s). `tests/unit/core/test_logging_client.py`
+  novo cobre a mecânica do retry com deadline/sleep próprios.
+
+### Descoberta técnica (registrada no fix anterior, confirmada aqui)
+
+O transporte REST do client (`_use_grpc=False`, obrigatório — ver
+docstring do módulo) **não aceita `retry=` nativo** e o 429 estoura no
+meio da paginação (`_get_next_page_response`). Por isso o retry envolve o
+scan inteiro: um 429 na página 8 re-executa da página 1. Aceitável — é
+raro, tem backoff, e fora do request path (o job diário) o custo não
+importa. `ResourceExhausted` é subclasse de `TooManyRequests` no
+`google-api-core` instalado (2.34), então um predicado só cobre as duas
+formas do 429.
+
+### Erros cometidos e aprendizados
+
+- Primeira rodada de testes rodou o backoff de verdade (deadline de 30s ×
+  ~4 testes de cota) e o suite foi de 3s pra 110s. Corrigido com a
+  fixture autouse no conftest zerando o deadline — a lição é que
+  qualquer retry com sleep real precisa de um kill-switch de teste
+  global, não patch caso a caso.
+
+---
+
 ## FinOps passa a ler audit log via cache pré-computado (fix do 429 → "Failed to fetch")
 
 Usuário reportou `google.api_core.exceptions.TooManyRequests: 429` nos

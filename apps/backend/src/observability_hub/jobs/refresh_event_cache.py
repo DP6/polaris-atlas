@@ -27,7 +27,7 @@ from google.cloud import firestore, storage
 from google.cloud import logging as cloud_logging
 
 from observability_hub.core import event_cache
-from observability_hub.core.exceptions import LoggingAccessDeniedError
+from observability_hub.core.exceptions import LoggingAccessDeniedError, LoggingQuotaExceededError
 from observability_hub.core.firestore import get_firestore_client
 from observability_hub.core.logging_client import get_logging_client
 from observability_hub.core.storage_client import get_storage_client
@@ -66,7 +66,7 @@ def _refresh_storage_read_keys(
         keys = storage_repository.list_read_object_keys(
             logging_client, project_id, storage_repository.LOOKBACK_DAYS
         )
-    except LoggingAccessDeniedError:
+    except (LoggingAccessDeniedError, LoggingQuotaExceededError):
         return 0
     except GoogleAPICallError as exc:
         logger.warning(
@@ -111,6 +111,12 @@ def _refresh_project(
         )
     except LoggingAccessDeniedError:
         logger.warning(json.dumps({"project_id": project_id, "status": "access_denied"}))
+        return
+    except LoggingQuotaExceededError:
+        # Cota read_requests/min do projeto estourada mesmo após o retry —
+        # transitória. O ciclo do dia seguinte (ou um novo disparo manual)
+        # preenche; não pode derrubar o refresh dos demais projetos.
+        logger.warning(json.dumps({"project_id": project_id, "status": "quota_exceeded"}))
         return
     except GoogleAPICallError as exc:
         # Cobre, entre outros, projeto inexistente/renomeado/deletado
