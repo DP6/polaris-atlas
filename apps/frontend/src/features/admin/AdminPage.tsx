@@ -1,13 +1,15 @@
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, RotateCw } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AdminAccessRequestsTab } from '@/features/admin/AdminAccessRequestsTab'
 import { AdminGroupsTab } from '@/features/admin/AdminGroupsTab'
 import { AdminProjectsTab } from '@/features/admin/AdminProjectsTab'
 import { AdminUsageTab } from '@/features/admin/AdminUsageTab'
 import { AdminUsersTab } from '@/features/admin/AdminUsersTab'
-import { usePendingAccessRequests } from '@/features/admin/hooks'
+import { usePendingAccessRequests, useRefreshEventCache } from '@/features/admin/hooks'
 
 const USERS_TAB = 'users'
 const PROJECTS_TAB = 'projects'
@@ -18,6 +20,18 @@ const USAGE_TAB = 'usage'
 export function AdminPage() {
   const pendingQuery = usePendingAccessRequests()
   const pendingCount = pendingQuery.data?.requests.length ?? 0
+  const refreshCachesMutation = useRefreshEventCache()
+
+  function refreshCaches() {
+    refreshCachesMutation.mutate(undefined, {
+      onSuccess: () =>
+        toast.success(
+          'Atualização dos caches de audit log (lineage, mapa de acesso, órfãs, FinOps e Storage) ' +
+            'disparada — pode levar alguns minutos para todos os projetos.',
+        ),
+      onError: () => toast.error('Não foi possível disparar a atualização dos caches.'),
+    })
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -29,13 +43,30 @@ export function AdminPage() {
         Voltar
       </Link>
 
-      <div>
-        <h1 className="text-2xl font-bold">Administração — usuários e acesso</h1>
-        <p className="text-sm text-muted-foreground">
-          Controla quem é administrador do Hub e a quais projetos GCP cada usuário tem acesso. O
-          login em si continua controlado pela allowlist do OAuth (fora daqui) — isto aqui só
-          controla acesso a projeto dentro do Hub.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Administração — usuários e acesso</h1>
+          <p className="text-sm text-muted-foreground">
+            Controla quem é administrador do Hub e a quais projetos GCP cada usuário tem acesso. O
+            login em si continua controlado pela allowlist do OAuth (fora daqui) — isto aqui só
+            controla acesso a projeto dentro do Hub.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="shrink-0"
+          disabled={refreshCachesMutation.isPending}
+          onClick={refreshCaches}
+          title="Recomputa os caches de audit log (lineage, mapa de acesso, órfãs, FinOps, Storage) de todos os projetos agora, sem esperar o ciclo diário (D-1). Use para resolver cache frio depois de um deploy ou de um pico de cota."
+        >
+          <RotateCw
+            size={14}
+            className={refreshCachesMutation.isPending ? 'animate-spin' : undefined}
+          />
+          Atualizar caches
+        </Button>
       </div>
 
       <Tabs defaultValue={USERS_TAB}>

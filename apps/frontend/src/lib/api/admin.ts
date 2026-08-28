@@ -27,9 +27,9 @@ import type {
 
 export const adminApi = {
   // Dispara sob demanda o Cloud Run Job de refresh do cache de audit log
-  // (lineage/acesso/órfãs) — mesma execução completa do ciclo diário
-  // automático (ver docs/specs/lineage.md). 202 sem corpo relevante: só
-  // confirma o disparo, não espera o Job terminar.
+  // (lineage/acesso/órfãs/FinOps/Storage) — mesma execução completa do
+  // ciclo diário automático (ver docs/specs/lineage.md). 202 sem corpo
+  // relevante: só confirma o disparo, não espera o Job terminar.
   refreshEventCache: () => httpClient.post<void>('/api/v1/admin/event-cache/refresh'),
 
   listUsers: () => httpClient.get<HubUsersListResponse>('/api/v1/admin/users'),

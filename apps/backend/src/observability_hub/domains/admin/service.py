@@ -304,15 +304,15 @@ def deny_access_request(
     return _resolve_access_request(client, request_id, "denied", resolved_by)
 
 
-# --- cache de audit log (lineage/access) --------------------------------------------
+# --- cache de audit log (lineage/access/finops/storage) ---------------------------
 
 
 def trigger_event_cache_refresh(run_client: run_v2.JobsClient) -> None:
     """Dispara sob demanda o Cloud Run Job que popula o cache de audit
-    log de lineage/access (jobs/refresh_event_cache.py) — mesmo Job do
-    ciclo diário automático (Cloud Scheduler, ver infra/terraform/modules/
-    cloud-run-job), atualiza todos os projetos de uma vez. Sem
-    deduplicação de execuções concorrentes na v1: se já houver uma
-    execução em andamento, esta apenas some outra em paralelo."""
+    log de lineage, access, finops e storage (jobs/refresh_event_cache.py)
+    — mesmo Job do ciclo diário automático (Cloud Scheduler, ver
+    infra/terraform/modules/cloud-run-job), atualiza todos os projetos de
+    uma vez. Sem deduplicação de execuções concorrentes na v1: se já
+    houver uma execução em andamento, esta apenas soma outra em paralelo."""
     job_name = f"backend-{settings.environment}-refresh-cache"
     trigger_job_execution(run_client, get_runtime_project(), settings.region, job_name)

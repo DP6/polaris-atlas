@@ -247,8 +247,8 @@ def retention_funnel(
 @router.post("/event-cache/refresh", status_code=202)
 def refresh_event_cache(run_client: run_v2.JobsClient = Depends(get_run_client)) -> None:
     """Dispara sob demanda o Cloud Run Job de refresh do cache de audit
-    log (lineage/access) — mesma execução completa do ciclo diário
-    automático (ver docs/specs/lineage.md). 202 porque a execução do Job
-    é assíncrona: este endpoint só confirma o disparo, não espera o
-    resultado."""
+    log (lineage, access, finops e storage) — mesma execução completa do
+    ciclo diário automático (ver docs/specs/lineage.md). 202 porque a
+    execução do Job é assíncrona: este endpoint só confirma o disparo,
+    não espera o resultado."""
     service.trigger_event_cache_refresh(run_client)
