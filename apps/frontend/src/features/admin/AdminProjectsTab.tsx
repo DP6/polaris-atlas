@@ -188,7 +188,7 @@ function ProjectRow({
           onClick={() => deleteProjectMutation.mutate(project.project_id)}
           disabled={deleteProjectMutation.isPending}
           aria-label={`Apagar ${project.project_id}`}
-          className="text-muted-foreground hover:text-status-error"
+          className="text-muted-foreground hover:text-status-error-foreground"
         >
           <Trash2 size={14} />
         </button>
@@ -243,7 +243,7 @@ function ProjectUsersDetail({ projectId }: { projectId: string }) {
                   type="button"
                   onClick={() => revokeMutation.mutate({ projectId, email: userGrant.email })}
                   aria-label={`Remover acesso de ${userGrant.email}`}
-                  className="text-muted-foreground hover:text-status-error"
+                  className="text-muted-foreground hover:text-status-error-foreground"
                 >
                   <X size={12} />
                 </button>
@@ -275,7 +275,7 @@ function ProjectUsersDetail({ projectId }: { projectId: string }) {
           Conceder
         </Button>
       </div>
-      {errorMessage && <p className="mt-1 text-xs text-status-error">{errorMessage}</p>}
+      {errorMessage && <p className="mt-1 text-xs text-status-error-foreground">{errorMessage}</p>}
     </div>
   )
 }

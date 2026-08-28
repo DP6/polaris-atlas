@@ -25,23 +25,30 @@ export function CollapsibleSection({
 }: CollapsibleSectionProps) {
   const [open, setOpen] = useState(defaultOpen)
   const isSection = variant === 'section'
+  // Cabeçalho real (<h2>/<h3>) envolvendo o botão de disclosure — padrão
+  // WAI-ARIA: o leitor de tela navega por cabeçalho e o botão anuncia
+  // expandido/recolhido. Antes o trigger era só um <button> estilizado,
+  // invisível pra navegação por cabeçalho.
+  const Heading = isSection ? 'h2' : 'h3'
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <CollapsibleTrigger
+        <Heading
           className={cn(
-            'flex items-center gap-1.5 hover:text-foreground',
-            isSection ? 'font-semibold text-lg' : 'text-sm text-muted-foreground',
+            'm-0',
+            isSection ? 'font-semibold text-lg' : 'font-medium text-muted-foreground text-sm',
           )}
         >
-          {open ? (
-            <ChevronDown size={isSection ? 16 : 14} />
-          ) : (
-            <ChevronRight size={isSection ? 16 : 14} />
-          )}
-          {title}
-        </CollapsibleTrigger>
+          <CollapsibleTrigger className="flex items-center gap-1.5 text-left hover:text-foreground">
+            {open ? (
+              <ChevronDown size={isSection ? 16 : 14} aria-hidden="true" />
+            ) : (
+              <ChevronRight size={isSection ? 16 : 14} aria-hidden="true" />
+            )}
+            {title}
+          </CollapsibleTrigger>
+        </Heading>
         {actions}
       </div>
       <CollapsibleContent className={cn('flex flex-col gap-4', isSection ? 'pt-4' : 'pt-2')}>

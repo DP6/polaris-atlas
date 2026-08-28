@@ -27,7 +27,7 @@ export function CatalogDatasetPage() {
   }
 
   if (tablesQuery.isError || !tablesQuery.data) {
-    return <p className="text-status-error">Erro ao carregar as tabelas do dataset.</p>
+    return <p className="text-status-error-foreground">Erro ao carregar as tabelas do dataset.</p>
   }
 
   const datasetSummary = datasetsQuery.data?.datasets.find((d) => d.dataset_id === datasetId)

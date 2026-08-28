@@ -82,10 +82,10 @@ function ageHours(iso: string | null): number | null {
 // nunca gerado.
 function freshnessClass(iso: string | null): string {
   const h = ageHours(iso)
-  if (h === null) return 'text-status-error'
-  if (h <= 26) return 'text-status-ok'
-  if (h <= 50) return 'text-status-warn'
-  return 'text-status-error'
+  if (h === null) return 'text-status-error-foreground'
+  if (h <= 26) return 'text-status-ok-foreground'
+  if (h <= 50) return 'text-status-warn-foreground'
+  return 'text-status-error-foreground'
 }
 
 function runDuration(run: EventCacheRun): string {
@@ -121,7 +121,7 @@ function runMode(run: EventCacheRun): string | null {
 function RunStatusBadge({ run }: { run: EventCacheRun }) {
   if (run.status === 'running') {
     return (
-      <Badge className="gap-1.5 border-status-info/30 bg-status-info/10 text-status-info">
+      <Badge className="gap-1.5 border-status-info/30 bg-status-info/10 text-status-info-foreground">
         <RotateCw size={11} className="animate-spin" />
         em andamento
       </Badge>
@@ -130,13 +130,17 @@ function RunStatusBadge({ run }: { run: EventCacheRun }) {
   const failed = failedProjects(run).length
   if (failed > 0) {
     return (
-      <Badge className="gap-1 border-status-warn/30 bg-status-warn/10 text-status-warn">
+      <Badge className="gap-1 border-status-warn/30 bg-status-warn/10 text-status-warn-foreground">
         <AlertTriangle size={11} />
         {failed} com problema
       </Badge>
     )
   }
-  return <Badge className="border-status-ok/30 bg-status-ok/10 text-status-ok">concluída</Badge>
+  return (
+    <Badge className="border-status-ok/30 bg-status-ok/10 text-status-ok-foreground">
+      concluída
+    </Badge>
+  )
 }
 
 function ProjectScopePicker({
@@ -301,7 +305,9 @@ function SummaryCard({
         <ul className="mt-3 flex flex-col gap-0.5 text-xs">
           {problems.map((p) => (
             <li key={p.project_id} className="flex items-center gap-2">
-              <span className="text-status-warn">{PROJECT_STATUS_LABEL[p.status] ?? p.status}</span>
+              <span className="text-status-warn-foreground">
+                {PROJECT_STATUS_LABEL[p.status] ?? p.status}
+              </span>
               <span className="font-mono text-muted-foreground">{p.project_id}</span>
             </li>
           ))}
@@ -321,7 +327,11 @@ function ProjectDetailRow({ project }: { project: EventCacheRunProject }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
       <span className="font-mono">{project.project_id}</span>
-      <span className={project.status === 'ok' ? 'text-status-ok' : 'text-status-warn'}>
+      <span
+        className={
+          project.status === 'ok' ? 'text-status-ok-foreground' : 'text-status-warn-foreground'
+        }
+      >
         {PROJECT_STATUS_LABEL[project.status] ?? project.status}
       </span>
       {project.mode && <span className="text-muted-foreground">{project.mode}</span>}
@@ -340,7 +350,7 @@ function ProjectDetailRow({ project }: { project: EventCacheRunProject }) {
 
 function KindFreshness({ cache }: { cache: EventCacheKindStatus }) {
   if (cache.never_run) {
-    return <span className="text-sm text-status-error">nunca rodou</span>
+    return <span className="text-sm text-status-error-foreground">nunca rodou</span>
   }
   return (
     <div className="flex flex-col leading-tight">

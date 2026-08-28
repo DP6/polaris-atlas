@@ -50,7 +50,7 @@ export function AdminPage() {
             {pendingCount > 0 && (
               <Badge
                 variant="outline"
-                className="border-status-warn/30 bg-status-warn/10 text-status-warn"
+                className="border-status-warn/30 bg-status-warn/10 text-status-warn-foreground"
               >
                 {pendingCount}
               </Badge>

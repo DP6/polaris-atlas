@@ -148,7 +148,7 @@ export function SearchPage() {
         </div>
       )}
 
-      {errorMessage && <p className="text-sm text-status-error">{errorMessage}</p>}
+      {errorMessage && <p className="text-sm text-status-error-foreground">{errorMessage}</p>}
 
       {result && hasNoResults && (
         <p className="text-sm text-muted-foreground">
@@ -161,7 +161,7 @@ export function SearchPage() {
           {result.datasets_with_match.length > 0 && (
             <div>
               <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold">
-                <CheckCircle2 size={16} className="text-status-ok" />
+                <CheckCircle2 size={16} className="text-status-ok-foreground" />
                 Encontrado em {result.datasets_with_match.length}{' '}
                 {result.datasets_with_match.length === 1 ? 'dataset' : 'datasets'}
               </h2>
@@ -172,7 +172,7 @@ export function SearchPage() {
           {result.datasets_without_match.length > 0 && (
             <div>
               <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold">
-                <XCircle size={16} className="text-status-error" />
+                <XCircle size={16} className="text-status-error-foreground" />
                 Ausente em {result.datasets_without_match.length}{' '}
                 {result.datasets_without_match.length === 1 ? 'dataset' : 'datasets'}
               </h2>

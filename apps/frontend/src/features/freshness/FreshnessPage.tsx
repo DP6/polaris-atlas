@@ -15,7 +15,7 @@ export function FreshnessPage() {
   }
 
   if (freshnessQuery.isError || !freshnessQuery.data) {
-    return <p className="text-status-error">Erro ao carregar o freshness do projeto.</p>
+    return <p className="text-status-error-foreground">Erro ao carregar o freshness do projeto.</p>
   }
 
   const totals: FreshnessCounts = freshnessQuery.data.datasets.reduce(

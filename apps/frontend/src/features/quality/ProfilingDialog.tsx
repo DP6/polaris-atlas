@@ -228,7 +228,9 @@ export function ProfilingDialog({
                     disabled={isView}
                   />
                   {isView && (
-                    <p className="text-xs text-status-warn">Amostragem não disponível para views</p>
+                    <p className="text-xs text-status-warn-foreground">
+                      Amostragem não disponível para views
+                    </p>
                   )}
                 </div>
 
@@ -304,7 +306,9 @@ export function ProfilingDialog({
                 </div>
               </div>
 
-              {errorMessage && <p className="shrink-0 text-sm text-status-error">{errorMessage}</p>}
+              {errorMessage && (
+                <p className="shrink-0 text-sm text-status-error-foreground">{errorMessage}</p>
+              )}
 
               {estimateMutation.data && !runMutation.data && (
                 <div className="flex shrink-0 gap-6 rounded-lg border border-border bg-card p-4 text-sm">

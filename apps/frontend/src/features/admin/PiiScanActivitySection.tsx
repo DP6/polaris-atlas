@@ -64,7 +64,7 @@ export function PiiScanActivitySection() {
   }
 
   if (activityQuery.isError || !activityQuery.data) {
-    return <p className="text-sm text-status-error">Erro ao carregar os scans de PII.</p>
+    return <p className="text-sm text-status-error-foreground">Erro ao carregar os scans de PII.</p>
   }
 
   return (

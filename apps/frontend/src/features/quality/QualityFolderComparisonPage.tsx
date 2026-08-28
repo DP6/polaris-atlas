@@ -428,7 +428,7 @@ function ColumnDiffTable({
                     key={entries[index].entry_id}
                     className={
                       highlight
-                        ? 'text-right text-xs font-medium text-status-error'
+                        ? 'text-right text-xs font-medium text-status-error-foreground'
                         : 'text-right text-xs'
                     }
                   >
@@ -540,7 +540,7 @@ function EditFolderDialog({
             />
           </div>
         )}
-        {errorMessage && <p className="text-sm text-status-error">{errorMessage}</p>}
+        {errorMessage && <p className="text-sm text-status-error-foreground">{errorMessage}</p>}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar

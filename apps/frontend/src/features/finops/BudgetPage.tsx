@@ -35,6 +35,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { WarningCallout } from '@/components/WarningCallout'
 import { useBudget } from '@/features/finops/hooks'
 import { useProjectContext } from '@/features/projects/ProjectContext'
 import { useTableFilterSort } from '@/hooks/useTableFilterSort'
@@ -182,11 +183,7 @@ export function BudgetPage() {
 
       {data && (
         <>
-          {data.warning && (
-            <div className="rounded-lg border border-status-warn/30 bg-status-warn/10 p-3 text-sm text-status-warn">
-              {data.warning}
-            </div>
-          )}
+          {data.warning && <WarningCallout>{data.warning}</WarningCallout>}
 
           <div className="flex flex-wrap gap-4">
             {[

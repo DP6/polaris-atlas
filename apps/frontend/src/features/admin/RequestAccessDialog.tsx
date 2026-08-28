@@ -82,7 +82,7 @@ export function RequestAccessDialog({
         </DialogHeader>
 
         {submitted ? (
-          <p className="text-sm text-status-ok">
+          <p className="text-sm text-status-ok-foreground">
             Solicitação enviada — um administrador vai revisar em breve.
           </p>
         ) : (
@@ -93,7 +93,7 @@ export function RequestAccessDialog({
               placeholder="project-id"
               emptyLabel="Nenhum projeto adicionado ainda."
             />
-            {errorMessage && <p className="text-sm text-status-error">{errorMessage}</p>}
+            {errorMessage && <p className="text-sm text-status-error-foreground">{errorMessage}</p>}
           </div>
         )}
 

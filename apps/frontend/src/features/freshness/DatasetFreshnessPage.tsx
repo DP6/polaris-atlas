@@ -15,7 +15,7 @@ export function DatasetFreshnessPage() {
   }
 
   if (freshnessQuery.isError || !freshnessQuery.data) {
-    return <p className="text-status-error">Erro ao carregar o freshness do dataset.</p>
+    return <p className="text-status-error-foreground">Erro ao carregar o freshness do dataset.</p>
   }
 
   return (

@@ -9,6 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { WarningCallout } from '@/components/WarningCallout'
 import { useTableAccess } from '@/features/access/hooks'
 import { formatDate, formatNumber } from '@/lib/format'
 import type { AccessType } from '@/types/access'
@@ -45,11 +46,7 @@ export function AccessTab({ projectId, datasetId, tableId }: AccessTabProps) {
         se ela ainda tem consumidor antes de arquivar, apagar ou mudar o schema.
       </p>
 
-      {data.warning && (
-        <div className="rounded-lg border border-status-warn/30 bg-status-warn/10 p-3 text-sm text-status-warn">
-          {data.warning}
-        </div>
-      )}
+      {data.warning && <WarningCallout>{data.warning}</WarningCallout>}
 
       {data.users.length === 0 && !data.warning ? (
         <p className="text-sm text-muted-foreground">

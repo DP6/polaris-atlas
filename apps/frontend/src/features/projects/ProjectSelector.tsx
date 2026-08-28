@@ -162,7 +162,7 @@ export function ProjectSelector() {
                     {!p.has_access && (
                       <Badge
                         variant="outline"
-                        className="border-status-warn/30 bg-status-warn/10 text-[10px] text-status-warn"
+                        className="border-status-warn/30 bg-status-warn/10 text-[10px] text-status-warn-foreground"
                       >
                         Sem acesso
                       </Badge>
@@ -176,7 +176,11 @@ export function ProjectSelector() {
         )}
         {validateQuery.data?.accessible && submittedProjectId === projectId && (
           <>
-            <CheckCircle2 size={16} className="text-status-ok" aria-label="Projeto acessível" />
+            <CheckCircle2
+              size={16}
+              className="text-status-ok-foreground"
+              aria-label="Projeto acessível"
+            />
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -184,8 +188,8 @@ export function ProjectSelector() {
                     variant="outline"
                     className={cn(
                       validateQuery.data.is_native
-                        ? 'border-status-ok/30 bg-status-ok/10 text-status-ok'
-                        : 'border-status-warn/30 bg-status-warn/10 text-status-warn',
+                        ? 'border-status-ok/30 bg-status-ok/10 text-status-ok-foreground'
+                        : 'border-status-warn/30 bg-status-warn/10 text-status-warn-foreground',
                     )}
                   />
                 }

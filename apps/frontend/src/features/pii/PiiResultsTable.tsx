@@ -25,8 +25,8 @@ const CONFIDENCE_LABELS: Record<'high' | 'medium', string> = {
 }
 
 const CONFIDENCE_COLOR: Record<'high' | 'medium', string> = {
-  high: 'text-status-error',
-  medium: 'text-status-warn',
+  high: 'text-status-error-foreground',
+  medium: 'text-status-warn-foreground',
 }
 
 export function PiiResultsTable({ columns }: { columns: PiiColumnResult[] }) {

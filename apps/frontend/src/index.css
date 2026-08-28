@@ -259,9 +259,13 @@ summary:focus-visible,
   *,
   *::before,
   *::after {
+    /* biome-ignore-start lint/complexity/noImportantStyles: reset canônico
+       de reduced-motion — precisa vencer animações/transições inline e de
+       @layer utilities do Tailwind. */
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+    /* biome-ignore-end lint/complexity/noImportantStyles: fim do bloco */
   }
 }

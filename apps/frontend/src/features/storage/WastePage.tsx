@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
+import { WarningCallout } from '@/components/WarningCallout'
 import { useProjectContext } from '@/features/projects/ProjectContext'
 import { useWasteCandidates } from '@/features/storage/hooks'
 import { useTableFilterSort } from '@/hooks/useTableFilterSort'
@@ -95,7 +96,7 @@ function ConfidenceBadge({ candidate }: { candidate: WasteCandidate }) {
     return (
       <Badge
         variant="secondary"
-        className="border-status-ok/30 bg-status-ok/10 text-status-ok"
+        className="border-status-ok/30 bg-status-ok/10 text-status-ok-foreground"
         title={`${candidate.usage_confirmed_object_count} de ${candidate.eligible_object_count} objetos sem leitura registrada nos últimos 90 dias`}
       >
         Sem leitura confirmada
@@ -198,11 +199,7 @@ export function WastePage() {
         </div>
       </div>
 
-      {data.usage_check_warning && (
-        <div className="rounded-lg border border-status-warn/30 bg-status-warn/10 p-3 text-sm text-status-warn">
-          {data.usage_check_warning}
-        </div>
-      )}
+      {data.usage_check_warning && <WarningCallout>{data.usage_check_warning}</WarningCallout>}
 
       <div className="flex items-center gap-2">
         <span className="text-sm text-muted-foreground">

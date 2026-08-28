@@ -27,9 +27,9 @@ const QUALITY_FLAG_LABELS: Record<QualityFlag, string> = {
 }
 
 const QUALITY_FLAG_COLOR: Record<QualityFlag, string> = {
-  ok: 'text-status-ok',
-  warning: 'text-status-warn',
-  critical: 'text-status-error',
+  ok: 'text-status-ok-foreground',
+  warning: 'text-status-warn-foreground',
+  critical: 'text-status-error-foreground',
 }
 
 export function ColumnResultsTable({ columns }: { columns: ColumnProfile[] }) {

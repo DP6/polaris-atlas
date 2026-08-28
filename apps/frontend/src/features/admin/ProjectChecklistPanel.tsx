@@ -11,9 +11,9 @@ const ITEM_LABELS: Record<ChecklistItemName, string> = {
 }
 
 const STATUS_ICON: Record<ChecklistItemStatus, React.ReactNode> = {
-  ok: <CheckCircle2 size={14} className="text-status-ok" />,
-  denied: <XCircle size={14} className="text-status-error" />,
-  not_found: <XCircle size={14} className="text-status-error" />,
+  ok: <CheckCircle2 size={14} className="text-status-ok-foreground" />,
+  denied: <XCircle size={14} className="text-status-error-foreground" />,
+  not_found: <XCircle size={14} className="text-status-error-foreground" />,
   not_checked: <CircleHelp size={14} className="text-muted-foreground" />,
 }
 

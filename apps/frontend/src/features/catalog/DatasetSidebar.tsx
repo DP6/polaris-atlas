@@ -261,7 +261,7 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
           )}
 
           {datasetsQuery.isError && (
-            <p className="px-3 text-sm text-status-error">Erro ao carregar datasets.</p>
+            <p className="px-3 text-sm text-status-error-foreground">Erro ao carregar datasets.</p>
           )}
 
           {datasetsQuery.data && datasetsQuery.data.datasets.length > 0 && (

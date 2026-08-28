@@ -11,6 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { WarningCallout } from '@/components/WarningCallout'
 import {
   useEstimateColumnTypeSuggestions,
   useRunColumnTypeSuggestions,
@@ -88,7 +89,7 @@ export function ColumnTypeSuggestionsTab({
             disabled={isView}
           />
           {isView && (
-            <p className="text-xs text-status-warn">
+            <p className="text-xs text-status-warn-foreground">
               Amostragem não disponível para views — TABLESAMPLE não é suportado
             </p>
           )}
@@ -111,7 +112,9 @@ export function ColumnTypeSuggestionsTab({
         </div>
       </div>
 
-      {errorMessage && <p className="shrink-0 text-sm text-status-error">{errorMessage}</p>}
+      {errorMessage && (
+        <p className="shrink-0 text-sm text-status-error-foreground">{errorMessage}</p>
+      )}
 
       {estimateMutation.data && !runMutation.data && (
         <div className="flex shrink-0 gap-6 rounded-lg border border-border bg-card p-4 text-sm">
@@ -133,9 +136,7 @@ export function ColumnTypeSuggestionsTab({
           {runMutation.data && (
             <>
               {runMutation.data.warning && (
-                <div className="rounded-lg border border-status-warn/30 bg-status-warn/10 p-3 text-sm text-status-warn">
-                  {runMutation.data.warning}
-                </div>
+                <WarningCallout>{runMutation.data.warning}</WarningCallout>
               )}
 
               {candidate && candidate.suggestions.length > 0 ? (
@@ -164,7 +165,7 @@ export function ColumnTypeSuggestionsTab({
                         <TableCell className="text-right text-muted-foreground">
                           {s.avg_current_bytes.toFixed(1)}B → {s.suggested_type_bytes}B
                         </TableCell>
-                        <TableCell className="text-right font-medium text-status-ok">
+                        <TableCell className="text-right font-medium text-status-ok-foreground">
                           US$ {s.estimated_storage_savings_usd_month.toFixed(6)}
                         </TableCell>
                       </TableRow>

@@ -156,7 +156,7 @@ export function NavigationAnalyticsSection() {
   }
 
   if (navigationQuery.isError || !navigationQuery.data) {
-    return <p className="text-sm text-status-error">Erro ao carregar a navegação.</p>
+    return <p className="text-sm text-status-error-foreground">Erro ao carregar a navegação.</p>
   }
 
   const filteredViews = navigationQuery.data.table_views.filter((v) =>

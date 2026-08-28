@@ -10,7 +10,7 @@ export function UsageHeatmapSection() {
   }
 
   if (heatmapQuery.isError || !heatmapQuery.data) {
-    return <p className="text-sm text-status-error">Erro ao carregar o mapa de calor.</p>
+    return <p className="text-sm text-status-error-foreground">Erro ao carregar o mapa de calor.</p>
   }
 
   const { cells } = heatmapQuery.data

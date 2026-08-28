@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
+import { WarningCallout } from '@/components/WarningCallout'
 import { useOrphans } from '@/features/lineage/hooks'
 import { useProjectContext } from '@/features/projects/ProjectContext'
 import { useTableFilterSort } from '@/hooks/useTableFilterSort'
@@ -184,11 +185,7 @@ export function OrphansPage() {
         </div>
       </div>
 
-      {data.warning && (
-        <div className="rounded-lg border border-status-warn/30 bg-status-warn/10 p-3 text-sm text-status-warn">
-          {data.warning}
-        </div>
-      )}
+      {data.warning && <WarningCallout>{data.warning}</WarningCallout>}
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative min-w-[220px] flex-1">

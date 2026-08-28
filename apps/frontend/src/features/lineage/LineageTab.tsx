@@ -1,5 +1,6 @@
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { CacheStalenessBadge } from '@/components/CacheStalenessBadge'
+import { WarningCallout } from '@/components/WarningCallout'
 import { useTableLineage } from '@/features/lineage/hooks'
 import { LineageGraph } from '@/features/lineage/LineageGraph'
 
@@ -31,16 +32,12 @@ export function LineageTab({ projectId, datasetId, tableId }: LineageTabProps) {
         descontinuar a tabela antes de fazer isso.
       </p>
 
-      {data.warning && (
-        <div className="rounded-lg border border-status-warn/30 bg-status-warn/10 p-3 text-sm text-status-warn">
-          {data.warning}
-        </div>
-      )}
+      {data.warning && <WarningCallout>{data.warning}</WarningCallout>}
 
       {data.truncated && (
-        <div className="rounded-lg border border-status-warn/30 bg-status-warn/10 p-3 text-sm text-status-warn">
+        <WarningCallout variant="info">
           Grafo truncado em {data.max_hops} saltos — pode haver mais tabelas além do limite.
-        </div>
+        </WarningCallout>
       )}
 
       <LineageGraph data={data} />

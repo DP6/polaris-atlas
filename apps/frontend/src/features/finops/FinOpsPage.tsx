@@ -25,6 +25,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { WarningCallout } from '@/components/WarningCallout'
 import { ColumnTypeScopePicker } from '@/features/finops/ColumnTypeScopePicker'
 import {
   useEstimateColumnTypeSuggestions,
@@ -272,11 +273,7 @@ function PartitionCandidatesTab({ projectId }: { projectId: string | undefined }
             </div>
           </div>
 
-          {data.warning && (
-            <div className="rounded-lg border border-status-warn/30 bg-status-warn/10 p-3 text-sm text-status-warn">
-              {data.warning}
-            </div>
-          )}
+          {data.warning && <WarningCallout>{data.warning}</WarningCallout>}
 
           <Table>
             <TableHeader>
@@ -342,7 +339,7 @@ function PartitionCandidatesTab({ projectId }: { projectId: string | undefined }
                     {candidate.estimated_savings_usd_conservative !== null &&
                     candidate.estimated_savings_usd_optimistic !== null ? (
                       <span
-                        className="font-medium text-status-ok"
+                        className="font-medium text-status-ok-foreground"
                         title={candidate.savings_disclaimer ?? undefined}
                       >
                         {formatUsd(candidate.estimated_savings_usd_conservative)} –{' '}
@@ -499,7 +496,7 @@ function ColumnTypesTab({ projectId }: { projectId: string | undefined }) {
         </div>
       </div>
 
-      {errorMessage && <p className="text-sm text-status-error">{errorMessage}</p>}
+      {errorMessage && <p className="text-sm text-status-error-foreground">{errorMessage}</p>}
 
       {estimateMutation.data && !runMutation.data && (
         <div className="flex flex-wrap gap-6 rounded-lg border border-border bg-card p-4 text-sm">
@@ -526,11 +523,7 @@ function ColumnTypesTab({ projectId }: { projectId: string | undefined }) {
 
       {runMutation.data && (
         <>
-          {runMutation.data.warning && (
-            <div className="rounded-lg border border-status-warn/30 bg-status-warn/10 p-3 text-sm text-status-warn">
-              {runMutation.data.warning}
-            </div>
-          )}
+          {runMutation.data.warning && <WarningCallout>{runMutation.data.warning}</WarningCallout>}
 
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative min-w-[220px] flex-1">
@@ -598,7 +591,7 @@ function ColumnTypesTab({ projectId }: { projectId: string | undefined }) {
                   <TableCell>
                     <ColumnTypeSuggestionsList suggestions={candidate.suggestions} />
                   </TableCell>
-                  <TableCell className="text-right font-medium text-status-ok">
+                  <TableCell className="text-right font-medium text-status-ok-foreground">
                     {formatUsd(totalSavings(candidate))}
                   </TableCell>
                 </TableRow>
