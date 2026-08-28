@@ -4,7 +4,7 @@ from google.cloud import firestore, storage
 from google.cloud import logging as cloud_logging
 
 from observability_hub.core.config import settings
-from observability_hub.core.exceptions import LoggingAccessDeniedError
+from observability_hub.core.exceptions import LoggingAccessDeniedError, LoggingQuotaExceededError
 from observability_hub.domains.storage import repository
 from observability_hub.domains.storage.schemas import (
     BucketObjectsResponse,
@@ -30,6 +30,14 @@ _USAGE_CHECK_FORBIDDEN_WARNING = (
     "logging.viewer + roles/logging.privateLogViewer). Todos os "
     'candidatos abaixo usam só a checagem de configuração ("confidence": '
     '"config_based").'
+)
+
+_USAGE_CHECK_QUOTA_WARNING = (
+    "Não foi possível verificar leituras de objeto agora: o limite de "
+    "leitura de audit logs do projeto foi atingido temporariamente. Todos "
+    'os candidatos abaixo usam só a checagem de configuração ("confidence": '
+    '"config_based"). Recarregue em alguns instantes para a checagem '
+    "completa."
 )
 
 _USAGE_CHECK_EMPTY_WARNING = (
@@ -174,6 +182,12 @@ def _read_object_keys_or_warning(
         )
     except LoggingAccessDeniedError:
         return set(), _USAGE_CHECK_FORBIDDEN_WARNING
+    except LoggingQuotaExceededError:
+        # Checagem 6.2 é best-effort: um 429 transitório na cota de leitura
+        # de audit log do projeto não deve derrubar waste-candidates
+        # inteiro (a checagem 6.1, de config, já é útil sozinha). Degrada
+        # pra "config_based" com aviso, mesmo tratamento de acesso negado.
+        return set(), _USAGE_CHECK_QUOTA_WARNING
     if not keys:
         return set(), _USAGE_CHECK_EMPTY_WARNING.format(days=repository.LOOKBACK_DAYS)
     return keys, None

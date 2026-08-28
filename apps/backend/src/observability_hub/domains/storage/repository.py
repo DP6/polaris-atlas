@@ -19,13 +19,17 @@ import logging as std_logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime, timedelta
 
-from google.api_core.exceptions import Forbidden
+from google.api_core.exceptions import Forbidden, TooManyRequests
 from google.cloud import firestore, storage
 from google.cloud import logging as cloud_logging
 
 from observability_hub.core import event_cache
 from observability_hub.core.config import settings
-from observability_hub.core.exceptions import LoggingAccessDeniedError, StorageAccessDeniedError
+from observability_hub.core.exceptions import (
+    LoggingAccessDeniedError,
+    LoggingQuotaExceededError,
+    StorageAccessDeniedError,
+)
 from observability_hub.core.storage_client import list_bucket_objects_cached
 
 _OBJECT_READ_METHOD = "storage.objects.get"
@@ -278,7 +282,14 @@ def get_read_object_keys_cached(
         if cached is not None:
             return cached
 
-    keys = list_read_object_keys(logging_client, project_id, LOOKBACK_DAYS)
+    try:
+        keys = list_read_object_keys(logging_client, project_id, LOOKBACK_DAYS)
+    except TooManyRequests as exc:
+        # Cota read_requests/min do projeto estourada. Transitória ->
+        # LoggingQuotaExceededError; quem chama (domains/storage/service.py)
+        # decide degradar pra warning "best-effort" em vez de derrubar a
+        # requisição inteira, mesmo tratamento de LoggingAccessDeniedError.
+        raise LoggingQuotaExceededError(project_id) from exc
 
     try:
         write_read_object_keys_cache(storage_client, firestore_client, project_id, keys)

@@ -48,12 +48,21 @@ compartilham o balde (topologia single-project), o que amplifica.
 - `PartitionCandidatesResponse` / `BudgetResponse` ganharam
   `cache_updated_at: datetime | None` (mesmo campo que `LineageGraphResponse`
   já expõe; aditivo/opcional).
-- **Stopgap de 429 introduzido junto** (o fix 2 generaliza): nova
+- **Stopgap de 429 introduzido junto** (o fix 2 generaliza com retry): nova
   `core/exceptions.py::LoggingQuotaExceededError` + handler em `main.py`
-  → HTTP **503 + `Retry-After: 60`**. `get_scan_events_cached` mapeia
-  `TooManyRequests` do scan ao vivo pra essa exceção (sem retry ainda).
+  → HTTP **503 + `Retry-After: 60`**. Aplicado no fallback ao vivo dos
+  **quatro** domínios que leem Cloud Logging, não só finops — durante a
+  validação em dev, `Acesso` deu "Failed to fetch" pelo mesmo motivo
+  (cache frio + cota saturada + `TooManyRequests` não capturado, só
+  `Forbidden` era). `get_scan_events_cached`/`get_access_events_cached`/
+  `get_job_events_cached` mapeiam `TooManyRequests` → 503;
+  `get_read_object_keys_cached` também, mas `storage/service.py` degrada
+  pra warning "config_based" (checagem 6.2 é best-effort, não deve
+  derrubar `waste-candidates` inteiro).
 - `docs/specs/finops-waste-scanner.md` bump v1.3 (mecanismo + AC-001 a
-  AC-008 + Suposições), `finops-budget.md` bump v1.3 (cross-ref).
+  AC-008 + Suposições), `finops-budget.md` bump v1.3 (cross-ref);
+  `lineage.md`/`access.md`/`storage.md` ganharam a linha de "429 → 503"
+  em Casos de borda.
 
 ### Não fez parte desta mudança (fica pro fix 2)
 

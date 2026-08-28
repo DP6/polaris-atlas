@@ -3,10 +3,10 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-from google.api_core.exceptions import Forbidden
+from google.api_core.exceptions import Forbidden, TooManyRequests
 
 from observability_hub.core import event_cache as event_cache_module
-from observability_hub.core.exceptions import LoggingAccessDeniedError
+from observability_hub.core.exceptions import LoggingAccessDeniedError, LoggingQuotaExceededError
 from observability_hub.domains.access import repository
 
 
@@ -368,3 +368,16 @@ def test_get_access_events_cached_returns_live_data_when_cache_write_fails(monke
 
     assert events == [live_event]
     assert cached_at is None
+
+
+def test_get_access_events_cached_raises_quota_exceeded_on_too_many_requests(monkeypatch):
+    """429 no scan ao vivo (cota read_requests/min do projeto) vira
+    LoggingQuotaExceededError -> HTTP 503, não um 500 "Failed to fetch"."""
+    client = MagicMock()
+    client.list_entries.side_effect = TooManyRequests("quota exceeded")
+    monkeypatch.setattr(repository, "read_access_events_cache", lambda *a, **kw: None)
+
+    with pytest.raises(LoggingQuotaExceededError) as exc_info:
+        repository.get_access_events_cached(client, MagicMock(), MagicMock(), "proj")
+
+    assert exc_info.value.project_id == "proj"

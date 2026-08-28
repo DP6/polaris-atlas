@@ -19,13 +19,13 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from google.api_core.exceptions import Forbidden
+from google.api_core.exceptions import Forbidden, TooManyRequests
 from google.cloud import firestore, storage
 from google.cloud import logging as cloud_logging
 
 from observability_hub.core import event_cache
 from observability_hub.core.config import settings
-from observability_hub.core.exceptions import LoggingAccessDeniedError
+from observability_hub.core.exceptions import LoggingAccessDeniedError, LoggingQuotaExceededError
 
 LOOKBACK_DAYS = 30
 _PAGE_SIZE = 1000
@@ -218,7 +218,15 @@ def get_access_events_cached(
         if cached is not None:
             return cached
 
-    events = list_access_events(client, project_id)
+    try:
+        events = list_access_events(client, project_id)
+    except TooManyRequests as exc:
+        # Cota read_requests/min do projeto estourada (dev+prod compartilham
+        # o balde). Transitória -> LoggingQuotaExceededError -> HTTP 503 +
+        # Retry-After, nunca um 500 "Failed to fetch". O retry com backoff
+        # que suaviza a maioria dos 429 antes daqui entra em
+        # core/logging_client.py::list_entries_with_retry (ver CHANGELOG).
+        raise LoggingQuotaExceededError(project_id) from exc
 
     try:
         write_access_events_cache(storage_client, firestore_client, project_id, events)

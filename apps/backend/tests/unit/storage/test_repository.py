@@ -3,10 +3,14 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-from google.api_core.exceptions import Forbidden
+from google.api_core.exceptions import Forbidden, TooManyRequests
 
 from observability_hub.core import event_cache as event_cache_module
-from observability_hub.core.exceptions import LoggingAccessDeniedError, StorageAccessDeniedError
+from observability_hub.core.exceptions import (
+    LoggingAccessDeniedError,
+    LoggingQuotaExceededError,
+    StorageAccessDeniedError,
+)
 from observability_hub.domains.storage import repository
 
 _PROJECT_ID = "observability-hub-dev"
@@ -364,3 +368,18 @@ def test_get_read_object_keys_cached_propagates_logging_access_denied_from_live_
         repository.get_read_object_keys_cached(
             logging_client, storage_client, firestore_client, _PROJECT_ID
         )
+
+
+def test_get_read_object_keys_cached_raises_quota_exceeded_on_too_many_requests(monkeypatch):
+    """429 no scan ao vivo (cota read_requests/min do projeto) vira
+    LoggingQuotaExceededError — quem chama (service) degrada pra warning."""
+    logging_client = MagicMock()
+    logging_client.list_entries.side_effect = TooManyRequests("quota exceeded")
+    monkeypatch.setattr(repository, "read_read_object_keys_cache", lambda *a, **kw: None)
+
+    with pytest.raises(LoggingQuotaExceededError) as exc_info:
+        repository.get_read_object_keys_cached(
+            logging_client, MagicMock(), MagicMock(), _PROJECT_ID
+        )
+
+    assert exc_info.value.project_id == _PROJECT_ID

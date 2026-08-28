@@ -234,6 +234,17 @@ mudança de infraestrutura: reaproveita 100% do bucket/Firestore/Job já
 existentes, então não há novo recurso GCP pra registrar em
 `docs/gcp-components.md`.
 
+**429 no fallback ao vivo** (2026-08-28): se o scan ao vivo em cache miss
+estourar a cota `read_requests`/min do projeto (dev+prod compartilham o
+balde), `get_read_object_keys_cached` levanta `LoggingQuotaExceededError`.
+Diferente dos outros domínios (que devolvem HTTP 503), aqui
+`_read_object_keys_or_warning` **degrada pra warning** `config_based` —
+mesmo tratamento de `LoggingAccessDeniedError`, porque a checagem 6.2 é
+best-effort e um 429 transitório não deve derrubar `waste-candidates`
+inteiro (a checagem 6.1 já é útil sozinha). O retry com backoff que
+suaviza a maioria dos 429 entra em
+`core/logging_client.py::list_entries_with_retry` (fix seguinte).
+
 ### 6.3 Estimativa de economia
 
 Nunca um valor único — faixa (mesmo padrão do scanner de particionamento
@@ -429,8 +440,9 @@ o mock existir).
 | AC-011 | Falha ao ler o cache (qualquer exceção, não só cache miss) cai pro scan ao vivo em vez de propagar | `test_get_read_object_keys_cached_falls_back_to_live_scan_when_cache_read_fails` |
 | AC-012 | Falha ao gravar o cache não impede a resposta de conter o resultado do scan ao vivo já feito | `test_get_read_object_keys_cached_returns_live_data_when_cache_write_fails` |
 | AC-013 | Falta de acesso ao Cloud Logging no scan ao vivo propaga (quem chama decide como comunicar) | `test_get_read_object_keys_cached_propagates_logging_access_denied_from_live_scan` |
-| AC-014 | O Job diário grava o cache de storage pra cada projeto conhecido, sem depender do request path | `test_refresh_project_writes_lineage_and_access_caches` |
-| AC-015 | Falha no refresh de storage (audit log desabilitado ou erro de API) não interrompe o refresh de lineage/access do mesmo projeto | `test_refresh_storage_read_keys_returns_zero_without_logging_access`, `test_refresh_storage_read_keys_returns_zero_on_api_error` |
+| AC-014 | O Job diário grava o cache de storage pra cada projeto conhecido, sem depender do request path | `test_refresh_project_writes_lineage_access_finops_and_storage_caches` |
+| AC-015 | Falha no refresh de storage (audit log desabilitado ou erro de API) não interrompe o refresh de lineage/access/finops do mesmo projeto | `test_refresh_storage_read_keys_returns_zero_without_logging_access`, `test_refresh_storage_read_keys_returns_zero_on_api_error` |
+| AC-016 | `429 TooManyRequests` no scan ao vivo vira `LoggingQuotaExceededError` no repositório e é degradado pra warning `config_based` no service (não HTTP 503) | `test_get_read_object_keys_cached_raises_quota_exceeded_on_too_many_requests`, `test_get_waste_candidates_degrades_gracefully_on_quota_exceeded` |
 
 ## 10. Abertos para decisão antes de implementar
 
