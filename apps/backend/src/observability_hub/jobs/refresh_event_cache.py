@@ -1,16 +1,20 @@
 """Entrypoint do Cloud Run Job de refresh do cache de audit log
-(lineage + access + storage) — roda 1x/dia (D-1) via Cloud Scheduler
-(infra/terraform/modules/cloud-run-job) ou sob demanda via o gatilho
-manual de admin (domains/admin::trigger_event_cache_refresh). Mesma
-imagem Docker do backend, comando/entrypoint diferente (ver módulo
+(lineage + access + finops + storage) — roda 1x/dia (D-1) via Cloud
+Scheduler (infra/terraform/modules/cloud-run-job) ou sob demanda via o
+gatilho manual de admin (domains/admin::trigger_event_cache_refresh).
+Mesma imagem Docker do backend, comando/entrypoint diferente (ver módulo
 Terraform cloud-run-job) — `python -m observability_hub.jobs.refresh_event_cache`.
 
-Não é um domínio — orquestra lineage, access, storage e admin (fonte da
-lista de projetos), mesma posição arquitetural de main.py. Reaproveita as
-funções de scan já existentes (list_job_events/list_access_events/
-list_read_object_keys) sem duplicar parsing; só adiciona a escrita no
-cache compartilhado (core/event_cache.py). O refresh de storage é
-best-effort e isolado do de lineage/access (ver
+Não é um domínio — orquestra lineage, access, finops, storage e admin
+(fonte da lista de projetos), mesma posição arquitetural de main.py.
+Reaproveita as funções de scan já existentes (list_job_events/
+list_access_events/list_scan_events/list_read_object_keys) sem duplicar
+parsing; só adiciona a escrita no cache compartilhado
+(core/event_cache.py). lineage e finops leem a mesma fonte de audit log
+(jobservice.jobcompleted), com dois scans separados porque os dataclasses
+diferem (JobEvent x ScanEvent) e domínios não compartilham parsing
+(CLAUDE.md) — tradeoff aceito (1x/dia, fora do request path). O refresh
+de storage é best-effort e isolado do de lineage/access/finops (ver
 _refresh_storage_read_keys) porque Data Access audit logs do GCS podem
 não estar habilitados no projeto (docs/specs/storage.md seção 6.2).
 """
@@ -29,6 +33,7 @@ from observability_hub.core.logging_client import get_logging_client
 from observability_hub.core.storage_client import get_storage_client
 from observability_hub.domains.access import repository as access_repository
 from observability_hub.domains.admin import repository as admin_repository
+from observability_hub.domains.finops import repository as finops_repository
 from observability_hub.domains.lineage import repository as lineage_repository
 from observability_hub.domains.storage import repository as storage_repository
 
@@ -91,6 +96,16 @@ def _refresh_project(
             storage_client, firestore_client, project_id, access_events
         )
 
+        # finops lê a mesma fonte que lineage (jobservice.jobcompleted) —
+        # se list_job_events passou, este passa. Fica no try principal (não
+        # isolado como storage), já que não depende de audit log opcional.
+        scan_events = finops_repository.list_scan_events(
+            logging_client, project_id, finops_repository.LOOKBACK_DAYS
+        )
+        finops_repository.write_scan_events_cache(
+            storage_client, firestore_client, project_id, scan_events
+        )
+
         read_object_keys_count = _refresh_storage_read_keys(
             logging_client, storage_client, firestore_client, project_id
         )
@@ -121,6 +136,7 @@ def _refresh_project(
                 "status": "ok",
                 "job_events": len(job_events),
                 "access_events": len(access_events),
+                "scan_events": len(scan_events),
                 "storage_read_object_keys": read_object_keys_count,
             }
         )

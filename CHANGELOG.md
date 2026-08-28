@@ -5,6 +5,76 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## FinOps passa a ler audit log via cache pré-computado (fix do 429 → "Failed to fetch")
+
+Usuário reportou `google.api_core.exceptions.TooManyRequests: 429` nos
+logs (`logging.googleapis.com/read_requests`, cota
+`ReadRequestsPerMinutePerProject` = 60/min, default), correlacionado com
+"Failed to fetch" recorrentes no app. Stack apontava
+`finops/repository.py::list_scan_events` via
+`GET /api/v1/finops/{project}/partition-candidates`.
+
+### Diagnóstico
+
+`finops` foi o único domínio que leu Cloud Logging que **não** tinha sido
+migrado pro cache diário quando `lineage`/`access` (e depois `storage`,
+commit `bb54830`) foram. `scan_partition_candidates` e `get_budget`
+chamavam `list_scan_events` **direto no request path** — scan síncrono de
+30 dias de `jobservice.jobcompleted` a cada request. Com `page_size=1000`,
+cada scan vira N chamadas paginadas de `entries.list`; um projeto ativo
++ o refetch do TanStack Query estoura 60/min num uso normal de tela (12
+ocorrências em 7 dias). O `429` não era capturado (só `Forbidden` era) →
+500 não tratado → "Failed to fetch". Cota é global por projeto e dev+prod
+compartilham o balde (topologia single-project), o que amplifica.
+
+### O que foi feito (fix 1 de 2 — este é o cache; o retro com backoff vem depois)
+
+- `domains/finops/repository.py` ganhou o mesmo quarteto de
+  `domains/access`: `serialize/deserialize_scan_events`,
+  `read/write_scan_events_cache`, `get_scan_events_cached`, sobre o
+  `core/event_cache.py` compartilhado (GCS + Firestore), namespace
+  `_CACHE_KIND = "finops_scan_events"`. **Nenhum recurso Terraform novo** —
+  reaproveita bucket/Firestore/Job já existentes.
+- `jobs/refresh_event_cache.py` (o mesmo Job diário D-1) agora também
+  varre `list_scan_events` pra cada projeto conhecido, no `try` principal
+  (não isolado como storage): finops lê a mesma fonte que lineage
+  (`jobservice.jobcompleted`), então se `list_job_events` passou, este
+  passa. `ScanEvent` carrega `timestamp` por evento, então **um cache de
+  30 dias serve os dois consumidores** — `partition-candidates` (janela
+  fixa) e `budget` (recorte month-to-date por filtro no service).
+- `domains/finops/service.py` / `api/v1/finops.py`: os 2 endpoints
+  passaram a receber `storage_client` + `firestore_client` via `Depends`
+  e ler `get_scan_events_cached` em vez de escanear ao vivo.
+- `PartitionCandidatesResponse` / `BudgetResponse` ganharam
+  `cache_updated_at: datetime | None` (mesmo campo que `LineageGraphResponse`
+  já expõe; aditivo/opcional).
+- **Stopgap de 429 introduzido junto** (o fix 2 generaliza): nova
+  `core/exceptions.py::LoggingQuotaExceededError` + handler em `main.py`
+  → HTTP **503 + `Retry-After: 60`**. `get_scan_events_cached` mapeia
+  `TooManyRequests` do scan ao vivo pra essa exceção (sem retry ainda).
+- `docs/specs/finops-waste-scanner.md` bump v1.3 (mecanismo + AC-001 a
+  AC-008 + Suposições), `finops-budget.md` bump v1.3 (cross-ref).
+
+### Não fez parte desta mudança (fica pro fix 2)
+
+`core/logging_client.py::list_entries_with_retry` — retry com backoff
+(`google.api_core.retry.Retry` envolvendo a paginação inteira, já que o
+transporte REST `_use_grpc=False` não aceita `retry=` nativo) aplicado
+aos 4 call sites de `list_entries` (finops, lineage, access, storage),
+substituindo o `except TooManyRequests` naked do finops. Ordem invertida
+a pedido do usuário: fix 1 (cache) mata o bug visível já; fix 2 (retry)
+suaviza o 429 residual de cache miss / do Job.
+
+### Erros cometidos e aprendizados
+
+- Nenhuma quebra nova nesta mudança. Aprendizado do diagnóstico: a cota
+  `read_requests` conta **páginas** de `entries.list`, não "scans" — o
+  `page_size=1000` que parecia otimização de latência era multiplicador
+  de consumo de cota. O cache elimina isso do request path; o retry do
+  fix 2 cobre o resíduo.
+
+---
+
 ## Cache TTL em 3 endpoints sem cache de Catalog/Freshness
 
 Continuação da mesma investigação de custo de Cloud Run (ver item

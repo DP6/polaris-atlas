@@ -12,7 +12,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 
-from google.cloud import bigquery
+from google.cloud import bigquery, firestore, storage
 from google.cloud import logging as cloud_logging
 
 from observability_hub.core.bigquery import (
@@ -40,7 +40,7 @@ from observability_hub.domains.finops.schemas import (
     SuggestedColumnType,
 )
 
-_PARTITION_CANDIDATE_LOOKBACK_DAYS = 30
+_PARTITION_CANDIDATE_LOOKBACK_DAYS = repository.LOOKBACK_DAYS
 _MIN_TABLE_SIZE_BYTES_FOR_PARTITION_CANDIDATE = 1_073_741_824  # 1 GB
 _CONSERVATIVE_REDUCTION = 0.30
 _OPTIMISTIC_REDUCTION = 0.70
@@ -104,6 +104,8 @@ def _month_start(now: datetime) -> datetime:
 def scan_partition_candidates(
     client: bigquery.Client,
     logging_client: cloud_logging.Client,
+    storage_client: storage.Client,
+    firestore_client: firestore.Client,
     project_id: str,
     datasets: list[str] | None = None,
     tables: list[str] | None = None,
@@ -127,8 +129,8 @@ def scan_partition_candidates(
             continue  # pequena demais pra valer a pena sinalizar
         size_candidates.append((dataset_id, table_id, bq_table))
 
-    events = repository.list_scan_events(
-        logging_client, project_id, _PARTITION_CANDIDATE_LOOKBACK_DAYS
+    events, cache_updated_at = repository.get_scan_events_cached(
+        logging_client, storage_client, firestore_client, project_id
     )
     billed_bytes_by_table: dict[tuple[str, str], int] = {}
     for event in events:
@@ -185,6 +187,7 @@ def scan_partition_candidates(
         project_id=project_id,
         lookback_days=_PARTITION_CANDIDATE_LOOKBACK_DAYS,
         candidates=candidates,
+        cache_updated_at=cache_updated_at,
         warning=_EMPTY_RESULT_WARNING.format(
             days=_PARTITION_CANDIDATE_LOOKBACK_DAYS, project_id=project_id
         )
@@ -216,6 +219,8 @@ def _group_keys(
 
 def get_budget(
     logging_client: cloud_logging.Client,
+    storage_client: storage.Client,
+    firestore_client: firestore.Client,
     project_id: str,
     group_by: BudgetGroupBy = BudgetGroupBy.TABLE,
     limit: int = _BUDGET_TOP_N_DEFAULT,
@@ -224,7 +229,14 @@ def get_budget(
     month_start = _month_start(now)
     lookback_days = (now - month_start).days + 1
 
-    events = repository.list_scan_events(logging_client, project_id, lookback_days)
+    # Fonte é o mesmo cache de 30 dias de scan_partition_candidates; o
+    # recorte pro mês corrente sai do filtro `event.timestamp < month_start`
+    # abaixo. Nos ~1 dia/ano em que lookback_days passa de 30 (fim de mês
+    # de 31 dias), o começo do mês pode faltar — já coberto pelo
+    # _BUDGET_RETENTION_CAVEAT, comportamento pré-existente.
+    events, cache_updated_at = repository.get_scan_events_cached(
+        logging_client, storage_client, firestore_client, project_id
+    )
 
     group_bytes: dict[str, int] = {}
     group_jobs: dict[str, int] = {}
@@ -306,6 +318,7 @@ def get_budget(
         total_cost_usd=total_cost_usd,
         top_queries=top_queries,
         projection=projection,
+        cache_updated_at=cache_updated_at,
         warning=warning,
     )
 

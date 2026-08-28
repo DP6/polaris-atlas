@@ -1,10 +1,16 @@
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-from google.api_core.exceptions import Forbidden
+from google.api_core.exceptions import Forbidden, TooManyRequests
 
-from observability_hub.core.exceptions import LoggingAccessDeniedError, ProjectAccessDeniedError
+from observability_hub.core import event_cache as event_cache_module
+from observability_hub.core.exceptions import (
+    LoggingAccessDeniedError,
+    LoggingQuotaExceededError,
+    ProjectAccessDeniedError,
+)
 from observability_hub.domains.finops import repository
 
 
@@ -215,6 +221,141 @@ def test_list_scan_events_parses_valid_entries_and_skips_invalid_ones():
     call_kwargs = client.list_entries.call_args.kwargs
     assert call_kwargs["resource_names"] == ["projects/observability-hub-dev"]
     assert 'resource.type="bigquery_resource"' in call_kwargs["filter_"]
+
+
+# --- serialize/deserialize_scan_events ----------------------------------------
+
+
+def test_serialize_deserialize_scan_events_round_trips():
+    events = [
+        repository.ScanEvent(
+            timestamp=datetime(2026, 8, 14, 10, 0, tzinfo=UTC),
+            referenced_tables=[("proj", "RAW", "a"), ("proj", "GOLD", "b")],
+            total_billed_bytes=10485760,
+            job_id="job1",
+            principal_email="ana@dp6.com.br",
+            query_text="SELECT 1",
+        )
+    ]
+
+    round_tripped = repository.deserialize_scan_events(repository.serialize_scan_events(events))
+
+    assert round_tripped == events
+
+
+def test_deserialize_scan_events_handles_no_timestamp_and_no_query_text():
+    events = [
+        repository.ScanEvent(
+            timestamp=None,
+            referenced_tables=[],
+            total_billed_bytes=0,
+            job_id="job1",
+            principal_email="ana@dp6.com.br",
+            query_text=None,
+        )
+    ]
+
+    round_tripped = repository.deserialize_scan_events(repository.serialize_scan_events(events))
+
+    assert round_tripped == events
+    assert round_tripped[0].timestamp is None
+    assert round_tripped[0].query_text is None
+
+
+# --- get_scan_events_cached --------------------------------------------------
+
+
+def _scan_event(job_id="job1"):
+    return repository.ScanEvent(
+        timestamp=datetime(2026, 8, 14, 10, 0, tzinfo=UTC),
+        referenced_tables=[],
+        total_billed_bytes=0,
+        job_id=job_id,
+        principal_email="ana@dp6.com.br",
+        query_text=None,
+    )
+
+
+def test_get_scan_events_cached_returns_cache_hit_without_calling_list_entries(monkeypatch):
+    client = MagicMock()
+    cached_events = [_scan_event("cached-job")]
+    cached_at = object()
+    monkeypatch.setattr(
+        repository, "read_scan_events_cache", lambda *a, **kw: (cached_events, cached_at)
+    )
+
+    events, returned_cached_at = repository.get_scan_events_cached(
+        client, MagicMock(), MagicMock(), "proj"
+    )
+
+    assert events == cached_events
+    assert returned_cached_at is cached_at
+    client.list_entries.assert_not_called()
+
+
+def test_get_scan_events_cached_falls_back_and_writes_cache_on_miss(monkeypatch):
+    client = MagicMock()
+    client.list_entries.return_value = []
+    monkeypatch.setattr(repository, "read_scan_events_cache", lambda *a, **kw: None)
+    write_calls = []
+    monkeypatch.setattr(
+        repository, "write_scan_events_cache", lambda *a, **kw: write_calls.append((a, kw))
+    )
+    seen_calls = []
+    monkeypatch.setattr(
+        event_cache_module, "record_project_seen", lambda *a, **kw: seen_calls.append((a, kw))
+    )
+
+    events, cached_at = repository.get_scan_events_cached(client, MagicMock(), MagicMock(), "proj")
+
+    assert events == []
+    assert cached_at is None
+    client.list_entries.assert_called_once()
+    assert len(write_calls) == 1
+    assert len(seen_calls) == 1
+
+
+def test_get_scan_events_cached_falls_back_to_live_scan_when_cache_read_fails(monkeypatch):
+    """Falha ao LER o cache (bucket sem IAM -> Forbidden, não tratado por
+    read_cache_bytes que só pega NotFound) nunca deve impedir o scan ao
+    vivo — mesma regressão já corrigida em lineage/access."""
+    client = MagicMock()
+    client.list_entries.return_value = []
+    monkeypatch.setattr(
+        repository,
+        "read_scan_events_cache",
+        lambda *a, **kw: (_ for _ in ()).throw(Forbidden("no access to bucket")),
+    )
+    monkeypatch.setattr(repository, "write_scan_events_cache", lambda *a, **kw: None)
+
+    events, cached_at = repository.get_scan_events_cached(client, MagicMock(), MagicMock(), "proj")
+
+    assert events == []
+    assert cached_at is None
+    client.list_entries.assert_called_once()
+
+
+def test_get_scan_events_cached_raises_quota_exceeded_on_too_many_requests(monkeypatch):
+    """429 no scan ao vivo (cota ReadRequestsPerMinutePerProject) vira
+    LoggingQuotaExceededError -> HTTP 503, não um 500 \"Failed to fetch\"."""
+    client = MagicMock()
+    client.list_entries.side_effect = TooManyRequests("quota exceeded")
+    monkeypatch.setattr(repository, "read_scan_events_cache", lambda *a, **kw: None)
+
+    with pytest.raises(LoggingQuotaExceededError) as exc_info:
+        repository.get_scan_events_cached(client, MagicMock(), MagicMock(), "proj")
+
+    assert exc_info.value.project_id == "proj"
+    assert exc_info.value.retry_after == 60
+
+
+def test_get_scan_events_cached_propagates_access_denied(monkeypatch):
+    client = MagicMock()
+    client.list_entries.side_effect = Forbidden("denied")
+    monkeypatch.setattr(repository, "read_scan_events_cache", lambda *a, **kw: None)
+
+    with pytest.raises(LoggingAccessDeniedError):
+        repository.get_scan_events_cached(client, MagicMock(), MagicMock(), "proj")
 
 
 # --- list_all_table_refs -------------------------------------------------------

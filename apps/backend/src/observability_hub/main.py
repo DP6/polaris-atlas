@@ -31,6 +31,7 @@ from observability_hub.core.exceptions import (
     InvalidSessionError,
     LastAdminLockoutError,
     LoggingAccessDeniedError,
+    LoggingQuotaExceededError,
     OAuthEmailNotAllowedError,
     OAuthExchangeError,
     OAuthStateMismatchError,
@@ -131,6 +132,27 @@ def handle_logging_access_denied(request: Request, exc: LoggingAccessDeniedError
                 f"--role='roles/{role}'"
                 for role in roles
             ],
+        },
+    )
+
+
+@app.exception_handler(LoggingQuotaExceededError)
+def handle_logging_quota_exceeded(request: Request, exc: LoggingQuotaExceededError) -> JSONResponse:
+    # 503 (não 500): é transitório e do lado do servidor — o cliente
+    # (TanStack Query) já reintenta 5xx com backoff, então costuma
+    # auto-recuperar sem o usuário ver erro. Retry-After orienta o
+    # intervalo. Sem `fix:` de gcloud — não é IAM; se recorrer, o caminho
+    # é aumentar a cota logging.googleapis.com/read_requests do projeto.
+    return JSONResponse(
+        status_code=503,
+        headers={"Retry-After": str(exc.retry_after)},
+        content={
+            "error": "logging_quota_exceeded",
+            "message": (
+                "O limite de leitura de audit logs do projeto foi atingido "
+                "temporariamente. Tente novamente em cerca de 1 minuto."
+            ),
+            "retry_after_seconds": exc.retry_after,
         },
     )
 

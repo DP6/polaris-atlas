@@ -1,9 +1,10 @@
 # Spec — Domínio: FinOps — Budget de custo
 
-**Versão:** 1.2 (`group_by=dataset` de volta, agora como opção — não fixo)
+**Versão:** 1.3 (leitura de audit log via cache pré-computado — mesmo
+mecanismo de `finops-waste-scanner.md` v1.3)
 **Status:** Aprovada
 **Fase:** 4 — FinOps (segunda frente: budget por dataset/projeto)
-**Última atualização:** 2026-08-22
+**Última atualização:** 2026-08-28
 
 ---
 
@@ -196,19 +197,23 @@ pra cortar.
 # domains/finops/service.py
 def get_budget(
     logging_client: cloud_logging.Client,
+    storage_client: storage.Client,
+    firestore_client: firestore.Client,
     project_id: str,
     group_by: BudgetGroupBy = BudgetGroupBy.TABLE,
     limit: int = 10,
 ) -> BudgetResponse:
     """
     1. month_start = dia 1 do mês corrente, 00:00 UTC. lookback_days =
-       dias desde month_start + 1 (a folga de +1 garante que o cutoff
-       passado pro Cloud Logging fique ANTES da meia-noite de
-       month_start, não depois — ver "Casos de borda").
-    2. Busca eventos com repository.list_scan_events(lookback_days) —
-       mesma função do scanner de desperdício, reaproveitada.
-       referenced_tables já vem sem entradas INFORMATION_SCHEMA (filtro
-       na origem, repository._parse_table_ref).
+       dias desde month_start + 1 — usado só pra projeção/caveat; NÃO é
+       mais passado pro scan (ver passo 2).
+    2. Busca eventos com repository.get_scan_events_cached() — lê o cache
+       pré-computado de 30 dias (mesmo blob que partition-candidates usa,
+       ver finops-waste-scanner.md v1.3, "Fonte de dados"). O recorte pro
+       mês corrente sai do filtro do passo 3, não de uma janela de scan
+       menor. referenced_tables já vem sem entradas INFORMATION_SCHEMA
+       (filtro na origem, repository._parse_table_ref). Retorna também
+       cache_updated_at, propagado pra BudgetResponse.
     3. Descarta evento sem timestamp, anterior a month_start (a folga do
        passo 1 pode trazer eventos do fim do mês anterior),
        com total_billed_bytes <= 0, ou cujo real_tables (tabelas
@@ -237,8 +242,8 @@ apps/backend/src/observability_hub/
 │   └── finops.py          # + GET /finops/{project_id}/budget?group_by=...
 ├── domains/finops/
 │   ├── service.py          # + get_budget(), _group_keys()
-│   ├── repository.py       # ScanEvent + job_id/principal_email/query_text; _parse_table_ref filtra INFORMATION_SCHEMA
-│   └── schemas.py          # + BudgetGroupBy, CostGroup, CostlyQuery, CostProjection, BudgetResponse
+│   ├── repository.py       # ScanEvent + job_id/principal_email/query_text; get_scan_events_cached() (cache, ver finops-waste-scanner.md v1.3); _parse_table_ref filtra INFORMATION_SCHEMA
+│   └── schemas.py          # + BudgetGroupBy, CostGroup, CostlyQuery, CostProjection, BudgetResponse (+ cache_updated_at)
 └── tests/unit/finops/
     ├── test_service.py      # + testes de get_budget por dimensão de group_by
     └── test_repository.py   # + testes de extração de job_id/principal_email/query_text + filtro INFORMATION_SCHEMA
@@ -268,10 +273,19 @@ tinha com o texto da query inline na célula).
 | Query com `JOIN` entre tabelas do mesmo dataset (`group_by=dataset`) | Custo somado **uma vez** pro dataset (dedup via `set`), diferente de `group_by=table` — evita inflar artificialmente o custo de um dataset só porque a query tocou duas tabelas dele |
 | Mesmo usuário com múltiplos jobs no mês (`group_by=user`) | Um único `CostGroup`, `job_count` e `billed_bytes` somados |
 | Texto de query maior que 2000 caracteres | Truncado com "…" no fim (`repository._QUERY_TEXT_MAX_CHARS`) |
-| Mês com mais de 30 dias corridos até agora (dia 31) | `warning` avisa sobre a retenção padrão de 30 dias do Cloud Logging — o início do mês pode estar faltando |
+| Mês com mais de 30 dias corridos até agora (dia 31) | `warning` avisa sobre a retenção padrão de 30 dias do Cloud Logging — o início do mês pode estar faltando. Com o cache de 30d isso passa a valer sempre no dia 31 (a fonte é fixa em 30d), não só quando os audit logs já expiraram — comportamento coberto pelo mesmo `warning`, sem regressão prática |
 | Nenhum evento de job no projeto | `warning` populado (mesmo texto/causas de lineage/access/scanner de desperdício), `groups`/`top_queries` vazios |
+| Cache hit / miss / falha de cache / `429` no scan ao vivo | Idêntico ao documentado em `finops-waste-scanner.md`, "Casos de borda" e "Critérios de aceite" (AC-001 a AC-008) — `get_scan_events_cached` é compartilhado pelos dois endpoints |
 | `limit` fora do intervalo 1–50 | HTTP 422 (validação do `Query(ge=1, le=50)`) |
 | `group_by` fora do enum | HTTP 422 (validação do `Query` com `BudgetGroupBy`) |
+
+---
+
+## Suposições
+
+| ID | Suposição | Status |
+|---|---|---|
+| ASM-001 | `budget` pode usar o mesmo cache de 30 dias de `partition-candidates` em vez de um scan com janela month-to-date variável: o recorte pro mês corrente já era feito por `event.timestamp < month_start` no service, não pela janela do scan. Efeito colateral: no dia 31 de meses de 31 dias, o `_BUDGET_RETENTION_CAVEAT` passa a disparar sempre (fonte fixa em 30d), não só quando os audit logs realmente expiraram — aceito, o texto do `warning` já cobre o caso. | confirmada |
 
 ---
 

@@ -74,7 +74,7 @@ todo o resto.
 
 | Recurso | Tipo | App | Ambiente | Gerenciado por | Observações |
 |---|---|---|---|---|---|
-| `backend-dev-refresh-cache` | Cloud Run Job | observability-hub | dev | terraform (`modules/cloud-run-job/main.tf`) | Roda 1x/dia (D-1), popula cache de lineage/acesso |
+| `backend-dev-refresh-cache` | Cloud Run Job | observability-hub | dev | terraform (`modules/cloud-run-job/main.tf`) | Roda 1x/dia (D-1), popula cache de audit log de lineage/acesso/finops (partition-candidates + budget)/storage (waste scanner 6.2). Sem recurso GCP novo — reaproveita bucket `event_cache` + Firestore |
 | `backend-prod-refresh-cache` | Cloud Run Job | observability-hub | prod | terraform | |
 | `backend-dev-refresh-cache-scheduler` | Cloud Scheduler job | observability-hub | dev | terraform | Cron `0 3 * * *` UTC |
 | `backend-prod-refresh-cache-scheduler` | Cloud Scheduler job | observability-hub | prod | terraform | |
@@ -95,7 +95,7 @@ todo o resto.
 
 | Recurso | Tipo | App | Ambiente | Gerenciado por | Observações |
 |---|---|---|---|---|---|
-| `dp6-ci-polaris-hub-cache-dev` | Bucket | observability-hub | dev | terraform (`environments/dev/main.tf`) | Cache de eventos de audit log (lineage/acesso) — payload grande, workaround do limite de 1MiB do Firestore |
+| `dp6-ci-polaris-hub-cache-dev` | Bucket | observability-hub | dev | terraform (`environments/dev/main.tf`) | Cache de eventos de audit log (lineage/acesso/finops/storage, um prefixo por domínio) — payload grande, workaround do limite de 1MiB do Firestore |
 | `dp6-ci-polaris-hub-cache-prod` | Bucket | observability-hub | prod | terraform | |
 | `dp6-ci-polaris-tfstate` | Bucket | n/a (plataforma/CI, não é do app) | - | terraform (`bootstrap/modules/wif-bootstrap/main.tf`) | State do Terraform, compartilhado dev+prod via `prefix` |
 
