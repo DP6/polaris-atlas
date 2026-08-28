@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { RequestAccessDialog } from '@/features/admin/RequestAccessDialog'
 import { DatasetSidebar } from '@/features/catalog/DatasetSidebar'
 import { useProjectContext } from '@/features/projects/ProjectContext'
+import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed'
 
 // Rotas que não dependem de um projeto GCP selecionado — hoje só /admin
 // (gerencia usuários/grupos/acesso, não dado de nenhum projeto). Sem essa
@@ -20,13 +21,17 @@ export function AppLayout() {
   const { projectId } = useProjectContext()
   const location = useLocation()
   const [requestAccessOpen, setRequestAccessOpen] = useState(false)
+  const { collapsed: sidebarCollapsed, toggle: toggleSidebar } = useSidebarCollapsed()
   const canRenderOutlet = Boolean(projectId) || !routeNeedsProject(location.pathname)
 
   return (
     <div className="flex h-screen flex-col">
-      <Topbar />
+      <Topbar
+        onToggleSidebar={projectId ? toggleSidebar : undefined}
+        sidebarCollapsed={sidebarCollapsed}
+      />
       <div className="flex min-h-0 flex-1">
-        {projectId && <DatasetSidebar projectId={projectId} />}
+        {projectId && !sidebarCollapsed && <DatasetSidebar projectId={projectId} />}
         <main className="min-w-0 flex-1 overflow-y-auto p-6">
           {canRenderOutlet ? (
             <Outlet />
