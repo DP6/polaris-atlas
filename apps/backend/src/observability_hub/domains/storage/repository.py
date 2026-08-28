@@ -26,11 +26,10 @@ from google.cloud import logging as cloud_logging
 from observability_hub.core import event_cache
 from observability_hub.core.config import settings
 from observability_hub.core.exceptions import StorageAccessDeniedError
-from observability_hub.core.logging_client import list_entries_with_retry
+from observability_hub.core.logging_client import LOGGING_PAGE_SIZE, list_entries_with_retry
 from observability_hub.core.storage_client import list_bucket_objects_cached
 
 _OBJECT_READ_METHOD = "storage.objects.get"
-_LOGGING_PAGE_SIZE = 1000
 # Janela do scanner 6.2 (objeto sem leitura recente) — ver
 # docs/specs/storage.md seção 6.2. Único valor de referência: service.py
 # e jobs/refresh_event_cache.py importam daqui em vez de duplicar.
@@ -194,7 +193,7 @@ def list_read_object_keys(
         logging_client,
         resource_names=[f"projects/{project_id}"],
         filter_=filter_,
-        page_size=_LOGGING_PAGE_SIZE,
+        page_size=LOGGING_PAGE_SIZE,
         project_id=project_id,
     )
     keys = set()

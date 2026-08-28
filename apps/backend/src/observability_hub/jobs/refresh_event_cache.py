@@ -30,6 +30,7 @@ from observability_hub.core import event_cache
 from observability_hub.core.exceptions import LoggingAccessDeniedError, LoggingQuotaExceededError
 from observability_hub.core.firestore import get_firestore_client
 from observability_hub.core.logging_client import (
+    LOGGING_PAGE_SIZE,
     bigquery_job_events_filter,
     get_logging_client,
     list_entries_with_retry,
@@ -42,6 +43,12 @@ from observability_hub.domains.lineage import repository as lineage_repository
 from observability_hub.domains.storage import repository as storage_repository
 
 logger = std_logging.getLogger("observability_hub.jobs.refresh_event_cache")
+
+# Pausa entre páginas do scan de audit log — rate-limit voluntário pro job
+# (que roda fora do request path) não estourar a cota read_requests do
+# projeto num scan grande. ~1 fetch a cada 0.4s -> ~150/min, folga sob os
+# 200/min. O request path nunca usa pausa.
+_SCAN_PAGE_PAUSE_SECONDS = 0.4
 
 
 def _known_projects(firestore_client: firestore.Client) -> list[str]:
@@ -102,8 +109,9 @@ def _refresh_project(
             logging_client,
             resource_names=[f"projects/{project_id}"],
             filter_=bigquery_job_events_filter(lineage_repository.LOOKBACK_DAYS),
-            page_size=1000,
+            page_size=LOGGING_PAGE_SIZE,
             project_id=project_id,
+            page_pause=_SCAN_PAGE_PAUSE_SECONDS,
         )
 
         job_events = lineage_repository.parse_job_events(raw_job_entries)

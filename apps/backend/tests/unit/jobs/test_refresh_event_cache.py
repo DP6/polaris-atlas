@@ -86,7 +86,7 @@ def test_refresh_project_scans_once_and_writes_all_four_caches(monkeypatch):
     parsers de lineage/access/finops; storage tem scan próprio."""
     scan_calls = []
 
-    def fake_scan(client, *, resource_names, filter_, page_size, project_id):
+    def fake_scan(client, *, resource_names, filter_, page_size, project_id, page_pause=0.0):
         scan_calls.append(project_id)
         return ["entry-1", "entry-2"]
 

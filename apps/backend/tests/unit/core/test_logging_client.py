@@ -42,6 +42,37 @@ def test_returns_materialized_list_on_first_success():
     )
 
 
+def test_page_pause_sleeps_on_page_boundaries(monkeypatch):
+    slept: list[float] = []
+    monkeypatch.setattr("time.sleep", lambda s: slept.append(s))
+    client = MagicMock()
+    client.list_entries.return_value = iter([f"e{i}" for i in range(5)])
+
+    result = logging_client.list_entries_with_retry(
+        client,
+        resource_names=["projects/proj"],
+        filter_="f",
+        page_size=2,
+        project_id="proj",
+        page_pause=0.4,
+    )
+
+    assert result == ["e0", "e1", "e2", "e3", "e4"]
+    # 5 entradas, página de 2 -> pausa em i=2 e i=4.
+    assert slept == [0.4, 0.4]
+
+
+def test_page_pause_zero_does_not_sleep(monkeypatch):
+    slept: list[float] = []
+    monkeypatch.setattr("time.sleep", lambda s: slept.append(s))
+    client = MagicMock()
+    client.list_entries.return_value = iter(["e0", "e1", "e2"])
+
+    logging_client.list_entries_with_retry(client, **_KWARGS)
+
+    assert slept == []
+
+
 def test_retries_on_too_many_requests_then_succeeds(_real_retry):
     client = MagicMock()
     client.list_entries.side_effect = [

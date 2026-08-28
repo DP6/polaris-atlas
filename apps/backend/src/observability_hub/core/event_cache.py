@@ -33,7 +33,9 @@ _SEEN_PROJECTS_COLLECTION = "event_cache_seen_projects"
 # execução, `projects` preenchido incrementalmente conforme cada projeto
 # termina (a tela faz polling e vê os projetos "acenderem" um a um).
 _CACHE_RUNS_COLLECTION = "event_cache_runs"
-_CACHE_RUNS_KEEP = 20
+# Retenção de execuções pra a tabela de histórico de Administração → Caches
+# (paginação até 50/página + filtros aplicados em Python sobre este total).
+_CACHE_RUNS_KEEP = 200
 
 
 def read_cache_bytes(

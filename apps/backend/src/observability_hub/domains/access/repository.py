@@ -25,12 +25,12 @@ from google.cloud import logging as cloud_logging
 from observability_hub.core import event_cache
 from observability_hub.core.config import settings
 from observability_hub.core.logging_client import (
+    LOGGING_PAGE_SIZE,
     bigquery_job_events_filter,
     list_entries_with_retry,
 )
 
 LOOKBACK_DAYS = 30
-_PAGE_SIZE = 1000
 _CACHE_KIND = "access"
 
 logger = logging.getLogger(__name__)
@@ -123,7 +123,7 @@ def list_access_events(client: cloud_logging.Client, project_id: str) -> list[Ac
         client,
         resource_names=[f"projects/{project_id}"],
         filter_=bigquery_job_events_filter(LOOKBACK_DAYS),
-        page_size=_PAGE_SIZE,
+        page_size=LOGGING_PAGE_SIZE,
         project_id=project_id,
     )
     return parse_access_events(entries)

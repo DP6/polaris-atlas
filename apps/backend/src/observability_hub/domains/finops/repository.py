@@ -30,13 +30,13 @@ from observability_hub.core import event_cache
 from observability_hub.core.config import settings
 from observability_hub.core.exceptions import ProjectAccessDeniedError
 from observability_hub.core.logging_client import (
+    LOGGING_PAGE_SIZE,
     bigquery_job_events_filter,
     list_entries_with_retry,
 )
 
 logger = logging.getLogger(__name__)
 
-_PAGE_SIZE = 1000
 _DATE_LIKE_TYPES = {"DATE", "DATETIME", "TIMESTAMP"}
 _QUERY_TEXT_MAX_CHARS = 2000
 
@@ -163,7 +163,7 @@ def list_scan_events(
         client,
         resource_names=[f"projects/{project_id}"],
         filter_=bigquery_job_events_filter(lookback_days),
-        page_size=_PAGE_SIZE,
+        page_size=LOGGING_PAGE_SIZE,
         project_id=project_id,
     )
     return parse_scan_events(entries)

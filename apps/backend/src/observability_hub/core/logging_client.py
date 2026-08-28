@@ -25,6 +25,7 @@ fetch" no browser).
 
 import json
 import logging
+import time
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 
@@ -69,6 +70,13 @@ _RETRY_INITIAL_BACKOFF = 1.0
 _RETRY_MAX_BACKOFF = 10.0
 _RETRY_MULTIPLIER = 2.0
 
+# `entries.list` corta a página pelo tamanho da resposta (~10 MiB), não
+# pela contagem pedida — audit log de job ≈ 2-4 KB, então na prática cada
+# página traz ~2.5-4 mil entradas independente do valor aqui. 5000 pede o
+# máximo útil; derruba um scan de 30 dias de ~50 mil eventos de ~50 páginas
+# pra ~15.
+LOGGING_PAGE_SIZE = 5000
+
 # ResourceExhausted é subclasse de TooManyRequests no google-api-core
 # instalado, então um predicado só cobre as duas formas do 429.
 # ServiceUnavailable (503 do próprio Logging) também é transitório.
@@ -102,10 +110,16 @@ def list_entries_with_retry(
     filter_: str,
     page_size: int,
     project_id: str,
+    page_pause: float = 0.0,
 ) -> list[cloud_logging.LogEntry]:
     """`client.list_entries(...)` materializado numa lista, com retry
     exponencial em 429 (`TooManyRequests`/`ResourceExhausted`) e 503
     (`ServiceUnavailable`).
+
+    `page_pause > 0` insere um `time.sleep(page_pause)` a cada `page_size`
+    entradas consumidas (≈ fronteira de página) — rate-limit voluntário
+    pro job de cache diário não estourar a cota `read_requests` num scan
+    grande. O request path sempre passa `0.0` (latência importa lá).
 
     Mapeia:
     - `Forbidden` -> `LoggingAccessDeniedError` (sem retry — falta de IAM,
@@ -125,9 +139,17 @@ def list_entries_with_retry(
     )
 
     def _scan() -> list[cloud_logging.LogEntry]:
-        return list(
-            client.list_entries(resource_names=resource_names, filter_=filter_, page_size=page_size)
+        gen = client.list_entries(
+            resource_names=resource_names, filter_=filter_, page_size=page_size
         )
+        if page_pause <= 0:
+            return list(gen)
+        out: list[cloud_logging.LogEntry] = []
+        for i, entry in enumerate(gen):
+            if i and page_size and i % page_size == 0:
+                time.sleep(page_pause)
+            out.append(entry)
+        return out
 
     try:
         return retry_policy(_scan)()

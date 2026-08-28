@@ -35,12 +35,12 @@ from google.cloud import logging as cloud_logging
 from observability_hub.core import event_cache
 from observability_hub.core.config import settings
 from observability_hub.core.logging_client import (
+    LOGGING_PAGE_SIZE,
     bigquery_job_events_filter,
     list_entries_with_retry,
 )
 
 LOOKBACK_DAYS = 30
-_PAGE_SIZE = 1000
 # Namespace do cache dentro do bucket compartilhado (core/event_cache.py)
 # e "kind" do metadado no Firestore — domains/access usa "access" no
 # mesmo bucket, prefixos diferentes.
@@ -166,7 +166,7 @@ def list_job_events(
         client,
         resource_names=[f"projects/{project_id}"],
         filter_=bigquery_job_events_filter(lookback_days),
-        page_size=_PAGE_SIZE,
+        page_size=LOGGING_PAGE_SIZE,
         project_id=project_id,
     )
     return parse_job_events(entries)
