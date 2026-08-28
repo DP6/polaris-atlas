@@ -1,11 +1,11 @@
 # Spec — Domínio: Mapa de acesso
 
-**Versão:** 1.1 (cache pré-computado de audit log compartilhado com
-lineage — job diário D-1 + gatilho manual de admin, ver
-`docs/specs/lineage.md` seção "Cache pré-computado de audit log")
+**Versão:** 1.2 (cache de audit log **incremental** compartilhado com
+lineage — ver `docs/specs/lineage.md` seção "Modelo incremental"; request
+path não escaneia mais ao vivo)
 **Status:** Aprovada
 **Fase:** 3 — Sprint 3.2
-**Última atualização:** 2026-08-25
+**Última atualização:** 2026-08-28
 
 ---
 
@@ -91,8 +91,10 @@ def get_table_access(
     limit: int = 20,
 ) -> TableAccessResponse:
     """
-    1. Busca todos os eventos de job do projeto na janela de 30 dias
-       (repository.list_access_events — mesma chamada de lineage).
+    1. Lê do cache os eventos de job do projeto na janela de 30 dias
+       (repository.get_access_events_cached — populado pelo Job de
+       refresh; cache miss levanta EventCacheNotReadyError, degradado
+       pra resposta vazia com warning).
     2. Por evento, compara a tripla completa (project_id, dataset_id,
        table_id) — nunca só (dataset_id, table_id), mesmo motivo do bug
        corrigido na v2 do lineage (colisão entre projetos com dataset/
@@ -147,7 +149,7 @@ apps/backend/src/observability_hub/
 ├── domains/access/
 │   ├── __init__.py
 │   ├── service.py
-│   ├── repository.py      # list_access_events() — duplica parsing de lineage + timestamp
+│   ├── repository.py      # parse_access_events() + get_access_events_cached() — duplica parsing de lineage + timestamp
 │   └── schemas.py
 └── tests/unit/access/
     ├── test_service.py
@@ -165,10 +167,15 @@ job diário D-1, gatilho manual de admin) descrito em
 duplicado aqui. Diferenças específicas deste domínio:
 
 - `get_table_access` (`domains/access/service.py`) chama
-  `repository.get_access_events_cached` em vez de `list_access_events`
-  diretamente — cache sempre elegível aqui (diferente de lineage/órfãs),
-  já que este endpoint **não tem** `lookback_days` variável, é sempre
-  `LOOKBACK_DAYS` fixo.
+  `repository.get_access_events_cached` — cache sempre elegível aqui
+  (este endpoint **não tem** `lookback_days` variável). Desde a v1.2
+  (modelo incremental) `list_access_events` **foi removida**: o request
+  path não escaneia mais o Cloud Logging ao vivo. Cache miss → registra o
+  projeto e levanta `EventCacheNotReadyError`, que `get_table_access`
+  degrada pra `users: []` + `warning` "cache ainda não gerado" (mesmo
+  bloco `except` de `LoggingQuotaExceededError`). Quem escaneia é só
+  `jobs/refresh_event_cache.py` (delta diário por `receiveTimestamp` +
+  merge/evicção de janela de 30 dias).
 - `TableAccessResponse` ganha `cache_updated_at: datetime | None` —
   mesmo significado (`null` = veio ao vivo nesta chamada).
 - `domains/access/repository.py` ganha
@@ -193,8 +200,8 @@ duplicado aqui. Diferenças específicas deste domínio:
 | `limit` fora do intervalo 1–100 | HTTP 422 (validação do `Query(ge=1, le=100)`) |
 | Job executado pela própria SA de runtime do Hub (`backend-run@<projeto-do-hub>.iam.gserviceaccount.com`) | Excluído da agregação — profiling/PII rodado pela UI usa essa SA pra consultar o BigQuery, não é um consumidor externo real (ver "Exclusão da SA do próprio Hub") |
 | Job de outra service account (ex: pipeline externo) | Conta normalmente, `is_service_account: true` |
-| Projeto nunca varrido pelo Job de refresh (cache miss) | Fallback síncrono (scan ao vivo), resultado gravado no cache pra próxima chamada — `cache_updated_at: null` só nesta resposta |
-| `429 TooManyRequests` no fallback ao vivo (cota `read_requests`/min do projeto, dev+prod compartilham) | `list_entries_with_retry` faz retry exponencial (backoff, deadline 30s) no 429/503; o que persistir vira `LoggingQuotaExceededError`, que o service **degrada pra resposta vazia com `warning`** (não 503) — mesmo tratamento best-effort de `storage`. O `warning` orienta usar Administração → "Atualizar caches". `main.py` ainda mapearia pra 503 se algum caminho não capturasse |
+| Projeto nunca varrido pelo Job de refresh (cache miss) | Request path **não escaneia ao vivo** (v1.2): registra o projeto e levanta `EventCacheNotReadyError` → `get_table_access` degrada pra `users: []` + `warning` "cache ainda não gerado". O próximo run do Job popula |
+| `429 TooManyRequests` (cota `read_requests`/min) — só no Job de refresh | Retry exponencial em `list_entries_with_retry`; o 429 persistente marca o projeto como `quota_exceeded` naquele run e o próximo ciclo tenta de novo. O request path de acesso não escaneia mais, então não vê 429 |
 
 ---
 
@@ -203,8 +210,9 @@ duplicado aqui. Diferenças específicas deste domínio:
 | ID | Comportamento | Testado em |
 |---|---|---|
 | AC-001 | Cache hit não chama `client.list_entries` (Cloud Logging) | `test_get_access_events_cached_returns_cache_hit_without_calling_list_entries` |
-| AC-002 | Cache miss faz o scan ao vivo e grava o resultado no cache antes de retornar | `test_get_access_events_cached_falls_back_and_writes_cache_on_miss` |
-| AC-003 | Falha ao ler/gravar o cache (qualquer exceção, não só cache miss) nunca impede a resposta de conter o resultado do scan ao vivo | `test_get_access_events_cached_falls_back_to_live_scan_when_cache_read_fails`, `test_get_access_events_cached_returns_live_data_when_cache_write_fails` |
+| AC-002 | Cache miss **não** escaneia ao vivo — registra o projeto e levanta `EventCacheNotReadyError` | `test_get_access_events_cached_raises_not_ready_and_records_project_on_miss` |
+| AC-003 | Falha ao ler o cache (qualquer exceção, não só cache miss) é tratada como cache miss, nunca propaga como 500 | `test_get_access_events_cached_treats_cache_read_failure_as_miss` |
+| AC-004 | `get_table_access` degrada `EventCacheNotReadyError` pra `users: []` + `warning` | `test_get_table_access_degrades_to_warning_when_cache_not_ready` |
 
 ## Suposições
 

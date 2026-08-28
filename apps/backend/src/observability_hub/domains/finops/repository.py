@@ -28,12 +28,7 @@ from google.cloud import logging as cloud_logging
 
 from observability_hub.core import event_cache
 from observability_hub.core.config import settings
-from observability_hub.core.exceptions import ProjectAccessDeniedError
-from observability_hub.core.logging_client import (
-    LOGGING_PAGE_SIZE,
-    bigquery_job_events_filter,
-    list_entries_with_retry,
-)
+from observability_hub.core.exceptions import EventCacheNotReadyError, ProjectAccessDeniedError
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +123,9 @@ def _parse_entry(entry: cloud_logging.LogEntry) -> ScanEvent | None:
     job_stats = job.get("jobStatistics", {})
     raw_referenced = job_stats.get("referencedTables", [])
     referenced = [ref for r in raw_referenced if (ref := _parse_table_ref(r)) is not None]
-    timestamp = _parse_timestamp(job_stats.get("endTime"))
+    timestamp = _parse_timestamp(
+        job_stats.get("endTime") or job_stats.get("startTime") or job_stats.get("createTime")
+    )
     total_billed_bytes = _parse_billed_bytes(job_stats.get("totalBilledBytes"))
 
     job_name = job.get("jobName", {})
@@ -145,45 +142,21 @@ def _parse_entry(entry: cloud_logging.LogEntry) -> ScanEvent | None:
     )
 
 
-def list_scan_events(
-    client: cloud_logging.Client, project_id: str, lookback_days: int
-) -> list[ScanEvent]:
-    """Levanta LoggingAccessDeniedError se a SA de runtime não tiver
-    roles/logging.viewer no projeto, e LoggingQuotaExceededError se a cota
-    read_requests/min do projeto persistir estourada após o retry (ver
-    core/logging_client.py::list_entries_with_retry). Lista vazia (sem
-    erro) é o resultado tanto de "nenhum job rodou na janela" quanto de
-    "Data Access audit logs desabilitados" — indistinguível por aqui, ver
-    aviso estático em domains/finops/service.py.
-
-    lookback_days > 30 esbarra na retenção padrão dos audit logs do Cloud
-    Logging (30 dias, salvo bucket/sink customizado) — ver
-    docs/specs/finops-waste-scanner.md, "Casos de borda"."""
-    entries = list_entries_with_retry(
-        client,
-        resource_names=[f"projects/{project_id}"],
-        filter_=bigquery_job_events_filter(lookback_days),
-        page_size=LOGGING_PAGE_SIZE,
-        project_id=project_id,
-    )
-    return parse_scan_events(entries)
-
-
 def parse_scan_events(entries: list[cloud_logging.LogEntry]) -> list[ScanEvent]:
-    """Parsing puro (sem I/O) — separado de list_scan_events pra
-    jobs/refresh_event_cache.py alimentar lineage/access/finops de um scan
-    único do Cloud Logging (ver core/logging_client.py::bigquery_job_events_filter)."""
+    """Parsing puro (sem I/O) — jobs/refresh_event_cache.py faz UM scan de
+    `jobservice.jobcompleted` e passa as entradas cruas pros 3 parsers
+    (lineage/access/finops). Não há mais `list_scan_events`: o request path
+    lê só do cache (modelo incremental), quem escaneia é o job."""
     return [event for entry in entries if (event := _parse_entry(entry)) is not None]
 
 
-# --- Cache de audit log (job periódico + fallback do request path) ---------
+# --- Cache de audit log (só o job periódico escaneia; request path só lê) --
 #
-# Antes desta seção, /finops/{project}/partition-candidates e
-# /finops/{project}/budget chamavam list_scan_events() direto no request
-# path — scan síncrono de 30 dias de audit log do Cloud Logging a cada
-# chamada, mesmo problema estrutural que domains/lineage, domains/access e
-# domains/storage já resolveram com este padrão (job diário
-# jobs/refresh_event_cache.py + core/event_cache.py). Ver CHANGELOG.md.
+# /finops/{project}/partition-candidates e /finops/{project}/budget leem
+# apenas do cache (modelo incremental) — quem escaneia o Cloud Logging é
+# jobs/refresh_event_cache.py (scan diário incremental + full manual),
+# mesmo padrão de domains/lineage, domains/access e domains/storage.
+# Ver docs/specs/finops-waste-scanner.md e CHANGELOG.md.
 
 
 def serialize_scan_events(events: list[ScanEvent]) -> bytes:
@@ -241,6 +214,11 @@ def write_scan_events_cache(
     firestore_client: firestore.Client,
     project_id: str,
     events: list[ScanEvent],
+    *,
+    window_start: datetime | None = None,
+    last_scan_receive_ts: datetime | None = None,
+    last_full_scan_at: datetime | None = None,
+    mode: str | None = None,
 ) -> None:
     event_cache.write_cache_bytes(
         storage_client,
@@ -248,7 +226,16 @@ def write_scan_events_cache(
         _cache_blob_path(project_id),
         serialize_scan_events(events),
     )
-    event_cache.set_cache_metadata(firestore_client, _CACHE_KIND, project_id, len(events))
+    event_cache.set_cache_metadata(
+        firestore_client,
+        _CACHE_KIND,
+        project_id,
+        len(events),
+        window_start=window_start,
+        last_scan_receive_ts=last_scan_receive_ts,
+        last_full_scan_at=last_full_scan_at,
+        mode=mode,
+    )
 
 
 def get_scan_events_cached(
@@ -257,39 +244,26 @@ def get_scan_events_cached(
     firestore_client: firestore.Client,
     project_id: str,
 ) -> tuple[list[ScanEvent], datetime | None]:
-    """Lê o cache pré-computado (job periódico ou fallback write-through de
-    outra requisição); em cache miss, escaneia LOOKBACK_DAYS dias ao vivo e
-    grava pra próxima chamada (auto-cura) — mesmo racional de
-    domains/access/repository.py::get_access_events_cached. ScanEvent
-    carrega timestamp por evento, então o mesmo cache de 30 dias serve
-    tanto scan_partition_candidates (janela fixa) quanto get_budget
-    (recorte month-to-date por filtro no service).
-
-    cached_at None = dado veio ao vivo nesta chamada. Falha ao ler/gravar o
-    cache é logada e ignorada (otimização, nunca derruba a resposta).
-    LoggingAccessDeniedError (scan ao vivo sem roles/logging.viewer) e
-    LoggingQuotaExceededError (429 persistente após o retry de
-    core/logging_client.py::list_entries_with_retry) propagam — main.py
-    mapeia pra 403 e 503 respectivamente."""
+    """Modelo incremental — o request path NÃO escaneia mais ao vivo em
+    cache miss (o scan roda só no job diário ou no gatilho manual de admin).
+    Cache hit -> (eventos, cached_at); serve tanto scan_partition_candidates
+    quanto get_budget (recorte month-to-date por filtro no service). Cache
+    miss -> registra o projeto (`record_project_seen`) e levanta
+    `EventCacheNotReadyError`, que domains/finops/service.py degrada pra
+    resposta vazia com warning."""
     try:
         cached = read_scan_events_cache(storage_client, firestore_client, project_id)
     except Exception:
         logger.exception(
-            "Falha ao ler cache de finops para %s — caindo pro scan ao vivo", project_id
+            "Falha ao ler cache de finops para %s — tratando como cache miss", project_id
         )
-    else:
-        if cached is not None:
-            return cached
+        cached = None
 
-    events = list_scan_events(logging_client, project_id, LOOKBACK_DAYS)
+    if cached is not None:
+        return cached
 
-    try:
-        write_scan_events_cache(storage_client, firestore_client, project_id, events)
-        event_cache.record_project_seen(firestore_client, project_id)
-    except Exception:
-        logger.exception("Falha ao gravar cache de finops para %s", project_id)
-
-    return events, None
+    event_cache.record_project_seen(firestore_client, project_id)
+    raise EventCacheNotReadyError(project_id)
 
 
 def list_all_table_refs(

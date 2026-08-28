@@ -3,12 +3,11 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-from google.api_core.exceptions import Forbidden, TooManyRequests
+from google.api_core.exceptions import Forbidden
 
 from observability_hub.core import event_cache as event_cache_module
 from observability_hub.core.exceptions import (
-    LoggingAccessDeniedError,
-    LoggingQuotaExceededError,
+    EventCacheNotReadyError,
     ProjectAccessDeniedError,
 )
 from observability_hub.domains.finops import repository
@@ -190,37 +189,11 @@ def test_parse_entry_returns_none_when_job_completed_event_missing():
     assert repository._parse_entry(_entry({})) is None
 
 
-# --- list_scan_events -----------------------------------------------------------
-
-
-def test_list_scan_events_raises_logging_access_denied():
-    client = MagicMock()
-    client.list_entries.side_effect = Forbidden("denied")
-
-    with pytest.raises(LoggingAccessDeniedError):
-        repository.list_scan_events(client, "observability-hub-dev", 30)
-
-
-def test_list_scan_events_parses_valid_entries_and_skips_invalid_ones():
-    valid_payload = {
-        "serviceData": {
-            "jobCompletedEvent": {
-                "job": {
-                    "jobStatistics": {"endTime": "2026-08-14T10:00:00Z", "referencedTables": []}
-                }
-            }
-        }
-    }
-    client = MagicMock()
-    client.list_entries.return_value = [_entry(valid_payload), _entry(None)]
-
-    events = repository.list_scan_events(client, "observability-hub-dev", 30)
-
-    assert len(events) == 1
-    client.list_entries.assert_called_once()
-    call_kwargs = client.list_entries.call_args.kwargs
-    assert call_kwargs["resource_names"] == ["projects/observability-hub-dev"]
-    assert 'resource.type="bigquery_resource"' in call_kwargs["filter_"]
+# --- parse_scan_events -------------------------------------------------------
+#
+# list_scan_events foi removida no modelo de cache incremental — o request
+# path não escaneia mais o Cloud Logging ao vivo, quem escaneia é
+# jobs/refresh_event_cache.py (que passa entradas cruas pra parse_*).
 
 
 def test_parse_scan_events_is_pure_and_skips_invalid_entries():
@@ -310,69 +283,41 @@ def test_get_scan_events_cached_returns_cache_hit_without_calling_list_entries(m
     client.list_entries.assert_not_called()
 
 
-def test_get_scan_events_cached_falls_back_and_writes_cache_on_miss(monkeypatch):
+def test_get_scan_events_cached_raises_not_ready_and_records_project_on_miss(monkeypatch):
+    """Modelo incremental: cache miss não escaneia mais ao vivo — registra
+    o projeto (pro job pegá-lo) e levanta EventCacheNotReadyError, que
+    domains/finops/service.py degrada pra resposta vazia com warning."""
     client = MagicMock()
-    client.list_entries.return_value = []
     monkeypatch.setattr(repository, "read_scan_events_cache", lambda *a, **kw: None)
-    write_calls = []
-    monkeypatch.setattr(
-        repository, "write_scan_events_cache", lambda *a, **kw: write_calls.append((a, kw))
-    )
     seen_calls = []
     monkeypatch.setattr(
         event_cache_module, "record_project_seen", lambda *a, **kw: seen_calls.append((a, kw))
     )
 
-    events, cached_at = repository.get_scan_events_cached(client, MagicMock(), MagicMock(), "proj")
+    with pytest.raises(EventCacheNotReadyError) as exc_info:
+        repository.get_scan_events_cached(client, MagicMock(), MagicMock(), "proj")
 
-    assert events == []
-    assert cached_at is None
-    client.list_entries.assert_called_once()
-    assert len(write_calls) == 1
+    assert exc_info.value.project_id == "proj"
     assert len(seen_calls) == 1
+    client.list_entries.assert_not_called()
 
 
-def test_get_scan_events_cached_falls_back_to_live_scan_when_cache_read_fails(monkeypatch):
+def test_get_scan_events_cached_treats_cache_read_failure_as_miss(monkeypatch):
     """Falha ao LER o cache (bucket sem IAM -> Forbidden, não tratado por
-    read_cache_bytes que só pega NotFound) nunca deve impedir o scan ao
-    vivo — mesma regressão já corrigida em lineage/access."""
+    read_cache_bytes que só pega NotFound) é logada e tratada como cache
+    miss — EventCacheNotReadyError, nunca um 500 cru."""
     client = MagicMock()
-    client.list_entries.return_value = []
     monkeypatch.setattr(
         repository,
         "read_scan_events_cache",
         lambda *a, **kw: (_ for _ in ()).throw(Forbidden("no access to bucket")),
     )
-    monkeypatch.setattr(repository, "write_scan_events_cache", lambda *a, **kw: None)
+    monkeypatch.setattr(event_cache_module, "record_project_seen", lambda *a, **kw: None)
 
-    events, cached_at = repository.get_scan_events_cached(client, MagicMock(), MagicMock(), "proj")
-
-    assert events == []
-    assert cached_at is None
-    client.list_entries.assert_called_once()
-
-
-def test_get_scan_events_cached_raises_quota_exceeded_on_too_many_requests(monkeypatch):
-    """429 no scan ao vivo (cota ReadRequestsPerMinutePerProject) vira
-    LoggingQuotaExceededError -> HTTP 503, não um 500 \"Failed to fetch\"."""
-    client = MagicMock()
-    client.list_entries.side_effect = TooManyRequests("quota exceeded")
-    monkeypatch.setattr(repository, "read_scan_events_cache", lambda *a, **kw: None)
-
-    with pytest.raises(LoggingQuotaExceededError) as exc_info:
+    with pytest.raises(EventCacheNotReadyError):
         repository.get_scan_events_cached(client, MagicMock(), MagicMock(), "proj")
 
-    assert exc_info.value.project_id == "proj"
-    assert exc_info.value.retry_after == 60
-
-
-def test_get_scan_events_cached_propagates_access_denied(monkeypatch):
-    client = MagicMock()
-    client.list_entries.side_effect = Forbidden("denied")
-    monkeypatch.setattr(repository, "read_scan_events_cache", lambda *a, **kw: None)
-
-    with pytest.raises(LoggingAccessDeniedError):
-        repository.get_scan_events_cached(client, MagicMock(), MagicMock(), "proj")
+    client.list_entries.assert_not_called()
 
 
 # --- list_all_table_refs -------------------------------------------------------

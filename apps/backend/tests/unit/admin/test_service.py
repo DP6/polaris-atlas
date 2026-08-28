@@ -948,8 +948,21 @@ def test_trigger_event_cache_refresh_calls_run_client_with_environment_job_name(
     service.trigger_event_cache_refresh(run_client)
 
     assert len(calls) == 1
-    args, _ = calls[0]
+    args, kwargs = calls[0]
     assert args == (run_client, "dp6-ci-polaris", "us-central1", "backend-dev-refresh-cache")
+    assert kwargs == {"force_full": False}
+
+
+def test_trigger_event_cache_refresh_forwards_force_full(monkeypatch):
+    monkeypatch.setattr(service, "get_runtime_project", lambda: "dp6-ci-polaris")
+    monkeypatch.setattr(service.settings, "region", "us-central1")
+    monkeypatch.setattr(service.settings, "environment", "dev")
+    calls = []
+    monkeypatch.setattr(service, "trigger_job_execution", lambda *a, **kw: calls.append((a, kw)))
+
+    service.trigger_event_cache_refresh(MagicMock(), force_full=True)
+
+    assert calls[0][1] == {"force_full": True}
 
 
 def test_get_event_cache_status_builds_runs_and_project_freshness(monkeypatch):
@@ -988,7 +1001,13 @@ def test_get_event_cache_status_builds_runs_and_project_freshness(monkeypatch):
 
     def _meta(c, kind, project_id):
         if project_id == "proj-a" and kind == "lineage":
-            return {"cached_at": "2026-08-28T03:01:00Z", "event_count": 10}
+            return {
+                "cached_at": "2026-08-28T03:01:00Z",
+                "event_count": 10,
+                "window_start": "2026-07-28T03:00:00Z",
+                "last_full_scan_at": "2026-08-20T03:00:00Z",
+                "mode": "incremental",
+            }
         return None
 
     monkeypatch.setattr(service.event_cache, "get_cache_metadata", _meta)
@@ -1014,3 +1033,12 @@ def test_get_event_cache_status_builds_runs_and_project_freshness(monkeypatch):
     ]
     assert result.projects[0].caches[0].event_count == 10
     assert result.projects[0].caches[1].cached_at is None
+
+    # freshness distingue "nunca rodou" de janela conhecida + expõe modo
+    lineage_cache = result.projects[0].caches[0]
+    assert lineage_cache.never_run is False
+    assert lineage_cache.mode == "incremental"
+    assert lineage_cache.window_start is not None
+    assert lineage_cache.window_start.year == 2026 and lineage_cache.window_start.month == 7
+    assert lineage_cache.last_full_scan_at is not None
+    assert result.projects[0].caches[1].never_run is True

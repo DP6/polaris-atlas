@@ -38,20 +38,25 @@ from observability_hub.core.exceptions import LoggingAccessDeniedError, LoggingQ
 logger = logging.getLogger(__name__)
 
 
-def bigquery_job_events_filter(lookback_days: int) -> str:
+def bigquery_job_events_filter(
+    lookback_days: int | None = None, *, since_receive_ts: datetime | None = None
+) -> str:
     """Filtro do Cloud Logging pros eventos de job completado do BigQuery
     (`jobservice.jobcompleted`, formato legado AuditData) — a MESMA fonte
     lida por domains/lineage, domains/access e domains/finops. Centralizado
     aqui pra jobs/refresh_event_cache.py poder fazer UM scan e alimentar os
-    3 parsers (parse_job_events/parse_access_events/parse_scan_events), em
-    vez de 3 scans idênticos que triplicavam a leitura da cota
-    read_requests do projeto."""
-    cutoff = (datetime.now(UTC) - timedelta(days=lookback_days)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    return (
-        'resource.type="bigquery_resource" '
-        'protoPayload.methodName="jobservice.jobcompleted" '
-        f'timestamp>="{cutoff}"'
+    3 parsers (parse_job_events/parse_access_events/parse_scan_events).
+
+    - `since_receive_ts` setado → delta incremental: `receiveTimestamp>"..."`
+      (tudo que foi INGERIDO desde o último run OK, cobre logs atrasados).
+    - senão → full scan: `timestamp>="hoje−lookback_days"` (default 30d)."""
+    base = 'resource.type="bigquery_resource" protoPayload.methodName="jobservice.jobcompleted" '
+    if since_receive_ts is not None:
+        return base + f'receiveTimestamp>"{since_receive_ts.strftime("%Y-%m-%dT%H:%M:%S.%fZ")}"'
+    cutoff = (datetime.now(UTC) - timedelta(days=lookback_days or 30)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
     )
+    return base + f'timestamp>="{cutoff}"'
 
 
 # Cota `logging.googleapis.com/read_requests` (60/min por projeto, default)

@@ -356,6 +356,24 @@ def test_get_budget_degrades_to_warning_on_quota_exceeded(monkeypatch):
     assert "limite de leitura de audit logs" in result.warning
 
 
+def test_get_budget_degrades_to_warning_when_cache_not_ready(monkeypatch):
+    """Modelo incremental: cache ainda não gerado pro projeto -> resposta
+    vazia com aviso "cache não gerado", não um 503."""
+
+    def _raise(*a, **kw):
+        raise service.EventCacheNotReadyError("proj")
+
+    monkeypatch.setattr(service.repository, "get_scan_events_cached", _raise)
+
+    result = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj")
+
+    assert result.groups == []
+    assert result.top_queries == []
+    assert result.cache_updated_at is None
+    assert result.warning is not None
+    assert "ainda não foi gerado" in result.warning
+
+
 def _last_day_of_previous_month():
     return _now().replace(day=1) - timedelta(days=1)
 

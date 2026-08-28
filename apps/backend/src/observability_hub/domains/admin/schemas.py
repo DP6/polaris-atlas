@@ -193,6 +193,16 @@ class EventCacheKindStatus(BaseModel):
     label: str
     cached_at: datetime | None = None
     event_count: int | None = None
+    # True = nenhum metadado no Firestore (o job nunca populou este
+    # domínio pra este projeto) — a tela mostra "nunca rodou" em vez de
+    # uma janela. Ver domains/admin/service.py::get_event_cache_status.
+    never_run: bool = True
+    # Piso da janela rolante do blob atual (evento mais antigo mantido) e
+    # "full" | "incremental" do último write do job — modelo incremental,
+    # ver jobs/refresh_event_cache.py.
+    window_start: datetime | None = None
+    last_full_scan_at: datetime | None = None
+    mode: str | None = None
 
 
 class EventCacheProjectStatus(BaseModel):

@@ -63,6 +63,14 @@ class Settings(BaseSettings):
     # nome do bucket é globalmente único e prefixado por ambiente.
     event_cache_bucket_name: str
 
+    # Força o Cloud Run Job de refresh (jobs/refresh_event_cache.py) a
+    # fazer full scan da janela inteira em todos os projetos, em vez do
+    # delta incremental. Injetada só sob demanda pelo gatilho manual de
+    # admin com o toggle "forçar completo" ligado (core/run_client.py
+    # ::trigger_job_execution monta um RunJobRequest.Overrides com esta
+    # env); o ciclo diário do Scheduler nunca a seta.
+    cache_force_full: bool = False
+
     log_level: str = "INFO"
     region_discovery_max_workers: int = 8
     # Preço on-demand do BigQuery por TiB processado (cloud.google.com/bigquery/pricing).

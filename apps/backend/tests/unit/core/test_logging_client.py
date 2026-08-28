@@ -19,6 +19,25 @@ _KWARGS = {
 }
 
 
+def test_bigquery_job_events_filter_full_scan_uses_timestamp_floor():
+    filter_ = logging_client.bigquery_job_events_filter(30)
+
+    assert 'protoPayload.methodName="jobservice.jobcompleted"' in filter_
+    assert 'timestamp>="' in filter_
+    assert "receiveTimestamp" not in filter_
+
+
+def test_bigquery_job_events_filter_incremental_uses_receive_timestamp():
+    from datetime import UTC, datetime
+
+    anchor = datetime(2026, 8, 27, 3, 15, 30, tzinfo=UTC)
+    filter_ = logging_client.bigquery_job_events_filter(since_receive_ts=anchor)
+
+    assert 'protoPayload.methodName="jobservice.jobcompleted"' in filter_
+    assert 'receiveTimestamp>"2026-08-27T03:15:30' in filter_
+    assert 'timestamp>="' not in filter_
+
+
 @pytest.fixture
 def _real_retry(monkeypatch):
     """Reverte o deadline-zero do autouse `_fast_logging_retry` do conftest

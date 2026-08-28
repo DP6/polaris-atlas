@@ -1,11 +1,12 @@
 # Spec — Domínio: Lineage e tabelas órfãs
 
-**Versão:** 2.3 (cache pré-computado de audit log, job diário D-1 +
-gatilho manual de admin — resolve "Failed to fetch" recorrente nestas
-telas)
+**Versão:** 2.4 (cache de audit log **incremental** — delta diário por
+`receiveTimestamp` + merge/evicção de janela rolante; request path não
+escaneia mais ao vivo, degrada pra vazio com aviso quando o cache ainda
+não foi gerado)
 **Status:** Aprovada
 **Fase:** 3 — Sprint 3.2 (lineage e órfãos)
-**Última atualização:** 2026-08-25
+**Última atualização:** 2026-08-28
 
 ---
 
@@ -304,22 +305,45 @@ fallback. Grava o resultado num cache compartilhado:
   (`core/event_cache.py`, mesmo padrão de dado derivado de
   `domains/quality/history_repository.py`).
 
-O request path (`domains/lineage/repository.py::get_job_events_cached`,
-`domains/access/repository.py::get_access_events_cached`) tenta o cache
-primeiro; em **cache miss** (projeto nunca varrido ainda) faz o scan
-síncrono de hoje como fallback e grava o resultado — auto-cura: só a
-primeira consulta de um projeto novo continua exposta ao cenário antigo.
-Qualquer falha ao ler ou gravar o cache (não só cache miss — ex: bucket
-sem permissão, GCS fora do ar) é capturada e ignorada nesse ponto,
-sempre caindo pro scan ao vivo: o cache é uma otimização, nunca pode ser
-a causa de uma resposta quebrar (ver ASM-006, causa raiz de uma
-regressão real do "Failed to fetch" que esta mesma versão introduziu).
+### Modelo incremental (v2.4, 2026-08-28)
 
-`list_job_events` não carrega timestamp por evento — por isso o cache só
-é usado quando chamado com `lookback_days` igual ao default do módulo
-(30). `get_table_lineage`/BFS transitivo nunca variam esse parâmetro
-(sempre elegíveis ao cache); `/orphans?lookback_days=<custom>` ignora o
-cache e cai no scan síncrono.
+Cada execução do Job (diária ou gatilho manual) lê só o **delta** —
+`receiveTimestamp > <maior high-water-mark salvo>` (não uma janela fixa
+de N dias, pra capturar logs ingeridos com atraso) — faz `merge_dedup`
+com o blob existente (por `job_id`, o evento novo vence) e **evicta** os
+eventos fora da janela rolante: **31 dias** pros domínios de job
+(`timestamp < hoje − 31d`), **90 dias** pra storage. Isso derruba a
+leitura diária de ~15 páginas/projeto pra ~1. O metadado
+(`core/event_cache.py::set_cache_metadata`) cresce com `window_start`,
+`last_scan_receive_ts` (o anchor do próximo delta), `last_full_scan_at` e
+`mode` (`"full"`/`"incremental"`).
+
+O **full scan** da janela inteira só roda quando não há base incremental:
+primeira execução do projeto, metadado sem `last_scan_receive_ts`, blob
+sumido (lifecycle do bucket) — ou quando o toggle **"forçar completo"** do
+gatilho de admin está ligado (`?force_full=true` → env
+`OBSERVABILITY_HUB_CACHE_FORCE_FULL=1` só naquela execução, via
+`run_v2.RunJobRequest.Overrides`; `core/config.py::settings.cache_force_full`).
+`JobEvent` passou a carregar `timestamp` (`endTime or startTime or
+createTime`) só pra a evicção de janela funcionar.
+
+O request path (`get_job_events_cached`, `get_access_events_cached`,
+`get_scan_events_cached`, `get_read_object_keys_cached`) **não escaneia
+mais o Cloud Logging ao vivo em cache miss**. Cache hit → devolve o dado.
+Cache miss (ou falha ao ler o blob — bucket sem permissão, GCS fora do
+ar) → registra o projeto (`record_project_seen`, pro próximo run do Job
+pegá-lo) e levanta `EventCacheNotReadyError`. Os serviços de
+lineage/access/finops/storage capturam essa exceção **junto** de
+`LoggingQuotaExceededError` e degradam pra grafo/lista/tela vazia com um
+`warning` ("o cache ainda não foi gerado…"); `main.py` mapeia pra HTTP
+503 só como rede de segurança. `_get_project_events` (travessia de
+lineage) trata `EventCacheNotReadyError` num projeto não-raiz como
+soft-fail, igual a `LoggingAccessDeniedError`.
+
+**Exceção**: `/orphans?lookback_days=<custom>` (power-user) continua
+escaneando ao vivo via `list_job_events` — opt-out explícito, caminho
+raro. `get_table_lineage`/BFS transitivo e `/orphans` sem `lookback_days`
+sempre passam pelo cache.
 
 **Gatilho manual**: `POST /api/v1/admin/event-cache/refresh`
 (admin-only) dispara a mesma execução completa do Job sob demanda, sem
@@ -389,9 +413,12 @@ apps/backend/src/observability_hub/
 | Job repetido diariamente na janela (mesma aresta) | Deduplicada — uma aresta por par `(source, target)`, não uma por job |
 | Nenhum evento de job no projeto raiz | `warning` populado (mesmo texto/causas da v1), `nodes`/`edges` vazios |
 | `max_hops` fora do intervalo 1–15 | HTTP 422 (validação do `Query(ge=1, le=15)`) |
-| Projeto nunca varrido pelo Job (cache miss) | Fallback síncrono (scan ao vivo), resultado gravado no cache pra próxima chamada — `cache_updated_at: null` só nesta resposta |
-| `429 TooManyRequests` no fallback ao vivo (cota `read_requests`/min do projeto, dev+prod compartilham) | `list_entries_with_retry` faz retry exponencial (backoff, deadline 30s); o 429 que persistir vira `LoggingQuotaExceededError`. No projeto **raiz** de `get_table_lineage`/`get_orphans`: degrada pra grafo/lista vazia com `warning` (não 503). Num projeto **não-raiz** durante a expansão: soft-fail (não expande a partir dele, o resto do grafo continua) — igual ao tratamento de `LoggingAccessDeniedError`. `main.py` ainda mapearia pra 503 num caminho não capturado |
-| `lookback_days` custom em `/orphans` | Cache ignorado (sempre scan ao vivo) — `JobEvent` não carrega timestamp por evento, não dá pra recortar um cache de 30 dias pra outra janela |
+| Projeto nunca varrido pelo Job (cache miss) — modelo incremental v2.4 | Request path **não escaneia ao vivo**: registra o projeto (`record_project_seen`) e levanta `EventCacheNotReadyError` → serviço degrada pra grafo/lista vazia com `warning` "cache ainda não gerado". O próximo run do Job (diário ou gatilho manual) popula. `main.py` mapeia pra 503 só como rede de segurança |
+| Projeto não-raiz sem cache durante a expansão (v2.4) | Soft-fail em `_get_project_events` — não expande a partir dele, resto do grafo intacto (igual a `LoggingAccessDeniedError`/`LoggingQuotaExceededError`) |
+| `429 TooManyRequests` (cota `read_requests`/min do projeto) — só no Job de refresh ou no scan custom de `/orphans` (v2.4: request path comum não escaneia mais) | `list_entries_with_retry` faz retry exponencial (backoff, deadline 30s); o 429 persistente vira `LoggingQuotaExceededError` → mesma degradação pra vazio+`warning` do cache-não-gerado |
+| `lookback_days` custom em `/orphans` | Único caminho do request path que ainda escaneia ao vivo (`list_job_events`) — opt-out explícito |
+| 1ª execução do Job pós-deploy v2.4 / metadado sem anchor / blob sumido (lifecycle) / toggle "forçar completo" | **Full scan** da janela de 31 dias; grava `mode: "full"` + `last_full_scan_at`. Runs seguintes voltam a `mode: "incremental"` (delta por `receiveTimestamp`) |
+| Evento de audit log sem `timestamp` parseável (após o fallback `endTime or startTime or createTime`) | Descartado na evicção de janela do Job — população ~zero na prática |
 | Job falha num projeto (acesso negado, projeto inexistente/descontinuado, ou qualquer outro erro) | Logado e pulado — não derruba o refresh dos demais projetos conhecidos |
 | Admin dispara o gatilho manual enquanto o ciclo diário já está rodando | Duas execuções do Job em paralelo — sem deduplicação na v1, ambas terminam gravando o mesmo resultado (idempotente) |
 
@@ -402,13 +429,16 @@ apps/backend/src/observability_hub/
 | ID | Comportamento | Testado em |
 |---|---|---|
 | AC-001 | Cache hit não chama `client.list_entries` (Cloud Logging) | `test_get_job_events_cached_returns_cache_hit_without_calling_list_entries` |
-| AC-002 | Cache miss faz o scan ao vivo e grava o resultado no cache antes de retornar | `test_get_job_events_cached_falls_back_and_writes_cache_on_miss` |
-| AC-003 | `lookback_days` diferente do default do módulo sempre ignora o cache | `test_get_job_events_cached_ignores_cache_for_non_default_lookback` |
+| AC-002 | Cache miss (lookback default) **não** escaneia ao vivo — registra o projeto e levanta `EventCacheNotReadyError` | `test_get_job_events_cached_raises_not_ready_and_records_project_on_miss` |
+| AC-003 | `lookback_days` diferente do default do módulo escaneia ao vivo (opt-out) | `test_get_job_events_cached_ignores_cache_for_non_default_lookback`, `test_get_job_events_cached_raises_quota_exceeded_on_custom_lookback` |
 | AC-004 | O job de refresh cobre a união de `hub_projects` e projetos vistos via cache miss | `test_known_projects_unions_hub_projects_and_seen_projects` |
 | AC-005 | Falha em um projeto durante o refresh (acesso negado, projeto inexistente, ou qualquer erro inesperado) não interrompe os demais | `test_refresh_project_skips_project_without_logging_access`, `test_refresh_project_skips_project_that_does_not_exist`, `test_refresh_project_skips_project_on_unexpected_error`, `test_main_processes_all_projects_even_when_one_does_not_exist` |
 | AC-006 | Gatilho manual de admin chama a Cloud Run Admin API com o nome de Job do ambiente atual | `test_trigger_event_cache_refresh_calls_run_client_with_environment_job_name` |
-| AC-007 | Falha ao ler o cache (qualquer exceção, não só cache miss) cai pro scan ao vivo em vez de propagar | `test_get_job_events_cached_falls_back_to_live_scan_when_cache_read_fails` |
-| AC-008 | Falha ao gravar o cache não impede a resposta de conter o resultado do scan ao vivo já feito | `test_get_job_events_cached_returns_live_data_when_cache_write_fails` |
+| AC-007 | Falha ao ler o cache (qualquer exceção, não só cache miss) é tratada como cache miss (`EventCacheNotReadyError`), nunca propaga como 500 | `test_get_job_events_cached_treats_cache_read_failure_as_miss` |
+| AC-008 | Job em modo incremental usa filtro `receiveTimestamp>` e faz merge (dedup por `job_id`) do delta com o blob existente | `test_refresh_project_incremental_uses_delta_filter_and_merges` |
+| AC-009 | Job cai em full scan (`mode: "full"`, filtro `timestamp>=`) quando falta anchor no metadado ou `force_full` está ligado | `test_refresh_project_full_scan_when_anchor_missing`, `test_refresh_project_full_scan_writes_all_four_caches` |
+| AC-010 | Gatilho manual com "forçar completo" injeta a env só naquela execução do Job | `test_trigger_event_cache_refresh_forwards_force_full`, `test_trigger_job_execution_force_full_injects_env_override` |
+| AC-011 | Serviços degradam `EventCacheNotReadyError` pra resposta vazia + `warning` (não 503) | `test_get_table_lineage_root_project_cache_not_ready_degrades_to_warning`, `test_get_orphans_cache_not_ready_degrades_to_warning`, `test_get_table_lineage_cross_project_cache_not_ready_soft_fails` |
 
 ---
 

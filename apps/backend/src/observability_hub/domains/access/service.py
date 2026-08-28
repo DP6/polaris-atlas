@@ -7,7 +7,7 @@ from google.cloud import firestore, storage
 from google.cloud import logging as cloud_logging
 
 from observability_hub.core.config import settings
-from observability_hub.core.exceptions import LoggingQuotaExceededError
+from observability_hub.core.exceptions import EventCacheNotReadyError, LoggingQuotaExceededError
 from observability_hub.domains.access import repository
 from observability_hub.domains.access.repository import TableRefTuple
 from observability_hub.domains.access.schemas import TableAccessEntry, TableAccessResponse
@@ -31,8 +31,14 @@ _QUOTA_WARNING = (
     "O limite de leitura de audit logs do projeto '{project_id}' foi atingido "
     "temporariamente (cota do Cloud Logging, compartilhada entre ambientes). "
     "O mapa de acesso volta assim que o cache for atualizado — um admin do "
-    "Hub pode forçar agora em Administração → 'Atualizar caches'; senão, "
-    "recarregue em alguns minutos."
+    "Hub pode forçar agora em Administração → Caches; senão, recarregue em "
+    "alguns minutos."
+)
+
+_CACHE_NOT_READY_WARNING = (
+    "O cache de audit log do projeto '{project_id}' ainda não foi gerado. Um "
+    "admin do Hub pode disparar agora em Administração → Caches → 'Atualizar "
+    "agora'; o ciclo diário também popula sozinho."
 )
 
 _DEFAULT_LIMIT = 20
@@ -79,6 +85,12 @@ def get_table_access(
         # de domains/storage/service.py pra o waste scanner 6.2.
         events, cache_updated_at = [], None
         quota_warning = _QUOTA_WARNING.format(project_id=project_id)
+    except EventCacheNotReadyError:
+        # Cache ainda não gerado pra este projeto (modelo incremental — o
+        # request path não escaneia mais ao vivo). Degrada igual à cota:
+        # tela vazia com aviso, o job popula.
+        events, cache_updated_at = [], None
+        quota_warning = _CACHE_NOT_READY_WARNING.format(project_id=project_id)
     hub_sa_email = _hub_runtime_sa_email()
 
     by_principal: dict[str, dict] = {}

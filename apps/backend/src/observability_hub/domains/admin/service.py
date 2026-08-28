@@ -324,15 +324,21 @@ def deny_access_request(
 # --- cache de audit log (lineage/access/finops/storage) ---------------------------
 
 
-def trigger_event_cache_refresh(run_client: run_v2.JobsClient) -> None:
+def trigger_event_cache_refresh(run_client: run_v2.JobsClient, *, force_full: bool = False) -> None:
     """Dispara sob demanda o Cloud Run Job que popula o cache de audit
     log de lineage, access, finops e storage (jobs/refresh_event_cache.py)
     — mesmo Job do ciclo diário automático (Cloud Scheduler, ver
     infra/terraform/modules/cloud-run-job), atualiza todos os projetos de
     uma vez. Sem deduplicação de execuções concorrentes na v1: se já
-    houver uma execução em andamento, esta apenas soma outra em paralelo."""
+    houver uma execução em andamento, esta apenas soma outra em paralelo.
+
+    `force_full=True` (toggle "forçar completo" da tela) faz o Job
+    ignorar o delta incremental e re-escanear a janela inteira de todos
+    os projetos nesta execução — ver core/run_client.py."""
     job_name = f"backend-{settings.environment}-refresh-cache"
-    trigger_job_execution(run_client, get_runtime_project(), settings.region, job_name)
+    trigger_job_execution(
+        run_client, get_runtime_project(), settings.region, job_name, force_full=force_full
+    )
 
 
 def _known_cache_projects(client: firestore.Client) -> list[str]:
@@ -388,6 +394,10 @@ def get_event_cache_status(client: firestore.Client) -> EventCacheStatusResponse
                     label=label,
                     cached_at=meta["cached_at"] if meta else None,
                     event_count=meta["event_count"] if meta else None,
+                    never_run=meta is None,
+                    window_start=meta.get("window_start") if meta else None,
+                    last_full_scan_at=meta.get("last_full_scan_at") if meta else None,
+                    mode=meta.get("mode") if meta else None,
                 )
             )
         project_rows.append(EventCacheProjectStatus(project_id=project_id, caches=kinds))

@@ -34,6 +34,7 @@ from google.cloud import logging as cloud_logging
 
 from observability_hub.core import event_cache
 from observability_hub.core.config import settings
+from observability_hub.core.exceptions import EventCacheNotReadyError
 from observability_hub.core.logging_client import (
     LOGGING_PAGE_SIZE,
     bigquery_job_events_filter,
@@ -61,6 +62,19 @@ class JobEvent:
     # job EXTRACT (destination_buckets) — vazios pra job de query.
     source_buckets: list[str] = field(default_factory=list)
     destination_buckets: list[str] = field(default_factory=list)
+    # Adicionado pro cache incremental (jobs/refresh_event_cache.py): permite
+    # evictar eventos fora da janela rolante de 31 dias. Antes o cache de
+    # lineage era só full-refresh, então não precisava.
+    timestamp: datetime | None = None
+
+
+def _parse_timestamp(raw: str | None) -> datetime | None:
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw)
+    except ValueError:
+        return None
 
 
 def _parse_table_ref(ref: dict | None) -> TableRefTuple | None:
@@ -138,6 +152,9 @@ def _parse_entry(entry: cloud_logging.LogEntry) -> JobEvent | None:
     job_name = job.get("jobName", {})
     job_id = job_name.get("jobId", "") if isinstance(job_name, dict) else ""
     principal_email = payload.get("authenticationInfo", {}).get("principalEmail", "")
+    timestamp = _parse_timestamp(
+        job_stats.get("endTime") or job_stats.get("startTime") or job_stats.get("createTime")
+    )
 
     return JobEvent(
         job_id=job_id,
@@ -146,6 +163,7 @@ def _parse_entry(entry: cloud_logging.LogEntry) -> JobEvent | None:
         destination_table=destination,
         source_buckets=source_buckets,
         destination_buckets=destination_buckets,
+        timestamp=timestamp,
     )
 
 
@@ -227,6 +245,7 @@ def serialize_job_events(events: list[JobEvent]) -> bytes:
             "destination_table": list(e.destination_table) if e.destination_table else None,
             "source_buckets": e.source_buckets,
             "destination_buckets": e.destination_buckets,
+            "timestamp": e.timestamp.isoformat() if e.timestamp else None,
         }
         for e in events
     ]
@@ -243,6 +262,8 @@ def deserialize_job_events(data: bytes) -> list[JobEvent]:
             destination_table=tuple(r["destination_table"]) if r["destination_table"] else None,
             source_buckets=r.get("source_buckets", []),
             destination_buckets=r.get("destination_buckets", []),
+            # `.get` tolera blob antigo (pré cache incremental) sem timestamp.
+            timestamp=datetime.fromisoformat(r["timestamp"]) if r.get("timestamp") else None,
         )
         for r in raw
     ]
@@ -273,6 +294,11 @@ def write_job_events_cache(
     firestore_client: firestore.Client,
     project_id: str,
     events: list[JobEvent],
+    *,
+    window_start: datetime | None = None,
+    last_scan_receive_ts: datetime | None = None,
+    last_full_scan_at: datetime | None = None,
+    mode: str | None = None,
 ) -> None:
     event_cache.write_cache_bytes(
         storage_client,
@@ -280,7 +306,16 @@ def write_job_events_cache(
         _cache_blob_path(project_id),
         serialize_job_events(events),
     )
-    event_cache.set_cache_metadata(firestore_client, _CACHE_KIND, project_id, len(events))
+    event_cache.set_cache_metadata(
+        firestore_client,
+        _CACHE_KIND,
+        project_id,
+        len(events),
+        window_start=window_start,
+        last_scan_receive_ts=last_scan_receive_ts,
+        last_full_scan_at=last_full_scan_at,
+        mode=mode,
+    )
 
 
 def get_job_events_cached(
@@ -290,40 +325,33 @@ def get_job_events_cached(
     project_id: str,
     lookback_days: int = LOOKBACK_DAYS,
 ) -> tuple[list[JobEvent], datetime | None]:
-    """Lê o cache pré-computado (job periódico ou fallback de outra
-    requisição) quando lookback_days é o default do módulo — JobEvent não
-    carrega timestamp por evento, então não dá pra recortar um cache de 30
-    dias pra uma janela diferente (ver docs/specs/lineage.md, ASM). Fora
-    desse caso, ou em cache miss, escaneia ao vivo (list_job_events) e
-    grava o resultado pra próxima chamada (auto-cura). Retorna
-    (eventos, cached_at) — cached_at None significa que o dado veio ao
-    vivo nesta própria chamada. Qualquer falha ao ler/gravar o cache
-    (ex: bucket sem permissão, GCS fora do ar) é logada e ignorada — o
-    cache é uma otimização, uma falha nele nunca deve derrubar a
-    resposta pro usuário (causa raiz de uma regressão real: 403 Forbidden
-    não tratado virou "Failed to fetch" de novo, ver CHANGELOG)."""
+    """Modelo incremental (ver docs/specs/lineage.md): o request path NÃO
+    escaneia mais ao vivo em cache miss — o scan roda só no job diário
+    (jobs/refresh_event_cache.py) ou no gatilho manual de admin.
+
+    - `lookback_days == LOOKBACK_DAYS` (caminho comum): cache hit ->
+      (eventos, cached_at); cache miss -> registra o projeto
+      (`record_project_seen`, pro job pegá-lo) e levanta
+      `EventCacheNotReadyError`, que domains/lineage/service.py degrada
+      pra grafo/lista vazia com warning.
+    - `lookback_days != LOOKBACK_DAYS` (só `/orphans` com lookback custom):
+      opt-out explícito, escaneia ao vivo — `JobEvent` carrega `timestamp`
+      agora, então dá pra recortar o cache, mas manter o scan ao vivo aqui
+      é mais simples e é caminho raro (script/power-user)."""
     if lookback_days == LOOKBACK_DAYS:
         try:
             cached = read_job_events_cache(storage_client, firestore_client, project_id)
         except Exception:
             logger.exception(
-                "Falha ao ler cache de lineage para %s — caindo pro scan ao vivo", project_id
+                "Falha ao ler cache de lineage para %s — tratando como cache miss", project_id
             )
-        else:
-            if cached is not None:
-                return cached
+            cached = None
+        if cached is not None:
+            return cached
+        event_cache.record_project_seen(firestore_client, project_id)
+        raise EventCacheNotReadyError(project_id)
 
-    # list_job_events já mapeia Forbidden -> LoggingAccessDeniedError e 429
-    # persistente -> LoggingQuotaExceededError (via
-    # core/logging_client.py::list_entries_with_retry); as duas propagam,
-    # main.py mapeia pra 403/503.
+    # /orphans com lookback custom: scan ao vivo (list_job_events mapeia
+    # Forbidden/429 pra LoggingAccessDeniedError/LoggingQuotaExceededError).
     events = list_job_events(client, project_id, lookback_days=lookback_days)
-
-    if lookback_days == LOOKBACK_DAYS:
-        try:
-            write_job_events_cache(storage_client, firestore_client, project_id, events)
-            event_cache.record_project_seen(firestore_client, project_id)
-        except Exception:
-            logger.exception("Falha ao gravar cache de lineage para %s", project_id)
-
     return events, None

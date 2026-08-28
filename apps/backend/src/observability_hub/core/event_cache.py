@@ -17,7 +17,9 @@ como fallback write-through, pelo próprio request path em cache miss —
 quem grava não faz diferença pra quem lê.
 """
 
+from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import Any
 
 from google.api_core.exceptions import NotFound
 from google.cloud import firestore, storage
@@ -71,16 +73,68 @@ def get_cache_metadata(
 
 
 def set_cache_metadata(
-    firestore_client: firestore.Client, cache_kind: str, project_id: str, event_count: int
+    firestore_client: firestore.Client,
+    cache_kind: str,
+    project_id: str,
+    event_count: int,
+    *,
+    window_start: datetime | None = None,
+    last_scan_receive_ts: datetime | None = None,
+    last_full_scan_at: datetime | None = None,
+    mode: str | None = None,
 ) -> dict:
+    """Grava o metadado do cache (doc `{cache_kind}:{project_id}`).
+
+    Campos de janela (`window_start`, `last_scan_receive_ts`,
+    `last_full_scan_at`, `mode`) alimentam o modelo incremental do job
+    (jobs/refresh_event_cache.py) e a tela Administração → Caches:
+    - `window_start`: piso da janela no blob atual (evento mais antigo mantido).
+    - `last_scan_receive_ts`: high-water-mark de `receiveTimestamp` — o
+      próximo delta escaneia `receiveTimestamp > isso`.
+    - `last_full_scan_at`: quando foi o último scan completo (preservado
+      entre runs incrementais).
+    - `mode`: `"full"` | `"incremental"` do último write.
+
+    `first_cached_at` e `last_full_scan_at` são preservados do doc anterior
+    quando não vierem explícitos."""
+    existing = get_cache_metadata(firestore_client, cache_kind, project_id) or {}
+    now = datetime.now(UTC)
     data = {
         "cache_kind": cache_kind,
         "project_id": project_id,
         "event_count": event_count,
-        "cached_at": datetime.now(UTC),
+        "cached_at": now,
+        "first_cached_at": existing.get("first_cached_at") or now,
+        "window_start": window_start,
+        "last_scan_receive_ts": last_scan_receive_ts,
+        "last_full_scan_at": last_full_scan_at or existing.get("last_full_scan_at"),
+        "mode": mode,
     }
     _cache_metadata_doc(firestore_client, cache_kind, project_id).set(data)
     return data
+
+
+def merge_dedup(existing: list, new: list, *, key: Callable[[Any], object]) -> list:
+    """Concatena `existing + new` deduplicando por `key(item)` — o item de
+    `new` vence em colisão (é o dado mais recente). Itens com `key` falsy
+    (ex.: job_id vazio) nunca são deduplicados — entram todos. Usado pelo
+    merge incremental do job (jobs/refresh_event_cache.py) com
+    `key=lambda e: e.job_id`."""
+    by_key: dict[object, Any] = {}
+    passthrough: list = []
+    for item in existing:
+        k = key(item)
+        if k:
+            by_key[k] = item
+        else:
+            passthrough.append(item)
+    for item in new:
+        k = key(item)
+        if k:
+            by_key[k] = item
+        else:
+            passthrough.append(item)
+    return [*by_key.values(), *passthrough]
 
 
 def record_project_seen(firestore_client: firestore.Client, project_id: str) -> None:
@@ -137,8 +191,10 @@ def record_cache_run_project(
     run_id: str,
     project_id: str,
     status: str,
-    counts: dict[str, int],
+    counts: dict[str, object],
 ) -> None:
+    # counts mistura contagens (int) com `mode` (str) desde o cache
+    # incremental — Firestore é schemaless, o valor entra como está.
     firestore_client.collection(_CACHE_RUNS_COLLECTION).document(run_id).update(
         {f"projects.{project_id}": {"status": status, "finished_at": datetime.now(UTC), **counts}}
     )

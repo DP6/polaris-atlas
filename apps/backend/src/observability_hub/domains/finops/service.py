@@ -21,7 +21,11 @@ from observability_hub.core.bigquery import (
     resolve_dataset_region,
 )
 from observability_hub.core.config import settings
-from observability_hub.core.exceptions import InvalidSamplePercentError, LoggingQuotaExceededError
+from observability_hub.core.exceptions import (
+    EventCacheNotReadyError,
+    InvalidSamplePercentError,
+    LoggingQuotaExceededError,
+)
 from observability_hub.domains.finops import repository, sql_builder
 from observability_hub.domains.finops.repository import ScanEvent, TableRefTuple
 from observability_hub.domains.finops.schemas import (
@@ -86,8 +90,14 @@ _QUOTA_WARNING = (
     "O limite de leitura de audit logs do projeto '{project_id}' foi atingido "
     "temporariamente (cota do Cloud Logging, compartilhada entre ambientes). "
     "Os números voltam assim que o cache for atualizado — um admin do Hub "
-    "pode forçar agora em Administração → 'Atualizar caches'; senão, "
-    "recarregue em alguns minutos."
+    "pode forçar agora em Administração → Caches; senão, recarregue em alguns "
+    "minutos."
+)
+
+_CACHE_NOT_READY_WARNING = (
+    "O cache de audit log do projeto '{project_id}' ainda não foi gerado. Um "
+    "admin do Hub pode disparar agora em Administração → Caches → 'Atualizar "
+    "agora'; o ciclo diário também popula sozinho."
 )
 
 
@@ -97,10 +107,10 @@ def _scan_events_or_quota_warning(
     firestore_client: firestore.Client,
     project_id: str,
 ) -> tuple[list[ScanEvent], datetime | None, str | None]:
-    """Cache frio + cota do Cloud Logging saturada → degrada pra resultado
-    vazio com aviso em vez de 503 (mesmo tratamento de
-    domains/access/service.py e do waste scanner 6.2 de storage). Retorna
-    (events, cache_updated_at, quota_warning)."""
+    """Cota do Cloud Logging saturada, ou cache ainda não gerado (modelo
+    incremental) → degrada pra resultado vazio com aviso em vez de 503
+    (mesmo tratamento de domains/access/service.py e do waste scanner 6.2
+    de storage). Retorna (events, cache_updated_at, warning)."""
     try:
         events, cache_updated_at = repository.get_scan_events_cached(
             logging_client, storage_client, firestore_client, project_id
@@ -108,6 +118,8 @@ def _scan_events_or_quota_warning(
         return events, cache_updated_at, None
     except LoggingQuotaExceededError:
         return [], None, _QUOTA_WARNING.format(project_id=project_id)
+    except EventCacheNotReadyError:
+        return [], None, _CACHE_NOT_READY_WARNING.format(project_id=project_id)
 
 
 def _human_bytes(num_bytes: int) -> str:

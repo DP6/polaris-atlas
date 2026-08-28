@@ -7,7 +7,10 @@ extensão do lineage) completos, testados e confirmados em
 via PR #25 e deployada em `observability-hub-prod` no mesmo dia,
 infraestrutura (IAM, buckets mock, dados) promovida antes do merge (ver
 `docs/onboarding-cliente.md`)
-**Versão:** v1.3 (cache pré-computado do scanner 6.2, ver seção 6.2)
+**Versão:** v1.4 (cache do scanner 6.2 **incremental** — `dict[(bucket,
+objeto) → ISO da última leitura]`, delta diário por `receiveTimestamp`,
+evicção de janela de 90 dias; request path não escaneia mais ao vivo, ver
+seção 6.2)
 **Depende de:** `domains/lineage` (extensão, não substituição)
 
 ---
@@ -214,39 +217,39 @@ consulta ao Cloud Logging. Diagnosticado como uma fonte real de custo
 (mesmo problema estrutural que lineage/access já tinham e resolveram,
 ver `CHANGELOG.md`, "Diagnóstico de custo do Cloud Run").
 
-**Mecanismo** (idêntico ao já documentado em `docs/specs/lineage.md`
-seção "Cache pré-computado"): `jobs/refresh_event_cache.py` (o mesmo
-Cloud Run Job diário, D-1, sem recurso Terraform novo) agora também
-chama `domains/storage/repository.py::list_read_object_keys` pra cada
-projeto conhecido e grava o resultado no mesmo cache compartilhado
-(`core/event_cache.py`: payload no bucket GCS `event_cache_bucket_name`,
-metadado no Firestore). O endpoint passa a ler
-`get_read_object_keys_cached()` — cache hit não toca Cloud Logging;
-cache miss cai pro scan ao vivo e grava pra próxima chamada (auto-cura),
-mesmo racional de `get_access_events_cached`.
+**Mecanismo** (idêntico ao documentado em `docs/specs/lineage.md` seção
+"Modelo incremental"): `jobs/refresh_event_cache.py` (o mesmo Cloud Run
+Job diário, D-1, sem recurso Terraform novo) chama
+`domains/storage/repository.py::scan_read_object_events` pra cada projeto
+e grava o resultado no cache compartilhado (`core/event_cache.py`:
+payload no bucket GCS `event_cache_bucket_name`, metadado no Firestore).
+
+**Cache virou `dict[(bucket, objeto) → ISO da leitura mais recente
+vista]`** (era `set[(bucket, objeto)]` sem data — não dava pra evictar
+uma chave "antiga" sem saber quando ela foi lida por último). Cada run é
+incremental: lê só o delta (`receiveTimestamp > último anchor`), faz
+`existing[k] = max(existing[k], ts)` por chave e evicta as chaves com
+`ts < hoje − 90d`. Full scan só na 1ª execução, sem anchor no metadado,
+blob no formato antigo (`[[b, o], …]` sem ts — `_deserialize` devolve
+`None`), blob sumido, ou toggle "forçar completo". O consumidor
+`get_read_object_keys_cached` devolve `set(cache.keys())` (o waste
+scanner 6.2 só faz `key in read_keys`).
+
+**Request path não escaneia mais ao vivo** (v1.4): `list_read_object_keys`
+foi removida. Cache hit → `set` das chaves. Cache miss (ou falha ao ler
+o blob) → registra o projeto (`record_project_seen`) e levanta
+`EventCacheNotReadyError`, que `_read_object_keys_or_warning` degrada pra
+warning `config_based` "cache ainda não gerado" — mesmo bloco `except`
+de `LoggingAccessDeniedError`/`LoggingQuotaExceededError`, porque a
+checagem 6.2 é best-effort (a checagem 6.1 já é útil sozinha).
 
 **Isolamento deliberado**: o refresh de storage dentro do Job é
 best-effort e isolado do de lineage/access (`_refresh_storage_read_keys`
 em `refresh_event_cache.py`) — como GCS `DATA_READ` pode não estar
-habilitado no projeto (ainda o caso em prod hoje), uma falha aqui nunca
-deve impedir o refresh de lineage/access do mesmo projeto. Nenhuma
-mudança de infraestrutura: reaproveita 100% do bucket/Firestore/Job já
-existentes, então não há novo recurso GCP pra registrar em
-`docs/gcp-components.md`.
-
-**429 no fallback ao vivo** (2026-08-28): se o scan ao vivo em cache miss
-estourar a cota `read_requests`/min do projeto (dev+prod compartilham o
-balde), `get_read_object_keys_cached` levanta `LoggingQuotaExceededError`.
-`_read_object_keys_or_warning` **degrada pra warning** `config_based` —
-mesmo tratamento de `LoggingAccessDeniedError`, porque a checagem 6.2 é
-best-effort e um 429 transitório não deve derrubar `waste-candidates`
-inteiro (a checagem 6.1 já é útil sozinha). `domains/access`,
-`domains/lineage` e `domains/finops` adotaram o mesmo padrão de degradar
-pra `warning` (2026-08-28) — o 503 de `main.py` virou só rede de
-segurança. Antes de chegar ao `LoggingQuotaExceededError`,
-`core/logging_client.py::list_entries_with_retry` faz retry exponencial
-(backoff, deadline 30s) no 429/503 — a maioria dos picos nem chega ao
-warning.
+habilitado no projeto (ainda o caso em prod hoje), uma falha aqui (403,
+429, ou qualquer `GoogleAPICallError`) nunca deve impedir o refresh de
+lineage/access do mesmo projeto: retorna 0. Nenhuma mudança de
+infraestrutura: reaproveita 100% do bucket/Firestore/Job já existentes.
 
 ### 6.3 Estimativa de economia
 
@@ -434,18 +437,19 @@ sessão futura (ver seção 2, fora do escopo por ora quanto a esse teste
 específico, mas a regra do scanner já está desenhada pra suportar quando
 o mock existir).
 
-## 11. Critérios de aceite — cache do scanner 6.2 (v1.3)
+## 11. Critérios de aceite — cache do scanner 6.2 (v1.4)
 
 | ID | Comportamento | Teste |
 |---|---|---|
-| AC-009 | Cache hit não chama `logging_client.list_entries` | `test_get_read_object_keys_cached_returns_cache_hit_without_scanning` |
-| AC-010 | Cache miss faz o scan ao vivo e grava o resultado no cache antes de retornar | `test_get_read_object_keys_cached_falls_back_and_writes_cache_on_miss` |
-| AC-011 | Falha ao ler o cache (qualquer exceção, não só cache miss) cai pro scan ao vivo em vez de propagar | `test_get_read_object_keys_cached_falls_back_to_live_scan_when_cache_read_fails` |
-| AC-012 | Falha ao gravar o cache não impede a resposta de conter o resultado do scan ao vivo já feito | `test_get_read_object_keys_cached_returns_live_data_when_cache_write_fails` |
-| AC-013 | Falta de acesso ao Cloud Logging no scan ao vivo propaga (quem chama decide como comunicar) | `test_get_read_object_keys_cached_propagates_logging_access_denied_from_live_scan` |
-| AC-014 | O Job diário grava o cache de storage pra cada projeto conhecido, sem depender do request path | `test_refresh_project_writes_lineage_access_finops_and_storage_caches` |
+| AC-009 | Cache hit devolve `set` das chaves sem chamar `logging_client.list_entries` | `test_get_read_object_keys_cached_returns_cache_hit_keys_without_scanning` |
+| AC-010 | Cache miss **não** escaneia ao vivo — registra o projeto e levanta `EventCacheNotReadyError` | `test_get_read_object_keys_cached_raises_not_ready_and_records_project_on_miss` |
+| AC-011 | Falha ao ler o cache (qualquer exceção, não só miss) é tratada como cache miss, nunca propaga como 500 | `test_get_read_object_keys_cached_treats_cache_read_failure_as_miss` |
+| AC-012 | `_read_object_keys_or_warning` degrada `EventCacheNotReadyError` pra warning `config_based` | `test_get_waste_candidates_degrades_gracefully_when_cache_not_ready` |
+| AC-013 | `scan_read_object_events` mapeia `Forbidden` → `LoggingAccessDeniedError` (só o Job escaneia) | `test_scan_read_object_events_raises_logging_access_denied_on_forbidden` |
+| AC-014 | O Job grava o cache de storage pra cada projeto, sem depender do request path | `test_refresh_project_full_scan_writes_all_four_caches` |
 | AC-015 | Falha no refresh de storage (audit log desabilitado ou erro de API) não interrompe o refresh de lineage/access/finops do mesmo projeto | `test_refresh_storage_read_keys_returns_zero_without_logging_access`, `test_refresh_storage_read_keys_returns_zero_on_api_error` |
-| AC-016 | `429 TooManyRequests` no scan ao vivo vira `LoggingQuotaExceededError` no repositório e é degradado pra warning `config_based` no service (não HTTP 503) | `test_get_read_object_keys_cached_raises_quota_exceeded_on_too_many_requests`, `test_get_waste_candidates_degrades_gracefully_on_quota_exceeded` |
+| AC-016 | Cache é `dict[(bucket, objeto) → ISO]`; formato antigo (`set`) força full scan; evicção por data de 90 dias | `test_serialize_deserialize_read_object_keys_round_trips`, `test_deserialize_read_object_keys_returns_none_for_old_set_format`, `test_refresh_storage_read_keys_evicts_keys_outside_window` |
+| AC-017 | Job em modo incremental usa filtro `receiveTimestamp>` e faz merge do delta com o blob | `test_scan_read_object_events_incremental_filter_uses_receive_timestamp`, `test_refresh_storage_read_keys_incremental_merges_delta_onto_existing` |
 
 ## 10. Abertos para decisão antes de implementar
 

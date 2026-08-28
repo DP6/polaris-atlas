@@ -24,6 +24,7 @@ from observability_hub.core.exceptions import (
     AccessRequestNotFoundError,
     AdminAccessRequiredError,
     DatasetNotFoundError,
+    EventCacheNotReadyError,
     FolderAccessDeniedError,
     FolderNotFoundError,
     InvalidDateColumnError,
@@ -153,6 +154,27 @@ def handle_logging_quota_exceeded(request: Request, exc: LoggingQuotaExceededErr
                 "temporariamente. Tente novamente em cerca de 1 minuto."
             ),
             "retry_after_seconds": exc.retry_after,
+        },
+    )
+
+
+@app.exception_handler(EventCacheNotReadyError)
+def handle_event_cache_not_ready(request: Request, exc: EventCacheNotReadyError) -> JSONResponse:
+    # Rede de segurança — os serviços de lineage/access/finops/storage já
+    # capturam EventCacheNotReadyError e degradam pra resposta vazia com
+    # warning (o request path não escaneia mais ao vivo, modelo
+    # incremental). Se chegar aqui é caminho não coberto: 503 porque é
+    # transitório (o job diário ou o gatilho de admin popula o cache).
+    return JSONResponse(
+        status_code=503,
+        headers={"Retry-After": "60"},
+        content={
+            "error": "event_cache_not_ready",
+            "message": (
+                "O cache de audit log deste projeto ainda não foi gerado. "
+                "Um administrador pode disparar em Administração → Caches; "
+                "o ciclo diário também popula sozinho."
+            ),
         },
     )
 

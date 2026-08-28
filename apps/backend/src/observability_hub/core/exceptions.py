@@ -45,6 +45,19 @@ class LoggingQuotaExceededError(Exception):
         )
 
 
+class EventCacheNotReadyError(Exception):
+    """O cache de audit log do projeto ainda não foi gerado (nenhum blob no
+    GCS) e o request path não escaneia mais ao vivo em cache miss (o scan
+    completo só roda no job diário ou no gatilho manual de admin — modelo
+    incremental, ver docs/specs/lineage.md). Os serviços de lineage/access/
+    finops/storage capturam essa exceção e degradam pra resposta vazia com
+    um warning; main.py mapeia pra HTTP 503 como rede de segurança."""
+
+    def __init__(self, project_id: str) -> None:
+        self.project_id = project_id
+        super().__init__(f"O cache de audit log do projeto '{project_id}' ainda não foi gerado.")
+
+
 class StorageAccessDeniedError(Exception):
     """A SA de runtime não tem roles/storage.objectViewer no projeto alvo —
     levantada por domains/storage ao consultar buckets/objetos via Cloud

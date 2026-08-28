@@ -5,6 +5,74 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Cache de audit log incremental (delta diário por `receiveTimestamp`)
+
+Continuação do trabalho de 429/custo do Cloud Logging. Depois de cache +
+retry + tela de acompanhamento, o modelo ainda era **full scan diário**
+da janela inteira (30d job / 90d storage), reescrevendo o blob. Num
+projeto de volume alto (`observability-hub-dev` ≈ 50 mil eventos/30d) o
+full scan diário ainda podia estourar a cota `read_requests` (o usuário
+subiu o limite de 60 → 200/min), e o cache de `access` chegou a **nunca
+popular** — o run abortava no 429 antes de gravá-lo.
+
+### O que foi feito
+
+- **Modelo incremental no Job** (`jobs/refresh_event_cache.py`). Cada run
+  lê só o delta — `receiveTimestamp > min(last_scan_receive_ts dos kinds)`
+  (não uma janela fixa de N dias, pra capturar logs ingeridos com
+  atraso) — faz `event_cache.merge_dedup` com o blob (dedup por `job_id`,
+  o evento novo vence) e evicta os eventos fora da janela rolante: **31
+  dias** pros domínios de job (`timestamp < hoje−31d`), **90 dias** pra
+  storage. Derruba a leitura diária de ~15 páginas/projeto pra ~1. O
+  **full scan** só roda na 1ª execução do projeto, sem `last_scan_receive_ts`
+  no metadado, blob sumido (lifecycle do bucket), ou toggle "forçar
+  completo".
+- **`set_cache_metadata` cresceu**: `window_start`, `last_scan_receive_ts`
+  (o anchor do próximo delta), `last_full_scan_at`, `mode`
+  (`full`/`incremental`). `first_cached_at`/`last_full_scan_at`
+  preservados entre runs.
+- **`JobEvent` ganhou `timestamp`** (`endTime or startTime or createTime`)
+  — necessário só pra a evicção de janela. `access`/`finops` já tinham;
+  os 3 `_parse_entry` passaram a usar o mesmo fallback de 3 campos.
+- **Request path parou de escanear ao vivo.** `get_job_events_cached`
+  (lookback default), `get_access_events_cached`, `get_scan_events_cached`,
+  `get_read_object_keys_cached`: cache miss → `record_project_seen` +
+  `EventCacheNotReadyError` (nova exceção). `list_access_events` e
+  `list_scan_events` **removidas**; `list_job_events` fica (só
+  `/orphans?lookback_days=<custom>`); `list_read_object_keys` virou
+  `scan_read_object_events`. Serviços de lineage/access/finops/storage
+  capturam `EventCacheNotReadyError` **junto** de `LoggingQuotaExceededError`
+  e degradam pra resposta vazia com `warning` "cache ainda não gerado".
+  `main.py` mapeia pra 503 só como rede de segurança.
+- **Cache de storage virou `dict[(bucket, objeto) → ISO da última
+  leitura]`** (era `set` sem data — não dava pra evictar por idade).
+  `_deserialize_read_object_keys` devolve `None` pro formato antigo →
+  força full scan. O consumidor devolve `set(cache.keys())`.
+- **Toggle "forçar completo"** no gatilho de admin:
+  `POST /api/v1/admin/event-cache/refresh?force_full=true` →
+  `run_v2.RunJobRequest.Overrides` injeta
+  `OBSERVABILITY_HUB_CACHE_FORCE_FULL=1` só naquela execução;
+  `core/config.py::settings.cache_force_full` (nunca lê `os.environ` fora
+  de config).
+- **Freshness da aba Caches** ganhou `never_run` ("nunca rodou" vs. uma
+  janela), `window_start`, `last_full_scan_at`, `mode`. Retenção de
+  execuções subiu 20 → 200.
+
+### Erros cometidos e aprendizados
+
+- `_JOB_KIND_SPECS` guardava **referências de função** capturadas no
+  import — o `monkeypatch` dos testes não pegava (o job usava a função
+  antiga). Corrigido guardando o módulo + o **nome** e resolvendo via
+  `getattr` no uso. Aprendizado: tabela de despacho num módulo
+  orquestrador que os testes precisam mockar tem que resolver os
+  callables tarde, não no load.
+- Stub de parser nos testes do job devolvia as entradas cruas (strings)
+  como "eventos" — quebrava no windowing novo (`e.timestamp`). O full
+  scan antigo não tocava os eventos, o incremental sim. Stubs de parser
+  agora devolvem objetos com `.job_id`/`.timestamp`.
+
+---
+
 ## Tela de acompanhamento do cache de audit log (Administração → Caches)
 
 Pedido do usuário: não bastava o botão "Atualizar caches", precisava de

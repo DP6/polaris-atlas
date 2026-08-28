@@ -1,8 +1,8 @@
 # Spec — Domínio: FinOps — Scanner de desperdício
 
-**Versão:** 1.3 (leitura de audit log via cache pré-computado, mesmo
-padrão de lineage/access/storage — ver "Fonte de dados" e seção "Critérios
-de aceite")
+**Versão:** 1.4 (cache de audit log **incremental**, mesmo padrão de
+lineage/access/storage — request path não escaneia mais ao vivo; ver
+"Fonte de dados" e "Critérios de aceite")
 **Status:** Aprovada
 **Fase:** 4 — FinOps (primeira frente: scanner de desperdício)
 **Última atualização:** 2026-08-28
@@ -66,39 +66,41 @@ propagava como `429 TooManyRequests` não tratado → 500 → "Failed to fetch"
 no browser. Bug real: 12 ocorrências em 7 dias num uso normal de tela.
 
 **Mecanismo** (idêntico ao documentado em `docs/specs/lineage.md` seção
-"Cache pré-computado" e `storage.md` seção 6.2): `jobs/refresh_event_cache.py`
-(o mesmo Cloud Run Job diário, D-1, **sem recurso Terraform novo**) agora
-também chama `list_scan_events` pra cada projeto conhecido e grava o
-resultado (`ScanEvent`, com `timestamp` por evento) no cache compartilhado
+"Modelo incremental" e `storage.md` seção 6.2): `jobs/refresh_event_cache.py`
+(o mesmo Cloud Run Job diário, D-1, **sem recurso Terraform novo**) faz
+**um** scan de `jobservice.jobcompleted` por projeto e passa os `LogEntry`
+crus pros 3 parsers (`parse_job_events`/`parse_access_events`/
+`parse_scan_events` — lineage/access/finops leem a mesma fonte), gravando
+`ScanEvent` (com `timestamp` por evento) no cache compartilhado
 `core/event_cache.py` (payload no bucket GCS `event_cache_bucket_name`,
-metadado no Firestore; namespace `_CACHE_KIND = "finops_scan_events"`). O
-endpoint passa a ler `get_scan_events_cached()` — cache hit não toca Cloud
-Logging; cache miss cai pro scan ao vivo e grava pra próxima chamada
-(auto-cura), mesmo racional de `get_access_events_cached`.
+metadado no Firestore; namespace `_CACHE_KIND = "finops_scan_events"`).
+Desde a v1.4, cada run é **incremental**: lê só o delta
+(`receiveTimestamp > último anchor`), faz merge (dedup por `job_id`) com o
+blob e evicta eventos com `timestamp` fora da janela rolante de 31 dias.
+Full scan só na 1ª execução, sem anchor no metadado, blob sumido, ou
+toggle "forçar completo" do admin.
+
+O endpoint lê `get_scan_events_cached()`. Cache hit → não toca Cloud
+Logging. Cache miss → `list_scan_events` **foi removida**; o request path
+não escaneia mais ao vivo: registra o projeto (`record_project_seen`) e
+levanta `EventCacheNotReadyError`, que `scan_partition_candidates`/
+`get_budget` degradam pra resposta com `warning` "cache ainda não gerado"
+(candidatas ainda vêm do BigQuery, sem savings; budget vazio) — mesmo
+bloco `except` de `LoggingQuotaExceededError`.
 
 **Cache de 30 dias serve os dois consumidores**: `ScanEvent` carrega
 `timestamp`, então o mesmo blob atende tanto `partition-candidates`
 (janela fixa de 30d) quanto `budget` (recorte month-to-date por filtro no
 service, ver `finops-budget.md`).
 
-**429 residual** (cache miss durante pico, ou o Job): `list_scan_events`
-usa `core/logging_client.py::list_entries_with_retry`, que faz retry
-exponencial (backoff, deadline 30s) no 429/503 — a maioria dos picos nem
-chega ao fim. O 429 que persistir vira `LoggingQuotaExceededError`, que
-`scan_partition_candidates`/`get_budget` **degradam pra resposta com
-`warning`** em vez de 503 (candidatas ainda vêm do BigQuery, sem savings;
-budget vazio). O 503 de `main.py` virou rede de segurança. No Job,
-`_refresh_project` captura `LoggingQuotaExceededError` (status
-`quota_exceeded` no log) — um 429 num projeto não interrompe os demais.
+**429 residual**: agora só o Job vê 429 (o request path não escaneia). O
+Job usa `list_entries_with_retry` (retry exponencial, deadline 30s); o
+429 persistente marca o projeto como `quota_exceeded` naquele run e
+`_refresh_project` segue pros demais. O 503 de `main.py` para
+`LoggingQuotaExceededError`/`EventCacheNotReadyError` virou rede de
+segurança.
 
-**Scan único no Job** (2026-08-28): lineage, access e finops leem a MESMA
-fonte (`jobservice.jobcompleted`, mesmo filtro). O Job faz **um** scan via
-`core/logging_client.py::bigquery_job_events_filter` +
-`list_entries_with_retry` e passa os `LogEntry` crus pros 3 parsers
-(`parse_job_events`/`parse_access_events`/`parse_scan_events`) — não são
-mais 3 scans idênticos. `list_scan_events`/`parse_scan_events` continuam
-separados: o primeiro pro request-path fallback, o segundo pro Job. O
-refresh de finops fica no `try` principal do Job (não isolado como
+O refresh de finops fica no `try` principal do Job (não isolado como
 storage).
 
 ---
@@ -200,7 +202,7 @@ apps/backend/src/observability_hub/
 ├── domains/finops/
 │   ├── __init__.py
 │   ├── service.py
-│   ├── repository.py       # list_scan_events() + get_scan_events_cached()/serialize/deserialize/read/write (cache), list_all_table_refs(), get_date_like_columns()
+│   ├── repository.py       # parse_scan_events() + get_scan_events_cached()/serialize/deserialize/read/write (cache), list_all_table_refs(), get_date_like_columns()
 │   └── schemas.py
 ├── jobs/
 │   └── refresh_event_cache.py   # popula o cache de finops_scan_events pra cada projeto (D-1)
@@ -222,14 +224,14 @@ apps/backend/src/observability_hub/
 | Tabela grande, não particionada, sem coluna DATE/DATETIME/TIMESTAMP | Não aparece — sem coluna candidata, sugestão não é viável |
 | Candidata sem custo observado nos últimos 30 dias | Aparece sem `estimated_savings_usd_*`/`savings_disclaimer` (ambos `null`) |
 | Nenhum evento de job no projeto | `warning` populado (mesmo texto/causas de lineage/access) |
-| Cache hit | `cache_updated_at` na resposta = quando o Job (ou write-through de outra requisição) gerou o blob; Cloud Logging não é tocado |
-| Cache miss | Scan ao vivo, grava o blob, `cache_updated_at = null` (dado veio ao vivo nesta chamada) |
-| Falha ao ler/gravar o cache (GCS fora do ar, bucket sem IAM) | Logada e ignorada — cai pro scan ao vivo, nunca derruba a resposta |
-| `429 TooManyRequests` no scan ao vivo (cota `read_requests` do projeto) | `list_entries_with_retry` retenta com backoff (deadline 30s); o 429 persistente vira `LoggingQuotaExceededError`, que `scan_partition_candidates`/`get_budget` **degradam pra resposta com `warning`** (candidatas ainda listadas, sem savings; budget vazio) — não 503, não "Failed to fetch". `main.py` ainda mapearia pra 503 num caminho não capturado |
+| Cache hit | `cache_updated_at` na resposta = quando o Job gerou o blob; Cloud Logging não é tocado |
+| Cache miss (v1.4) | Request path **não escaneia ao vivo**: registra o projeto e levanta `EventCacheNotReadyError` → `scan_partition_candidates`/`get_budget` degradam pra resposta com `warning` "cache ainda não gerado" (candidatas ainda vêm do BigQuery, sem savings; budget vazio) |
+| Falha ao ler o cache (GCS fora do ar, bucket sem IAM) | Logada e tratada como cache miss (`EventCacheNotReadyError`) — nunca 500 cru |
+| `429 TooManyRequests` (cota `read_requests`) | Só o Job de refresh escaneia; o 429 persistente marca `quota_exceeded` naquele run e o próximo ciclo tenta de novo. `main.py` mapeia `LoggingQuotaExceededError`/`EventCacheNotReadyError` pra 503 só como rede de segurança |
 
 ---
 
-## Critérios de aceite — cache de audit log (v1.3)
+## Critérios de aceite — cache de audit log (v1.4)
 
 Cobre `get_scan_events_cached` (usado por `partition-candidates` **e**
 `budget`, ver `finops-budget.md`) e o refresh no Job diário.
@@ -237,13 +239,12 @@ Cobre `get_scan_events_cached` (usado por `partition-candidates` **e**
 | ID | Comportamento | Teste |
 |---|---|---|
 | AC-001 | Cache hit não chama `logging_client.list_entries` e devolve `cache_updated_at` do metadado | `test_get_scan_events_cached_returns_cache_hit_without_calling_list_entries` |
-| AC-002 | Cache miss faz o scan ao vivo, grava o blob + `record_project_seen`, e retorna `cache_updated_at = None` | `test_get_scan_events_cached_falls_back_and_writes_cache_on_miss` |
-| AC-003 | Falha ao ler o cache (qualquer exceção, não só miss) cai pro scan ao vivo em vez de propagar | `test_get_scan_events_cached_falls_back_to_live_scan_when_cache_read_fails` |
-| AC-004 | `429` no scan ao vivo é re-tentado com backoff (`list_entries_with_retry`, deadline 30s); o que persistir vira `LoggingQuotaExceededError`, degradado pra resposta com `warning` no service (não 503) | `test_retries_on_too_many_requests_then_succeeds`, `test_persistent_too_many_requests_raises_quota_exceeded`, `test_scan_partition_candidates_degrades_to_warning_on_quota_exceeded`, `test_get_budget_degrades_to_warning_on_quota_exceeded` |
-| AC-005 | Falta de `roles/logging.viewer` no scan ao vivo propaga como `LoggingAccessDeniedError` | `test_get_scan_events_cached_propagates_access_denied` |
+| AC-002 | Cache miss **não** escaneia ao vivo — registra o projeto (`record_project_seen`) e levanta `EventCacheNotReadyError` | `test_get_scan_events_cached_raises_not_ready_and_records_project_on_miss` |
+| AC-003 | Falha ao ler o cache (qualquer exceção, não só miss) é tratada como cache miss, nunca propaga como 500 | `test_get_scan_events_cached_treats_cache_read_failure_as_miss` |
+| AC-004 | `scan_partition_candidates`/`get_budget` degradam `EventCacheNotReadyError` pra resposta com `warning` (não 503) | `test_get_budget_degrades_to_warning_when_cache_not_ready` |
 | AC-006 | `ScanEvent` sobrevive a serialize→deserialize (com e sem `timestamp`/`query_text`) | `test_serialize_deserialize_scan_events_round_trips`, `test_deserialize_scan_events_handles_no_timestamp_and_no_query_text` |
-| AC-007 | O Job diário grava o cache de `finops_scan_events` pra cada projeto conhecido, no `try` principal (junto de lineage/access) | `test_refresh_project_writes_lineage_access_finops_and_storage_caches` |
-| AC-008 | `429` no refresh de finops dentro do Job não interrompe o processamento dos demais projetos | `test_refresh_project_survives_finops_quota_error` |
+| AC-007 | O Job grava o cache de `finops_scan_events` pra cada projeto, no `try` principal (junto de lineage/access) | `test_refresh_project_full_scan_writes_all_four_caches` |
+| AC-008 | Em modo incremental o Job faz merge do delta (dedup por `job_id`) com o blob e evicta eventos fora da janela de 31 dias | `test_refresh_project_incremental_uses_delta_filter_and_merges` |
 
 ## Suposições
 

@@ -72,6 +72,74 @@ def test_set_cache_metadata_writes_expected_shape():
     assert data["cached_at"] is not None
 
 
+def test_set_cache_metadata_persists_window_fields():
+    firestore_client = MagicMock()
+    firestore_client.collection.return_value.document.return_value.get.return_value.exists = False
+    from datetime import UTC, datetime
+
+    window_start = datetime(2026, 7, 28, tzinfo=UTC)
+    anchor = datetime(2026, 8, 28, 3, 0, tzinfo=UTC)
+
+    data = event_cache.set_cache_metadata(
+        firestore_client,
+        "lineage",
+        "proj",
+        event_count=5,
+        window_start=window_start,
+        last_scan_receive_ts=anchor,
+        last_full_scan_at=anchor,
+        mode="incremental",
+    )
+
+    assert data["window_start"] == window_start
+    assert data["last_scan_receive_ts"] == anchor
+    assert data["last_full_scan_at"] == anchor
+    assert data["mode"] == "incremental"
+
+
+def test_set_cache_metadata_preserves_last_full_scan_at_when_not_given():
+    firestore_client = MagicMock()
+    existing_doc = firestore_client.collection.return_value.document.return_value.get.return_value
+    existing_doc.exists = True
+    existing_doc.to_dict.return_value = {
+        "first_cached_at": "2026-01-01T00:00:00Z",
+        "last_full_scan_at": "2026-08-20T03:00:00Z",
+    }
+
+    data = event_cache.set_cache_metadata(
+        firestore_client, "lineage", "proj", event_count=1, mode="incremental"
+    )
+
+    assert data["last_full_scan_at"] == "2026-08-20T03:00:00Z"
+    assert data["first_cached_at"] == "2026-01-01T00:00:00Z"
+
+
+# --- merge_dedup -------------------------------------------------------------
+
+
+def test_merge_dedup_new_wins_on_key_collision():
+    from types import SimpleNamespace
+
+    existing = [SimpleNamespace(job_id="a", v=1), SimpleNamespace(job_id="b", v=1)]
+    new = [SimpleNamespace(job_id="b", v=2), SimpleNamespace(job_id="c", v=2)]
+
+    merged = event_cache.merge_dedup(existing, new, key=lambda e: e.job_id)
+
+    by_id = {e.job_id: e.v for e in merged}
+    assert by_id == {"a": 1, "b": 2, "c": 2}
+
+
+def test_merge_dedup_keeps_all_items_with_falsy_key():
+    from types import SimpleNamespace
+
+    existing = [SimpleNamespace(job_id=""), SimpleNamespace(job_id="")]
+    new = [SimpleNamespace(job_id="")]
+
+    merged = event_cache.merge_dedup(existing, new, key=lambda e: e.job_id)
+
+    assert len(merged) == 3
+
+
 def test_record_project_seen_writes_project_id():
     firestore_client = MagicMock()
 

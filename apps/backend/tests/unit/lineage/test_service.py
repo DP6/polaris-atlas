@@ -5,7 +5,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from observability_hub.core.config import settings
-from observability_hub.core.exceptions import LoggingAccessDeniedError, LoggingQuotaExceededError
+from observability_hub.core.exceptions import (
+    EventCacheNotReadyError,
+    LoggingAccessDeniedError,
+    LoggingQuotaExceededError,
+)
 from observability_hub.domains.lineage import service
 from observability_hub.domains.lineage.repository import JobEvent
 
@@ -292,6 +296,61 @@ def test_get_table_lineage_root_project_quota_exceeded_degrades_to_warning(monke
     assert result.cache_updated_at is None
     assert result.warning is not None
     assert "limite de leitura de audit logs" in result.warning
+
+
+def test_get_table_lineage_root_project_cache_not_ready_degrades_to_warning(monkeypatch):
+    """Modelo incremental: cache ainda não gerado pro projeto raiz ->
+    grafo vazio com aviso "cache não gerado", não um 503."""
+
+    def _raise(*a, **kw):
+        raise EventCacheNotReadyError("proj")
+
+    monkeypatch.setattr(service.repository, "get_job_events_cached", _raise)
+
+    result = service.get_table_lineage(
+        MagicMock(), MagicMock(), MagicMock(), MagicMock(), "proj", "GOLD", "x"
+    )
+
+    assert result.nodes == []
+    assert result.edges == []
+    assert result.warning is not None
+    assert "ainda não foi gerado" in result.warning
+
+
+def test_get_table_lineage_cross_project_cache_not_ready_soft_fails(monkeypatch):
+    """Um projeto não-raiz sem cache gerado durante a expansão não derruba
+    o grafo — só não expande a partir dele (igual a cota/acesso negado)."""
+    root_events = [_event([("other", "RAW", "src")], ("proj", "GOLD", "x"))]
+
+    def _fake(logging_client, storage_client, firestore_client, project_id, lookback_days=30):
+        if project_id == "other":
+            raise EventCacheNotReadyError(project_id)
+        return root_events, None
+
+    monkeypatch.setattr(service.repository, "get_job_events_cached", _fake)
+
+    result = service.get_table_lineage(
+        MagicMock(), MagicMock(), MagicMock(), MagicMock(), "proj", "GOLD", "x"
+    )
+
+    assert any(n.project_id == "other" for n in result.nodes if n.type == "table")
+    assert result.warning is None
+
+
+def test_get_orphans_cache_not_ready_degrades_to_warning(monkeypatch):
+    monkeypatch.setattr(service, "discover_regions", lambda project_id, client: ["US"])
+    monkeypatch.setattr(service.repository, "list_all_table_refs", lambda *a, **kw: [("RAW", "t1")])
+
+    def _raise(*a, **kw):
+        raise EventCacheNotReadyError("proj")
+
+    monkeypatch.setattr(service.repository, "get_job_events_cached", _raise)
+
+    result = service.get_orphans(MagicMock(), MagicMock(), MagicMock(), MagicMock(), "proj")
+
+    assert result.orphans == []
+    assert result.warning is not None
+    assert "ainda não foi gerado" in result.warning
 
 
 def test_get_table_lineage_cross_project_quota_exceeded_soft_fails(monkeypatch):
