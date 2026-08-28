@@ -28,6 +28,12 @@ _CACHE_METADATA_COLLECTION = "event_cache_metadata"
 # ganham doc em hub_projects. jobs/refresh_event_cache.py varre a união
 # de hub_projects com esta coleção (ver docs/specs/lineage.md, ASM).
 _SEEN_PROJECTS_COLLECTION = "event_cache_seen_projects"
+# Registro de execuções do job de refresh (jobs/refresh_event_cache.py) —
+# lido pela tela de acompanhamento em Administração → Caches. Um doc por
+# execução, `projects` preenchido incrementalmente conforme cada projeto
+# termina (a tela faz polling e vê os projetos "acenderem" um a um).
+_CACHE_RUNS_COLLECTION = "event_cache_runs"
+_CACHE_RUNS_KEEP = 20
 
 
 def read_cache_bytes(
@@ -85,3 +91,68 @@ def record_project_seen(firestore_client: firestore.Client, project_id: str) -> 
 def list_seen_projects(firestore_client: firestore.Client) -> list[str]:
     docs = firestore_client.collection(_SEEN_PROJECTS_COLLECTION).stream()
     return [doc.id for doc in docs]
+
+
+# --- Registro de execuções do job de refresh (tela de acompanhamento) --------
+
+
+def _cache_run_id() -> str:
+    # Ordenável lexicograficamente == cronologicamente (usado como doc id e
+    # como chave de order_by, sem precisar de índice composto no Firestore).
+    return datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+
+
+def _prune_cache_runs(firestore_client: firestore.Client) -> None:
+    docs = list(
+        firestore_client.collection(_CACHE_RUNS_COLLECTION)
+        .order_by("run_id", direction=firestore.Query.DESCENDING)
+        .stream()
+    )
+    for doc in docs[_CACHE_RUNS_KEEP:]:
+        doc.reference.delete()
+
+
+def start_cache_run(firestore_client: firestore.Client, project_ids: list[str]) -> str:
+    """Cria o doc da execução e retorna o run_id. `projects` começa vazio e
+    é preenchido por record_cache_run_project conforme cada projeto termina."""
+    run_id = _cache_run_id()
+    firestore_client.collection(_CACHE_RUNS_COLLECTION).document(run_id).set(
+        {
+            "run_id": run_id,
+            "started_at": datetime.now(UTC),
+            "finished_at": None,
+            "status": "running",
+            "project_count": len(project_ids),
+            "projects": {},
+        }
+    )
+    _prune_cache_runs(firestore_client)
+    return run_id
+
+
+def record_cache_run_project(
+    firestore_client: firestore.Client,
+    run_id: str,
+    project_id: str,
+    status: str,
+    counts: dict[str, int],
+) -> None:
+    firestore_client.collection(_CACHE_RUNS_COLLECTION).document(run_id).update(
+        {f"projects.{project_id}": {"status": status, "finished_at": datetime.now(UTC), **counts}}
+    )
+
+
+def finish_cache_run(firestore_client: firestore.Client, run_id: str) -> None:
+    firestore_client.collection(_CACHE_RUNS_COLLECTION).document(run_id).update(
+        {"status": "done", "finished_at": datetime.now(UTC)}
+    )
+
+
+def list_cache_runs(firestore_client: firestore.Client, limit: int = 5) -> list[dict]:
+    docs = (
+        firestore_client.collection(_CACHE_RUNS_COLLECTION)
+        .order_by("run_id", direction=firestore.Query.DESCENDING)
+        .limit(limit)
+        .stream()
+    )
+    return [doc.to_dict() for doc in docs]

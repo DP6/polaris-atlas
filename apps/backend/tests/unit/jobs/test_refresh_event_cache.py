@@ -222,17 +222,33 @@ def test_main_refreshes_every_known_project(monkeypatch):
     monkeypatch.setattr(refresh_event_cache, "get_firestore_client", lambda: MagicMock())
     monkeypatch.setattr(refresh_event_cache, "_known_projects", lambda firestore_client: ["a", "b"])
     refreshed = []
+
+    def _fake_refresh(logging_client, storage_client, firestore_client, project_id):
+        refreshed.append(project_id)
+        return "ok", {"job_events": 0}
+
+    monkeypatch.setattr(refresh_event_cache, "_refresh_project", _fake_refresh)
+    run_calls = {"start": 0, "record": [], "finish": 0}
     monkeypatch.setattr(
-        refresh_event_cache,
-        "_refresh_project",
-        lambda logging_client, storage_client, firestore_client, project_id: refreshed.append(
-            project_id
-        ),
+        refresh_event_cache.event_cache,
+        "start_cache_run",
+        lambda fc, projects: run_calls.__setitem__("start", run_calls["start"] + 1) or "run-1",
+    )
+    monkeypatch.setattr(
+        refresh_event_cache.event_cache,
+        "record_cache_run_project",
+        lambda fc, run_id, pid, status, counts: run_calls["record"].append(pid),
+    )
+    monkeypatch.setattr(
+        refresh_event_cache.event_cache,
+        "finish_cache_run",
+        lambda fc, run_id: run_calls.__setitem__("finish", run_calls["finish"] + 1),
     )
 
     refresh_event_cache.main()
 
     assert refreshed == ["a", "b"]
+    assert run_calls == {"start": 1, "record": ["a", "b"], "finish": 1}
 
 
 def test_main_processes_all_projects_even_when_one_does_not_exist(monkeypatch):

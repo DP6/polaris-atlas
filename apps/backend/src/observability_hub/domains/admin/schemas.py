@@ -163,3 +163,43 @@ class ChecklistItem(BaseModel):
 class ProjectChecklistResponse(BaseModel):
     project_id: str
     items: list[ChecklistItem]
+
+
+# --- Acompanhamento do cache de audit log (Administração → Caches) ------------
+
+
+class EventCacheRunProject(BaseModel):
+    project_id: str
+    # "ok" | "access_denied" | "quota_exceeded" | "api_error" | "unexpected_error"
+    status: str
+    finished_at: datetime | None = None
+    job_events: int | None = None
+    access_events: int | None = None
+    scan_events: int | None = None
+    storage_read_object_keys: int | None = None
+
+
+class EventCacheRun(BaseModel):
+    run_id: str
+    started_at: datetime
+    finished_at: datetime | None = None
+    status: str  # "running" | "done"
+    project_count: int
+    projects: list[EventCacheRunProject]
+
+
+class EventCacheKindStatus(BaseModel):
+    kind: str  # "lineage" | "access" | "finops_scan_events" | "storage_read_keys"
+    label: str
+    cached_at: datetime | None = None
+    event_count: int | None = None
+
+
+class EventCacheProjectStatus(BaseModel):
+    project_id: str
+    caches: list[EventCacheKindStatus]
+
+
+class EventCacheStatusResponse(BaseModel):
+    runs: list[EventCacheRun]
+    projects: list[EventCacheProjectStatus]

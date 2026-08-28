@@ -23,6 +23,7 @@ from observability_hub.domains.admin.schemas import (
     AccessRequest,
     AccessRequestsListResponse,
     AccessRequestStatus,
+    EventCacheStatusResponse,
     HubGroup,
     HubGroupsListResponse,
     HubProject,
@@ -252,3 +253,14 @@ def refresh_event_cache(run_client: run_v2.JobsClient = Depends(get_run_client))
     execução do Job é assíncrona: este endpoint só confirma o disparo,
     não espera o resultado."""
     service.trigger_event_cache_refresh(run_client)
+
+
+@router.get("/event-cache/status", response_model=EventCacheStatusResponse)
+def get_event_cache_status(
+    client: firestore.Client = Depends(get_firestore_client),
+) -> EventCacheStatusResponse:
+    """Acompanhamento do cache de audit log: últimas execuções do Job
+    (por projeto: ok / sem acesso / cota estourada / erro) + freshness
+    por projeto × domínio. Lido do Firestore, sem tocar Cloud Logging nem
+    o Cloud Run Admin API. Alimenta a tela Administração → Caches."""
+    return service.get_event_cache_status(client)

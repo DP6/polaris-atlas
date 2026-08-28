@@ -15,9 +15,22 @@ export const ADMIN_PROJECTS_QUERY_KEY = ['admin-projects']
 export const ADMIN_GROUPS_QUERY_KEY = ['admin-groups']
 export const ADMIN_ACCESS_REQUESTS_QUERY_KEY = ['admin-access-requests']
 
+export const ADMIN_EVENT_CACHE_STATUS_QUERY_KEY = ['admin-event-cache-status']
+
 export function useRefreshEventCache() {
   return useMutation({
     mutationFn: adminApi.refreshEventCache,
+  })
+}
+
+// Polling mais rápido enquanto há uma execução em andamento (pra ver os
+// projetos "acenderem" um a um), mais lento em repouso.
+export function useEventCacheStatus() {
+  return useQuery({
+    queryKey: ADMIN_EVENT_CACHE_STATUS_QUERY_KEY,
+    queryFn: adminApi.getEventCacheStatus,
+    refetchInterval: (query) =>
+      query.state.data?.runs.some((r) => r.status === 'running') ? 8_000 : 45_000,
   })
 }
 

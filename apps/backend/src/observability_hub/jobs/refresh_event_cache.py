@@ -88,7 +88,11 @@ def _refresh_project(
     storage_client: storage.Client,
     firestore_client: firestore.Client,
     project_id: str,
-) -> None:
+) -> tuple[str, dict[str, int]]:
+    """Retorna (status, counts) pra o registro de execução no Firestore
+    (event_cache_runs, lido pela tela de acompanhamento em Administração →
+    Caches). status: "ok" | "access_denied" | "quota_exceeded" |
+    "api_error" | "unexpected_error"."""
     try:
         # UM scan de jobservice.jobcompleted (30d) alimenta lineage, access
         # e finops — os 3 leem a mesma fonte, só o parser difere. Sem isso
@@ -122,13 +126,13 @@ def _refresh_project(
         )
     except LoggingAccessDeniedError:
         logger.warning(json.dumps({"project_id": project_id, "status": "access_denied"}))
-        return
+        return "access_denied", {}
     except LoggingQuotaExceededError:
         # Cota read_requests/min do projeto estourada mesmo após o retry —
         # transitória. O ciclo do dia seguinte (ou um novo disparo manual)
         # preenche; não pode derrubar o refresh dos demais projetos.
         logger.warning(json.dumps({"project_id": project_id, "status": "quota_exceeded"}))
-        return
+        return "quota_exceeded", {}
     except GoogleAPICallError as exc:
         # Cobre, entre outros, projeto inexistente/renomeado/deletado
         # (Cloud Logging devolve 404 NotFound em vez de 403 Forbidden
@@ -139,25 +143,21 @@ def _refresh_project(
         logger.warning(
             json.dumps({"project_id": project_id, "status": "api_error", "error": str(exc)})
         )
-        return
+        return "api_error", {}
     except Exception as exc:  # noqa: BLE001 — rede de segurança final do job em lote
         logger.error(
             json.dumps({"project_id": project_id, "status": "unexpected_error", "error": str(exc)})
         )
-        return
+        return "unexpected_error", {}
 
-    logger.info(
-        json.dumps(
-            {
-                "project_id": project_id,
-                "status": "ok",
-                "job_events": len(job_events),
-                "access_events": len(access_events),
-                "scan_events": len(scan_events),
-                "storage_read_object_keys": read_object_keys_count,
-            }
-        )
-    )
+    counts = {
+        "job_events": len(job_events),
+        "access_events": len(access_events),
+        "scan_events": len(scan_events),
+        "storage_read_object_keys": read_object_keys_count,
+    }
+    logger.info(json.dumps({"project_id": project_id, "status": "ok", **counts}))
+    return "ok", counts
 
 
 def main() -> None:
@@ -167,9 +167,24 @@ def main() -> None:
 
     projects = _known_projects(firestore_client)
     logger.info(json.dumps({"status": "start", "project_count": len(projects)}))
-    for project_id in projects:
-        _refresh_project(logging_client, storage_client, firestore_client, project_id)
-    logger.info(json.dumps({"status": "done"}))
+
+    # Registro de execução no Firestore (event_cache_runs) — lido pela tela
+    # de acompanhamento em Administração → Caches. try/finally garante que
+    # a execução seja marcada como concluída mesmo se main() estourar no
+    # meio (o que _refresh_project já não deixa acontecer por projeto, mas
+    # _known_projects / get_*_client podem).
+    run_id = event_cache.start_cache_run(firestore_client, projects)
+    try:
+        for project_id in projects:
+            status, counts = _refresh_project(
+                logging_client, storage_client, firestore_client, project_id
+            )
+            event_cache.record_cache_run_project(
+                firestore_client, run_id, project_id, status, counts
+            )
+    finally:
+        event_cache.finish_cache_run(firestore_client, run_id)
+    logger.info(json.dumps({"status": "done", "run_id": run_id}))
 
 
 if __name__ == "__main__":

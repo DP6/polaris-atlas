@@ -358,6 +358,40 @@ aprovar. Negar um pedido `"inclusion"` não registra nada, igual ao fluxo
 
 ---
 
+## Acompanhamento do cache de audit log (aba "Caches")
+
+O Hub mantém um cache diário de audit log de Cloud Logging pra lineage,
+mapa de acesso, FinOps (budget) e Storage (waste scanner) — ver
+`docs/specs/lineage.md`, "Cache pré-computado". A aba **Caches** de
+Administração dá visibilidade granular disso:
+
+- **Disparo**: `POST /api/v1/admin/event-cache/refresh` (202) executa o
+  Cloud Run Job de refresh sob demanda, fora do ciclo diário
+  (`domains/admin/service.py::trigger_event_cache_refresh` →
+  `core/run_client.py`; a SA de runtime precisa de `roles/run.invoker`
+  **sobre o Job**, concedido no módulo Terraform `cloud-run-job`).
+- **Estado**: `GET /api/v1/admin/event-cache/status`
+  (`get_event_cache_status`) devolve, **só a partir do Firestore** (nada
+  de Cloud Logging nem Cloud Run Admin API — evita depender de
+  `roles/run.viewer`):
+  - **Últimas 5 execuções** (`event_cache_runs`, gravado pelo próprio Job
+    em `jobs/refresh_event_cache.py`): `run_id`, `started_at`/
+    `finished_at`, `status` (`running`/`done`), e um mapa
+    `projects[project_id] → {status, finished_at, contagens}` preenchido
+    incrementalmente conforme cada projeto termina. `status` por projeto:
+    `ok` | `access_denied` | `quota_exceeded` | `api_error` |
+    `unexpected_error`.
+  - **Freshness por projeto × domínio**: pra cada projeto conhecido
+    (mesma união `hub_projects` ∪ "vistos" que o Job varre, menos o
+    wildcard `*`) e cada um dos 4 `_CACHE_KIND`, o `cached_at` e
+    `event_count` de `event_cache_metadata`.
+- **Frontend** (`AdminCachesTab.tsx`): cards de execução + tabela de
+  freshness (colorida por idade), com `refetchInterval` curto (8s)
+  enquanto há execução `running` pra ver os projetos processarem um a um.
+- **Retenção**: `event_cache_runs` guarda só as ~20 execuções mais
+  recentes (`core/event_cache.py::_prune_cache_runs`, chamado no início
+  de cada execução).
+
 ## Checklist de onboarding (best-effort, v1.9)
 
 `GET /api/v1/admin/projects/{project_id}/checklist` (admin-only) —

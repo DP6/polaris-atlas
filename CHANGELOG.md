@@ -5,6 +5,39 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Tela de acompanhamento do cache de audit log (Administração → Caches)
+
+Pedido do usuário: não bastava o botão "Atualizar caches", precisava de
+uma tela com feedback granular — qual projeto já foi processado, com que
+status, quando cada cache foi gerado.
+
+### O que foi feito
+
+- **Job grava o progresso no Firestore.** `jobs/refresh_event_cache.main()`
+  cria um doc em `event_cache_runs` (`start_cache_run`), atualiza
+  `projects.{project_id}` conforme cada projeto termina
+  (`record_cache_run_project` — status `ok`/`access_denied`/
+  `quota_exceeded`/`api_error`/`unexpected_error` + contagens de eventos),
+  e marca `done` no fim (`finish_cache_run`, em `try/finally`).
+  `_refresh_project` passou a **retornar** `(status, counts)` em vez de só
+  logar. Mantém só as ~20 execuções mais recentes (`_prune_cache_runs`).
+- **Endpoint** `GET /api/v1/admin/event-cache/status` (`domains/admin/service.py::get_event_cache_status`):
+  últimas 5 execuções + freshness por projeto × domínio (lineage / access /
+  finops_scan_events / storage_read_keys), tudo do Firestore — **sem
+  tocar Cloud Logging nem o Cloud Run Admin API** (não precisa de
+  `roles/run.viewer` na SA de runtime). Polling barato.
+- **Tela** `AdminCachesTab` (nova aba "Caches" em Administração): cards de
+  execução (badge de status, duração, `N ok · M cota estourada · …`,
+  lista dos projetos com problema) + tabela de freshness por projeto
+  (relativo + contagem, colorido verde/amarelo/vermelho por idade). O
+  botão de disparo saiu do header do AdminPage pra dentro desta aba;
+  `refetchInterval` cai pra 8s enquanto há execução `running` pra ver os
+  projetos "acenderem" um a um.
+- Nova coleção Firestore `event_cache_runs` registrada em
+  `docs/gcp-components.md` (mesmo named database, sem recurso GCP novo).
+
+---
+
 ## Um scan de audit log no job de refresh + 429 degrada pra warning (não 503) em access/lineage/finops
 
 Continuação do fix do 429 do Cloud Logging. Depois de cache + retry + 503,

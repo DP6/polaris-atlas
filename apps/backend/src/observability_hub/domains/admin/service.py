@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 
 from google.cloud import firestore, run_v2
 
-from observability_hub.core import workspace_directory
+from observability_hub.core import event_cache, workspace_directory
 from observability_hub.core.bigquery import get_runtime_project
 from observability_hub.core.config import settings
 from observability_hub.core.exceptions import AccessRequestNotFoundError, LastAdminLockoutError
@@ -23,6 +23,11 @@ from observability_hub.domains.admin import repository
 from observability_hub.domains.admin.schemas import (
     AccessRequest,
     AccessRequestsListResponse,
+    EventCacheKindStatus,
+    EventCacheProjectStatus,
+    EventCacheRun,
+    EventCacheRunProject,
+    EventCacheStatusResponse,
     HubGroup,
     HubGroupsListResponse,
     HubProject,
@@ -36,6 +41,18 @@ from observability_hub.domains.admin.schemas import (
     UpsertHubUserRequest,
     WorkspaceGroupInfo,
     WorkspaceGroupsListResponse,
+)
+
+# Namespaces de cache gravados por jobs/refresh_event_cache.py — um por
+# domínio que lê audit log. Devem casar com os `_CACHE_KIND` de
+# domains/{lineage,access,finops,storage}/repository.py. Hardcoded aqui
+# (não importado dos 4 repos) pelo mesmo racional de isolamento de domínio
+# do resto do admin.
+_EVENT_CACHE_KINDS: tuple[tuple[str, str], ...] = (
+    ("lineage", "Lineage / órfãs"),
+    ("access", "Mapa de acesso"),
+    ("finops_scan_events", "FinOps (budget / desperdício)"),
+    ("storage_read_keys", "Storage (waste scanner)"),
 )
 
 # Wildcard: libera qualquer project_id que a service account de runtime
@@ -316,3 +333,63 @@ def trigger_event_cache_refresh(run_client: run_v2.JobsClient) -> None:
     houver uma execução em andamento, esta apenas soma outra em paralelo."""
     job_name = f"backend-{settings.environment}-refresh-cache"
     trigger_job_execution(run_client, get_runtime_project(), settings.region, job_name)
+
+
+def _known_cache_projects(client: firestore.Client) -> list[str]:
+    """Mesma união que jobs/refresh_event_cache.py::_known_projects varre —
+    hub_projects (menos o wildcard "*") ∪ projetos vistos via cache miss."""
+    from_admin = {
+        p["project_id"]
+        for p in repository.list_projects(client)
+        if p["project_id"] != _WILDCARD_PROJECT
+    }
+    from_seen = set(event_cache.list_seen_projects(client))
+    return sorted(from_admin | from_seen)
+
+
+def get_event_cache_status(client: firestore.Client) -> EventCacheStatusResponse:
+    """Estado do cache de audit log pra a tela de acompanhamento
+    (Administração → Caches): últimas execuções do job + freshness por
+    projeto × domínio. Tudo do Firestore — nenhuma chamada ao Cloud Run
+    Admin API (evita depender de roles/run.viewer na SA de runtime)."""
+    runs: list[EventCacheRun] = []
+    for raw in event_cache.list_cache_runs(client, limit=5):
+        projects = {
+            pid: EventCacheRunProject(
+                project_id=pid,
+                status=p.get("status", "unknown"),
+                finished_at=p.get("finished_at"),
+                job_events=p.get("job_events"),
+                access_events=p.get("access_events"),
+                scan_events=p.get("scan_events"),
+                storage_read_object_keys=p.get("storage_read_object_keys"),
+            )
+            for pid, p in sorted((raw.get("projects") or {}).items())
+        }
+        runs.append(
+            EventCacheRun(
+                run_id=raw["run_id"],
+                started_at=raw["started_at"],
+                finished_at=raw.get("finished_at"),
+                status=raw.get("status", "unknown"),
+                project_count=raw.get("project_count", 0),
+                projects=list(projects.values()),
+            )
+        )
+
+    project_rows: list[EventCacheProjectStatus] = []
+    for project_id in _known_cache_projects(client):
+        kinds: list[EventCacheKindStatus] = []
+        for kind, label in _EVENT_CACHE_KINDS:
+            meta = event_cache.get_cache_metadata(client, kind, project_id)
+            kinds.append(
+                EventCacheKindStatus(
+                    kind=kind,
+                    label=label,
+                    cached_at=meta["cached_at"] if meta else None,
+                    event_count=meta["event_count"] if meta else None,
+                )
+            )
+        project_rows.append(EventCacheProjectStatus(project_id=project_id, caches=kinds))
+
+    return EventCacheStatusResponse(runs=runs, projects=project_rows)

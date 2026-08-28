@@ -950,3 +950,67 @@ def test_trigger_event_cache_refresh_calls_run_client_with_environment_job_name(
     assert len(calls) == 1
     args, _ = calls[0]
     assert args == (run_client, "dp6-ci-polaris", "us-central1", "backend-dev-refresh-cache")
+
+
+def test_get_event_cache_status_builds_runs_and_project_freshness(monkeypatch):
+    client = MagicMock()
+
+    monkeypatch.setattr(
+        service.event_cache,
+        "list_cache_runs",
+        lambda c, limit=5: [
+            {
+                "run_id": "20260828T030000000000Z",
+                "started_at": "2026-08-28T03:00:00Z",
+                "finished_at": "2026-08-28T03:04:00Z",
+                "status": "done",
+                "project_count": 2,
+                "projects": {
+                    "proj-b": {"status": "quota_exceeded", "finished_at": "2026-08-28T03:02:00Z"},
+                    "proj-a": {
+                        "status": "ok",
+                        "finished_at": "2026-08-28T03:01:00Z",
+                        "job_events": 10,
+                        "access_events": 4,
+                        "scan_events": 7,
+                        "storage_read_object_keys": 0,
+                    },
+                },
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        service.repository,
+        "list_projects",
+        lambda c: [{"project_id": "proj-a"}, {"project_id": "*"}],
+    )
+    monkeypatch.setattr(service.event_cache, "list_seen_projects", lambda c: ["proj-b"])
+
+    def _meta(c, kind, project_id):
+        if project_id == "proj-a" and kind == "lineage":
+            return {"cached_at": "2026-08-28T03:01:00Z", "event_count": 10}
+        return None
+
+    monkeypatch.setattr(service.event_cache, "get_cache_metadata", _meta)
+
+    result = service.get_event_cache_status(client)
+
+    # 1 execução, projetos ordenados (proj-a antes de proj-b)
+    assert len(result.runs) == 1
+    run = result.runs[0]
+    assert run.status == "done"
+    assert [p.project_id for p in run.projects] == ["proj-a", "proj-b"]
+    assert run.projects[0].job_events == 10
+    assert run.projects[1].status == "quota_exceeded"
+
+    # wildcard "*" NÃO entra na lista de projetos; proj-a e proj-b entram
+    assert [p.project_id for p in result.projects] == ["proj-a", "proj-b"]
+    # 4 domínios por projeto, na ordem canônica
+    assert [k.kind for k in result.projects[0].caches] == [
+        "lineage",
+        "access",
+        "finops_scan_events",
+        "storage_read_keys",
+    ]
+    assert result.projects[0].caches[0].event_count == 10
+    assert result.projects[0].caches[1].cached_at is None

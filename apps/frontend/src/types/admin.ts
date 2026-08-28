@@ -245,3 +245,39 @@ export interface RetentionFunnelResponse {
   users_with_5plus_actions: number
   users_with_10plus_actions: number
 }
+
+export interface EventCacheRunProject {
+  project_id: string
+  status: string // "ok" | "access_denied" | "quota_exceeded" | "api_error" | "unexpected_error"
+  finished_at: string | null
+  job_events: number | null
+  access_events: number | null
+  scan_events: number | null
+  storage_read_object_keys: number | null
+}
+
+export interface EventCacheRun {
+  run_id: string
+  started_at: string
+  finished_at: string | null
+  status: string // "running" | "done"
+  project_count: number
+  projects: EventCacheRunProject[]
+}
+
+export interface EventCacheKindStatus {
+  kind: string
+  label: string
+  cached_at: string | null
+  event_count: number | null
+}
+
+export interface EventCacheProjectStatus {
+  project_id: string
+  caches: EventCacheKindStatus[]
+}
+
+export interface EventCacheStatusResponse {
+  runs: EventCacheRun[]
+  projects: EventCacheProjectStatus[]
+}

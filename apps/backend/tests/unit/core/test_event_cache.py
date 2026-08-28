@@ -91,3 +91,61 @@ def test_list_seen_projects_returns_document_ids():
     firestore_client.collection.return_value.stream.return_value = [doc_a, doc_b]
 
     assert event_cache.list_seen_projects(firestore_client) == ["proj-a", "proj-b"]
+
+
+def test_start_cache_run_creates_running_doc_and_returns_id():
+    firestore_client = MagicMock()
+    # _prune_cache_runs itera o stream — vazio, nada a apagar.
+    firestore_client.collection.return_value.order_by.return_value.stream.return_value = []
+
+    run_id = event_cache.start_cache_run(firestore_client, ["a", "b", "c"])
+
+    assert run_id
+    doc_ref = firestore_client.collection.return_value.document.return_value
+    written = doc_ref.set.call_args.args[0]
+    assert written["run_id"] == run_id
+    assert written["status"] == "running"
+    assert written["project_count"] == 3
+    assert written["projects"] == {}
+    assert written["finished_at"] is None
+
+
+def test_record_cache_run_project_updates_dotted_path():
+    firestore_client = MagicMock()
+
+    event_cache.record_cache_run_project(
+        firestore_client, "run-1", "proj-x", "ok", {"job_events": 5, "access_events": 2}
+    )
+
+    doc_ref = firestore_client.collection.return_value.document.return_value
+    firestore_client.collection.return_value.document.assert_called_with("run-1")
+    update_arg = doc_ref.update.call_args.args[0]
+    assert "projects.proj-x" in update_arg
+    entry = update_arg["projects.proj-x"]
+    assert entry["status"] == "ok"
+    assert entry["job_events"] == 5
+    assert entry["finished_at"] is not None
+
+
+def test_finish_cache_run_marks_done():
+    firestore_client = MagicMock()
+
+    event_cache.finish_cache_run(firestore_client, "run-1")
+
+    doc_ref = firestore_client.collection.return_value.document.return_value
+    update_arg = doc_ref.update.call_args.args[0]
+    assert update_arg["status"] == "done"
+    assert update_arg["finished_at"] is not None
+
+
+def test_list_cache_runs_orders_by_run_id_desc():
+    firestore_client = MagicMock()
+    query = firestore_client.collection.return_value.order_by.return_value.limit.return_value
+    query.stream.return_value = [MagicMock(to_dict=lambda: {"run_id": "r2"})]
+
+    runs = event_cache.list_cache_runs(firestore_client, limit=3)
+
+    assert runs == [{"run_id": "r2"}]
+    firestore_client.collection.return_value.order_by.assert_called_once()
+    _, kwargs = firestore_client.collection.return_value.order_by.call_args
+    assert kwargs.get("direction") is not None

@@ -4,6 +4,7 @@ import type {
   AccessRequestAnalyticsResponse,
   AccessRequestStatus,
   AccessRequestsListResponse,
+  EventCacheStatusResponse,
   FavoritesAnalyticsResponse,
   HubGroup,
   HubGroupsListResponse,
@@ -31,6 +32,11 @@ export const adminApi = {
   // ciclo diário automático (ver docs/specs/lineage.md). 202 sem corpo
   // relevante: só confirma o disparo, não espera o Job terminar.
   refreshEventCache: () => httpClient.post<void>('/api/v1/admin/event-cache/refresh'),
+
+  // Acompanhamento do cache de audit log (execuções do Job + freshness por
+  // projeto × domínio) — tudo do Firestore, barato de fazer polling.
+  getEventCacheStatus: () =>
+    httpClient.get<EventCacheStatusResponse>('/api/v1/admin/event-cache/status'),
 
   listUsers: () => httpClient.get<HubUsersListResponse>('/api/v1/admin/users'),
 
