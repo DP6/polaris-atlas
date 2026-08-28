@@ -23,6 +23,7 @@ from observability_hub.domains.admin.schemas import (
     AccessRequest,
     AccessRequestsListResponse,
     AccessRequestStatus,
+    EventCacheRunsResponse,
     EventCacheStatusResponse,
     HubGroup,
     HubGroupsListResponse,
@@ -263,8 +264,20 @@ def refresh_event_cache(
 def get_event_cache_status(
     client: firestore.Client = Depends(get_firestore_client),
 ) -> EventCacheStatusResponse:
-    """Acompanhamento do cache de audit log: últimas execuções do Job
-    (por projeto: ok / sem acesso / cota estourada / erro) + freshness
-    por projeto × domínio. Lido do Firestore, sem tocar Cloud Logging nem
-    o Cloud Run Admin API. Alimenta a tela Administração → Caches."""
+    """Freshness do cache de audit log por projeto × domínio (quando cada
+    cache foi gerado, janela, modo, "nunca rodou"). Lido do Firestore, sem
+    tocar Cloud Logging nem o Cloud Run Admin API. Polling frequente na
+    tela Administração → Caches — o histórico de execuções vem do endpoint
+    /event-cache/runs, com cadência própria."""
     return service.get_event_cache_status(client)
+
+
+@router.get("/event-cache/runs", response_model=EventCacheRunsResponse)
+def list_event_cache_runs(
+    client: firestore.Client = Depends(get_firestore_client),
+) -> EventCacheRunsResponse:
+    """Histórico completo de execuções do Job de refresh (~200 retidas,
+    mais recentes primeiro) — status por projeto (ok / sem acesso / cota
+    estourada / erro), modo (full/incremental) e contagens. A tela filtra
+    (status, projeto, período, só com falha) e pagina no cliente."""
+    return service.list_event_cache_runs(client)

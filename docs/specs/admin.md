@@ -2,7 +2,9 @@
 
 **Versão:** 1.10 (aba "Caches" — cache de audit log incremental: toggle
 "forçar completo", freshness com `never_run`/`window_start`/`mode`,
-retenção de 200 execuções; ver "Acompanhamento do cache de audit log")
+histórico de execuções em `GET /event-cache/runs` (separado de `/status`)
+com card de resumo + tabela filtrável/paginada no cliente, retenção de
+200 execuções; ver "Acompanhamento do cache de audit log")
 **Status:** Aprovada
 **Fase:** Transversal (não faz parte do roadmap de observabilidade de `docs/prd.md`) — plataforma
 **Última atualização:** 2026-08-28
@@ -376,37 +378,47 @@ Administração dá visibilidade granular disso:
   projetos nessa execução. É injetado como env
   `OBSERVABILITY_HUB_CACHE_FORCE_FULL=1` só naquela execução, via
   `run_v2.RunJobRequest.Overrides` (`core/config.py::settings.cache_force_full`).
-- **Estado**: `GET /api/v1/admin/event-cache/status`
-  (`get_event_cache_status`) devolve, **só a partir do Firestore** (nada
-  de Cloud Logging nem Cloud Run Admin API — evita depender de
-  `roles/run.viewer`):
-  - **Últimas execuções** (`event_cache_runs`, gravado pelo próprio Job
-    em `jobs/refresh_event_cache.py`): `run_id`, `started_at`/
-    `finished_at`, `status` (`running`/`done`), e um mapa
-    `projects[project_id] → {status, finished_at, contagens}` preenchido
-    incrementalmente conforme cada projeto termina. `status` por projeto:
-    `ok` | `access_denied` | `quota_exceeded` | `api_error` |
-    `unexpected_error`. As contagens incluem `mode` (`full`/`incremental`)
-    e `raw_entries` (tamanho do delta) desde o cache incremental.
-  - **Freshness por projeto × domínio**: pra cada projeto conhecido
-    (mesma união `hub_projects` ∪ "vistos" que o Job varre, menos o
-    wildcard `*`) e cada um dos 4 `_CACHE_KIND`, de `event_cache_metadata`:
-    `cached_at`, `event_count`, **`never_run`** (`true` = nenhum metadado
-    ainda — a tela mostra "nunca rodou" em vez de uma janela),
-    `window_start` (piso da janela rolante no blob atual),
-    `last_full_scan_at` e `mode`.
+Dois endpoints, **só a partir do Firestore** (nada de Cloud Logging nem
+Cloud Run Admin API — evita depender de `roles/run.viewer`), com cadências
+de polling separadas:
+
+- **Freshness**: `GET /api/v1/admin/event-cache/status`
+  (`get_event_cache_status`) — pra cada projeto conhecido (união
+  `hub_projects` ∪ "vistos" que o Job varre, menos o wildcard `*`) e cada
+  um dos 4 `_CACHE_KIND`, de `event_cache_metadata`: `cached_at`,
+  `event_count`, **`never_run`** (`true` = nenhum metadado ainda — a tela
+  mostra "nunca rodou" em vez de uma janela), `window_start` (piso da
+  janela rolante no blob atual), `last_full_scan_at`, `mode`. Payload
+  pequeno, polling constante (30s).
+- **Histórico de execuções**: `GET /api/v1/admin/event-cache/runs`
+  (`list_event_cache_runs`) — **todas** as execuções retidas (~200, mais
+  recentes primeiro; `event_cache_runs`, gravado pelo próprio Job).
+  `run_id`, `started_at`/`finished_at`, `status` (`running`/`done`), e um
+  mapa `projects[project_id] → {status, finished_at, contagens, mode,
+  raw_entries}` preenchido incrementalmente conforme cada projeto termina.
+  `status` por projeto: `ok` | `access_denied` | `quota_exceeded` |
+  `api_error` | `unexpected_error`. Polling rápido (8s) só enquanto há
+  execução `running`. Foi separado de `/status` na v1.10 pra o polling
+  frequente da freshness não arrastar ~200 runs a cada tick.
 - **Cache não gerado no request path**: quando um usuário abre uma tela de
   lineage/access/finops/storage de um projeto ainda sem cache, o serviço
   degrada pra resposta vazia com um `warning` orientando "Administração →
   Caches" (não 503) e o projeto passa a aparecer na freshness como
   "nunca rodou" (`record_project_seen`). O modelo incremental **não
   escaneia mais o Cloud Logging no request path**.
-- **Frontend** (`AdminCachesTab.tsx`): card de resumo da execução
-  atual/última + tabela de execuções paginada e filtrável (ver PR 3),
-  com `refetchInterval` curto enquanto há execução `running`.
+- **Frontend** (`AdminCachesTab.tsx`): **card de resumo** da execução
+  atual/última (badge de status, `N/M` projetos, duração, modo, lista dos
+  projetos com problema) + botão "Atualizar agora" com checkbox **"forçar
+  completo"**; **tabela de execuções** (linha = resumo do run, linha
+  expansível com o detalhe por projeto) **filtrável** — status (runs com
+  ao menos um projeto naquele status), projeto (substring), período (data
+  de `started_at`), "só com falha" — e **paginada**. Filtro e paginação
+  rodam **no cliente** sobre a lista inteira (~200), mesmo padrão das
+  outras seções de analytics do admin (`usePagination` + `PaginationBar`).
 - **Retenção**: `event_cache_runs` guarda só as ~200 execuções mais
   recentes (`core/event_cache.py::_CACHE_RUNS_KEEP` / `_prune_cache_runs`,
-  chamado no início de cada execução).
+  chamado no início de cada execução; é também o `limit` default de
+  `list_cache_runs`).
 
 ## Checklist de onboarding (best-effort, v1.9)
 

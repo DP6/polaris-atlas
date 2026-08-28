@@ -27,6 +27,7 @@ from observability_hub.domains.admin.schemas import (
     EventCacheProjectStatus,
     EventCacheRun,
     EventCacheRunProject,
+    EventCacheRunsResponse,
     EventCacheStatusResponse,
     HubGroup,
     HubGroupsListResponse,
@@ -353,36 +354,37 @@ def _known_cache_projects(client: firestore.Client) -> list[str]:
     return sorted(from_admin | from_seen)
 
 
-def get_event_cache_status(client: firestore.Client) -> EventCacheStatusResponse:
-    """Estado do cache de audit log pra a tela de acompanhamento
-    (Administração → Caches): últimas execuções do job + freshness por
-    projeto × domínio. Tudo do Firestore — nenhuma chamada ao Cloud Run
-    Admin API (evita depender de roles/run.viewer na SA de runtime)."""
-    runs: list[EventCacheRun] = []
-    for raw in event_cache.list_cache_runs(client, limit=5):
-        projects = {
-            pid: EventCacheRunProject(
-                project_id=pid,
-                status=p.get("status", "unknown"),
-                finished_at=p.get("finished_at"),
-                job_events=p.get("job_events"),
-                access_events=p.get("access_events"),
-                scan_events=p.get("scan_events"),
-                storage_read_object_keys=p.get("storage_read_object_keys"),
-            )
-            for pid, p in sorted((raw.get("projects") or {}).items())
-        }
-        runs.append(
-            EventCacheRun(
-                run_id=raw["run_id"],
-                started_at=raw["started_at"],
-                finished_at=raw.get("finished_at"),
-                status=raw.get("status", "unknown"),
-                project_count=raw.get("project_count", 0),
-                projects=list(projects.values()),
-            )
+def _to_event_cache_run(raw: dict) -> EventCacheRun:
+    projects = [
+        EventCacheRunProject(
+            project_id=pid,
+            status=p.get("status", "unknown"),
+            finished_at=p.get("finished_at"),
+            job_events=p.get("job_events"),
+            access_events=p.get("access_events"),
+            scan_events=p.get("scan_events"),
+            storage_read_object_keys=p.get("storage_read_object_keys"),
+            mode=p.get("mode"),
+            raw_entries=p.get("raw_entries"),
         )
+        for pid, p in sorted((raw.get("projects") or {}).items())
+    ]
+    return EventCacheRun(
+        run_id=raw["run_id"],
+        started_at=raw["started_at"],
+        finished_at=raw.get("finished_at"),
+        status=raw.get("status", "unknown"),
+        project_count=raw.get("project_count", 0),
+        projects=projects,
+    )
 
+
+def get_event_cache_status(client: firestore.Client) -> EventCacheStatusResponse:
+    """Freshness do cache de audit log por projeto × domínio pra a tela de
+    acompanhamento (Administração → Caches). Só Firestore — nenhuma chamada
+    ao Cloud Run Admin API (evita depender de roles/run.viewer). O
+    histórico de execuções vive em list_event_cache_runs (endpoint
+    separado, polling próprio)."""
     project_rows: list[EventCacheProjectStatus] = []
     for project_id in _known_cache_projects(client):
         kinds: list[EventCacheKindStatus] = []
@@ -402,4 +404,14 @@ def get_event_cache_status(client: firestore.Client) -> EventCacheStatusResponse
             )
         project_rows.append(EventCacheProjectStatus(project_id=project_id, caches=kinds))
 
-    return EventCacheStatusResponse(runs=runs, projects=project_rows)
+    return EventCacheStatusResponse(projects=project_rows)
+
+
+def list_event_cache_runs(client: firestore.Client) -> EventCacheRunsResponse:
+    """Todas as execuções retidas do Job de refresh (~200, mais recentes
+    primeiro), do Firestore. A tela filtra (status, projeto, período, só
+    com falha) e pagina no cliente — mesmo padrão das outras seções de
+    analytics do admin."""
+    return EventCacheRunsResponse(
+        runs=[_to_event_cache_run(raw) for raw in event_cache.list_cache_runs(client)]
+    )

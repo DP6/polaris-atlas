@@ -254,6 +254,8 @@ export interface EventCacheRunProject {
   access_events: number | null
   scan_events: number | null
   storage_read_object_keys: number | null
+  mode: string | null // "full" | "incremental"
+  raw_entries: number | null // tamanho do delta lido (nº de LogEntry)
 }
 
 export interface EventCacheRun {
@@ -270,6 +272,10 @@ export interface EventCacheKindStatus {
   label: string
   cached_at: string | null
   event_count: number | null
+  never_run: boolean
+  window_start: string | null
+  last_full_scan_at: string | null
+  mode: string | null // "full" | "incremental"
 }
 
 export interface EventCacheProjectStatus {
@@ -277,7 +283,13 @@ export interface EventCacheProjectStatus {
   caches: EventCacheKindStatus[]
 }
 
+// GET /event-cache/status — só freshness por projeto × domínio.
 export interface EventCacheStatusResponse {
-  runs: EventCacheRun[]
   projects: EventCacheProjectStatus[]
+}
+
+// GET /event-cache/runs — histórico completo de execuções (~200 retidas),
+// filtrado e paginado no cliente.
+export interface EventCacheRunsResponse {
+  runs: EventCacheRun[]
 }

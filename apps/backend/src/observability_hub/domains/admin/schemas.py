@@ -177,6 +177,10 @@ class EventCacheRunProject(BaseModel):
     access_events: int | None = None
     scan_events: int | None = None
     storage_read_object_keys: int | None = None
+    # Modelo incremental (jobs/refresh_event_cache.py): "full" | "incremental"
+    # deste projeto neste run, e o tamanho do delta lido (nº de LogEntry).
+    mode: str | None = None
+    raw_entries: int | None = None
 
 
 class EventCacheRun(BaseModel):
@@ -211,5 +215,15 @@ class EventCacheProjectStatus(BaseModel):
 
 
 class EventCacheStatusResponse(BaseModel):
-    runs: list[EventCacheRun]
+    # Só freshness por projeto × domínio — o histórico de execuções vive
+    # em GET /event-cache/runs (EventCacheRunsResponse), com cadência de
+    # polling própria (ver docs/specs/admin.md, aba "Caches").
     projects: list[EventCacheProjectStatus]
+
+
+class EventCacheRunsResponse(BaseModel):
+    # Todas as execuções retidas (~200, ver core/event_cache.py
+    # ::_CACHE_RUNS_KEEP) — a tela de Administração → Caches filtra e
+    # pagina no cliente, mesmo padrão das outras seções de analytics do
+    # admin (lista carregada inteira, corte no front).
+    runs: list[EventCacheRun]

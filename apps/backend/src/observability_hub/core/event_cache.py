@@ -206,7 +206,11 @@ def finish_cache_run(firestore_client: firestore.Client, run_id: str) -> None:
     )
 
 
-def list_cache_runs(firestore_client: firestore.Client, limit: int = 5) -> list[dict]:
+def list_cache_runs(
+    firestore_client: firestore.Client, limit: int = _CACHE_RUNS_KEEP
+) -> list[dict]:
+    """Execuções mais recentes primeiro. O default traz tudo que está
+    retido — a tela Administração → Caches filtra/pagina no cliente."""
     docs = (
         firestore_client.collection(_CACHE_RUNS_COLLECTION)
         .order_by("run_id", direction=firestore.Query.DESCENDING)

@@ -965,13 +965,14 @@ def test_trigger_event_cache_refresh_forwards_force_full(monkeypatch):
     assert calls[0][1] == {"force_full": True}
 
 
-def test_get_event_cache_status_builds_runs_and_project_freshness(monkeypatch):
+def test_list_event_cache_runs_builds_runs_from_firestore(monkeypatch):
     client = MagicMock()
 
-    monkeypatch.setattr(
-        service.event_cache,
-        "list_cache_runs",
-        lambda c, limit=5: [
+    captured_limit = {}
+
+    def _list_cache_runs(c, limit=200):
+        captured_limit["limit"] = limit
+        return [
             {
                 "run_id": "20260828T030000000000Z",
                 "started_at": "2026-08-28T03:00:00Z",
@@ -987,11 +988,33 @@ def test_get_event_cache_status_builds_runs_and_project_freshness(monkeypatch):
                         "access_events": 4,
                         "scan_events": 7,
                         "storage_read_object_keys": 0,
+                        "mode": "incremental",
+                        "raw_entries": 42,
                     },
                 },
             }
-        ],
-    )
+        ]
+
+    monkeypatch.setattr(service.event_cache, "list_cache_runs", _list_cache_runs)
+
+    result = service.list_event_cache_runs(client)
+
+    # traz tudo que está retido (default do list_cache_runs), não só 5
+    assert captured_limit["limit"] == 200
+    assert len(result.runs) == 1
+    run = result.runs[0]
+    assert run.status == "done"
+    # projetos ordenados (proj-a antes de proj-b)
+    assert [p.project_id for p in run.projects] == ["proj-a", "proj-b"]
+    assert run.projects[0].job_events == 10
+    assert run.projects[0].mode == "incremental"
+    assert run.projects[0].raw_entries == 42
+    assert run.projects[1].status == "quota_exceeded"
+
+
+def test_get_event_cache_status_builds_project_freshness_only(monkeypatch):
+    client = MagicMock()
+
     monkeypatch.setattr(
         service.repository,
         "list_projects",
@@ -1014,14 +1037,8 @@ def test_get_event_cache_status_builds_runs_and_project_freshness(monkeypatch):
 
     result = service.get_event_cache_status(client)
 
-    # 1 execução, projetos ordenados (proj-a antes de proj-b)
-    assert len(result.runs) == 1
-    run = result.runs[0]
-    assert run.status == "done"
-    assert [p.project_id for p in run.projects] == ["proj-a", "proj-b"]
-    assert run.projects[0].job_events == 10
-    assert run.projects[1].status == "quota_exceeded"
-
+    # /status não carrega mais o histórico de execuções (foi pro /runs)
+    assert not hasattr(result, "runs")
     # wildcard "*" NÃO entra na lista de projetos; proj-a e proj-b entram
     assert [p.project_id for p in result.projects] == ["proj-a", "proj-b"]
     # 4 domínios por projeto, na ordem canônica
