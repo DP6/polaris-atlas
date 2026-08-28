@@ -84,19 +84,22 @@ service, ver `finops-budget.md`).
 **429 residual** (cache miss durante pico, ou o Job): `list_scan_events`
 usa `core/logging_client.py::list_entries_with_retry`, que faz retry
 exponencial (backoff, deadline 30s) no 429/503 — a maioria dos picos nem
-chega ao 503. O 429 que persistir vira `LoggingQuotaExceededError` → HTTP
-**503 + `Retry-After`** (não um 500, não um resultado vazio). No Job,
+chega ao fim. O 429 que persistir vira `LoggingQuotaExceededError`, que
+`scan_partition_candidates`/`get_budget` **degradam pra resposta com
+`warning`** em vez de 503 (candidatas ainda vêm do BigQuery, sem savings;
+budget vazio). O 503 de `main.py` virou rede de segurança. No Job,
 `_refresh_project` captura `LoggingQuotaExceededError` (status
 `quota_exceeded` no log) — um 429 num projeto não interrompe os demais.
 
-**Fica no `try` principal do Job** (não isolado como storage): finops lê a
-mesma fonte que lineage (`jobservice.jobcompleted`, mesmo filtro) — se
-`list_job_events` passou, este passa. lineage e finops fazem dois scans
-separados da mesma fonte porque os dataclasses diferem (`JobEvent` sem
-`totalBilledBytes`/`timestamp`; `ScanEvent` sem `destinationTable`) e
-domínios não compartilham parsing — tradeoff aceito (1×/dia, fora do
-request path); unificar num scan cru com dois parsers fica pra depois se o
-Job virar gargalo.
+**Scan único no Job** (2026-08-28): lineage, access e finops leem a MESMA
+fonte (`jobservice.jobcompleted`, mesmo filtro). O Job faz **um** scan via
+`core/logging_client.py::bigquery_job_events_filter` +
+`list_entries_with_retry` e passa os `LogEntry` crus pros 3 parsers
+(`parse_job_events`/`parse_access_events`/`parse_scan_events`) — não são
+mais 3 scans idênticos. `list_scan_events`/`parse_scan_events` continuam
+separados: o primeiro pro request-path fallback, o segundo pro Job. O
+refresh de finops fica no `try` principal do Job (não isolado como
+storage).
 
 ---
 
@@ -222,7 +225,7 @@ apps/backend/src/observability_hub/
 | Cache hit | `cache_updated_at` na resposta = quando o Job (ou write-through de outra requisição) gerou o blob; Cloud Logging não é tocado |
 | Cache miss | Scan ao vivo, grava o blob, `cache_updated_at = null` (dado veio ao vivo nesta chamada) |
 | Falha ao ler/gravar o cache (GCS fora do ar, bucket sem IAM) | Logada e ignorada — cai pro scan ao vivo, nunca derruba a resposta |
-| `429 TooManyRequests` no scan ao vivo (cota `read_requests` do projeto) | `LoggingQuotaExceededError` → HTTP 503 + `Retry-After: 60` (não 500, não resultado vazio) |
+| `429 TooManyRequests` no scan ao vivo (cota `read_requests` do projeto) | `list_entries_with_retry` retenta com backoff (deadline 30s); o 429 persistente vira `LoggingQuotaExceededError`, que `scan_partition_candidates`/`get_budget` **degradam pra resposta com `warning`** (candidatas ainda listadas, sem savings; budget vazio) — não 503, não "Failed to fetch". `main.py` ainda mapearia pra 503 num caminho não capturado |
 
 ---
 
@@ -236,7 +239,7 @@ Cobre `get_scan_events_cached` (usado por `partition-candidates` **e**
 | AC-001 | Cache hit não chama `logging_client.list_entries` e devolve `cache_updated_at` do metadado | `test_get_scan_events_cached_returns_cache_hit_without_calling_list_entries` |
 | AC-002 | Cache miss faz o scan ao vivo, grava o blob + `record_project_seen`, e retorna `cache_updated_at = None` | `test_get_scan_events_cached_falls_back_and_writes_cache_on_miss` |
 | AC-003 | Falha ao ler o cache (qualquer exceção, não só miss) cai pro scan ao vivo em vez de propagar | `test_get_scan_events_cached_falls_back_to_live_scan_when_cache_read_fails` |
-| AC-004 | `429 TooManyRequests` no scan ao vivo é re-tentado com backoff exponencial (`list_entries_with_retry`, deadline 30s); o que persistir vira `LoggingQuotaExceededError` (HTTP 503 + `Retry-After` em `main.py`) | `test_retries_on_too_many_requests_then_succeeds`, `test_persistent_too_many_requests_raises_quota_exceeded`, `test_get_scan_events_cached_raises_quota_exceeded_on_too_many_requests`, `test_handle_logging_quota_exceeded_returns_503_with_retry_after` |
+| AC-004 | `429` no scan ao vivo é re-tentado com backoff (`list_entries_with_retry`, deadline 30s); o que persistir vira `LoggingQuotaExceededError`, degradado pra resposta com `warning` no service (não 503) | `test_retries_on_too_many_requests_then_succeeds`, `test_persistent_too_many_requests_raises_quota_exceeded`, `test_scan_partition_candidates_degrades_to_warning_on_quota_exceeded`, `test_get_budget_degrades_to_warning_on_quota_exceeded` |
 | AC-005 | Falta de `roles/logging.viewer` no scan ao vivo propaga como `LoggingAccessDeniedError` | `test_get_scan_events_cached_propagates_access_denied` |
 | AC-006 | `ScanEvent` sobrevive a serialize→deserialize (com e sem `timestamp`/`query_text`) | `test_serialize_deserialize_scan_events_round_trips`, `test_deserialize_scan_events_handles_no_timestamp_and_no_query_text` |
 | AC-007 | O Job diário grava o cache de `finops_scan_events` pra cada projeto conhecido, no `try` principal (junto de lineage/access) | `test_refresh_project_writes_lineage_access_finops_and_storage_caches` |
@@ -247,7 +250,7 @@ Cobre `get_scan_events_cached` (usado por `partition-candidates` **e**
 | ID | Suposição | Status |
 |---|---|---|
 | ASM-001 | Um cache único de 30 dias de `ScanEvent` serve tanto `partition-candidates` (janela fixa 30d) quanto `budget` (recorte month-to-date por filtro no service), porque `ScanEvent` carrega `timestamp` por evento. Nos ~1 dia/ano em que a janela month-to-date passa de 30d (fim de mês de 31 dias), o começo do mês pode faltar — já coberto pelo `_BUDGET_RETENTION_CAVEAT` pré-existente, sem regressão. | confirmada |
-| ASM-002 | finops e lineage lendo a mesma fonte (`jobservice.jobcompleted`) com dois scans separados no Job é aceitável (1×/dia, fora do request path). Unificar num scan cru + dois parsers só se o Job virar gargalo de cota. | confirmada |
+| ASM-002 | ~~finops e lineage lendo a mesma fonte com scans separados no Job é aceitável.~~ **Invalidada 2026-08-28**: no primeiro projeto de volume real (`observability-hub-dev`) os 3 scans idênticos (lineage/access/finops) estouravam a cota antes de gravar qualquer cache. Job passou a fazer **um** scan → 3 parsers (`bigquery_job_events_filter` + `parse_*`). | invalidada |
 
 ## Perguntas em aberto
 

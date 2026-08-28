@@ -5,6 +5,57 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Um scan de audit log no job de refresh + 429 degrada pra warning (não 503) em access/lineage/finops
+
+Continuação do fix do 429 do Cloud Logging. Depois de cache + retry + 503,
+a tela de **Acesso** ainda dava erro em dev: 503 em vez de "Failed to
+fetch", mas ainda quebrada. Causa: o cache de `access` do projeto estava
+frio e o request path não conseguia populá-lo (scan ao vivo × cota
+saturada).
+
+### Diagnóstico
+
+`observability-hub-dev` como projeto alvo tem volume ALTO de
+`jobservice.jobcompleted` (são as próprias queries do Hub — profiling,
+PII, catálogo). O job diário `_refresh_project` fazia **3 scans idênticos
+de 30 dias** desse filtro (lineage, access, finops), triplicando o
+consumo da cota `read_requests`. Num projeto de volume alto isso estoura
+os 60/min no meio do primeiro projeto, o `_refresh_project` aborta, e
+**nenhum** dos 4 caches é gravado — então "Atualizar caches" também não
+resolvia.
+
+### O que foi feito
+
+- **Job faz UM scan, alimenta 3 parsers.**
+  `core/logging_client.py::bigquery_job_events_filter(lookback_days)`
+  centraliza o filtro compartilhado; cada repo ganhou um `parse_*`
+  público (`parse_job_events`/`parse_access_events`/`parse_scan_events`)
+  separado do `list_*` (que continua pro request-path fallback). O job
+  chama `list_entries_with_retry` uma vez e passa os `LogEntry` crus pros
+  3 parsers → ~3× menos leitura de cota no refresh.
+- **429 persistente degrada pra warning, não 503**, em access, lineage
+  (grafo + órfãs) e finops (partition-candidates + budget) — mesmo
+  tratamento que `storage` já dava pro waste scanner 6.2. A tela abre
+  vazia com um aviso ("limite de leitura de audit logs... um admin pode
+  forçar 'Atualizar caches'") em vez de um erro. Durante a expansão do
+  grafo de lineage, um projeto não-raiz com 429 vira soft-fail (não
+  expande a partir dele, o resto do grafo continua) — igual ao
+  tratamento de `LoggingAccessDeniedError` que já existia lá.
+- `LoggingQuotaExceededError` → HTTP 503 (`main.py`) continua como rede
+  de segurança pra qualquer caminho que não capture a exceção.
+- `tests/unit/jobs/test_refresh_event_cache.py` reescrito pro modelo de
+  scan único; testes de degradação nos 3 serviços.
+
+### Erros cometidos e aprendizados
+
+- A ideia de "3 scans idênticos, tradeoff aceito (1×/dia, fora do
+  request path)" — registrada no CHANGELOG do fix do cache de finops —
+  não sobreviveu ao primeiro projeto de volume real. O tradeoff só valia
+  enquanto o volume era baixo; virou a causa direta de o cache nunca
+  popular. Unificado agora.
+
+---
+
 ## Retry com backoff no scan de audit log (core/logging_client.py::list_entries_with_retry)
 
 Terceira e última parte da frente do 429 do Cloud Logging (depois do

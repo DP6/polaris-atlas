@@ -317,6 +317,45 @@ def _stub_budget_events(monkeypatch, events):
     )
 
 
+def _stub_quota_exceeded(monkeypatch):
+    def _raise(*a, **kw):
+        raise service.LoggingQuotaExceededError("proj")
+
+    monkeypatch.setattr(service.repository, "get_scan_events_cached", _raise)
+
+
+def test_scan_partition_candidates_degrades_to_warning_on_quota_exceeded(monkeypatch):
+    _stub_partition_common(
+        monkeypatch,
+        all_tables=[("RAW", "big_table")],
+        metadata={"proj.RAW.big_table": _bq_table(num_bytes=2_000_000_000)},
+        date_columns_by_table={("RAW", "big_table"): ["event_date"]},
+    )
+    _stub_quota_exceeded(monkeypatch)
+
+    result = service.scan_partition_candidates(
+        _fake_client(), MagicMock(), MagicMock(), MagicMock(), "proj"
+    )
+
+    # Sem eventos de custo observado -> candidatas ainda listadas (a parte
+    # que vem do BigQuery), mas sem savings e com o aviso de cota.
+    assert result.cache_updated_at is None
+    assert result.warning is not None
+    assert "limite de leitura de audit logs" in result.warning
+
+
+def test_get_budget_degrades_to_warning_on_quota_exceeded(monkeypatch):
+    _stub_quota_exceeded(monkeypatch)
+
+    result = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj")
+
+    assert result.groups == []
+    assert result.top_queries == []
+    assert result.cache_updated_at is None
+    assert result.warning is not None
+    assert "limite de leitura de audit logs" in result.warning
+
+
 def _last_day_of_previous_month():
     return _now().replace(day=1) - timedelta(days=1)
 

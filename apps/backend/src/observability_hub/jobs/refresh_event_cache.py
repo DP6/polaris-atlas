@@ -7,16 +7,16 @@ Terraform cloud-run-job) — `python -m observability_hub.jobs.refresh_event_cac
 
 Não é um domínio — orquestra lineage, access, finops, storage e admin
 (fonte da lista de projetos), mesma posição arquitetural de main.py.
-Reaproveita as funções de scan já existentes (list_job_events/
-list_access_events/list_scan_events/list_read_object_keys) sem duplicar
-parsing; só adiciona a escrita no cache compartilhado
-(core/event_cache.py). lineage e finops leem a mesma fonte de audit log
-(jobservice.jobcompleted), com dois scans separados porque os dataclasses
-diferem (JobEvent x ScanEvent) e domínios não compartilham parsing
-(CLAUDE.md) — tradeoff aceito (1x/dia, fora do request path). O refresh
-de storage é best-effort e isolado do de lineage/access/finops (ver
-_refresh_storage_read_keys) porque Data Access audit logs do GCS podem
-não estar habilitados no projeto (docs/specs/storage.md seção 6.2).
+lineage, access e finops leem a MESMA fonte de audit log
+(`jobservice.jobcompleted`) — o Job faz **um único scan** do Cloud
+Logging (via core/logging_client.py::bigquery_job_events_filter) e
+alimenta os 3 parsers (`parse_job_events`/`parse_access_events`/
+`parse_scan_events`), em vez de 3 scans idênticos que triplicavam a
+leitura da cota `read_requests` do projeto e faziam o refresh falhar
+inteiro em projeto de volume alto. O refresh de storage é best-effort e
+isolado (ver _refresh_storage_read_keys) — filtro diferente
+(`storage.objects.get`) e Data Access audit logs do GCS podem não estar
+habilitados no projeto (docs/specs/storage.md seção 6.2).
 """
 
 import json
@@ -29,7 +29,11 @@ from google.cloud import logging as cloud_logging
 from observability_hub.core import event_cache
 from observability_hub.core.exceptions import LoggingAccessDeniedError, LoggingQuotaExceededError
 from observability_hub.core.firestore import get_firestore_client
-from observability_hub.core.logging_client import get_logging_client
+from observability_hub.core.logging_client import (
+    bigquery_job_events_filter,
+    get_logging_client,
+    list_entries_with_retry,
+)
 from observability_hub.core.storage_client import get_storage_client
 from observability_hub.domains.access import repository as access_repository
 from observability_hub.domains.admin import repository as admin_repository
@@ -86,22 +90,29 @@ def _refresh_project(
     project_id: str,
 ) -> None:
     try:
-        job_events = lineage_repository.list_job_events(logging_client, project_id)
+        # UM scan de jobservice.jobcompleted (30d) alimenta lineage, access
+        # e finops — os 3 leem a mesma fonte, só o parser difere. Sem isso
+        # eram 3 scans idênticos e o refresh estourava a cota num projeto
+        # de volume alto antes de gravar qualquer cache.
+        raw_job_entries = list_entries_with_retry(
+            logging_client,
+            resource_names=[f"projects/{project_id}"],
+            filter_=bigquery_job_events_filter(lineage_repository.LOOKBACK_DAYS),
+            page_size=1000,
+            project_id=project_id,
+        )
+
+        job_events = lineage_repository.parse_job_events(raw_job_entries)
         lineage_repository.write_job_events_cache(
             storage_client, firestore_client, project_id, job_events
         )
 
-        access_events = access_repository.list_access_events(logging_client, project_id)
+        access_events = access_repository.parse_access_events(raw_job_entries)
         access_repository.write_access_events_cache(
             storage_client, firestore_client, project_id, access_events
         )
 
-        # finops lê a mesma fonte que lineage (jobservice.jobcompleted) —
-        # se list_job_events passou, este passa. Fica no try principal (não
-        # isolado como storage), já que não depende de audit log opcional.
-        scan_events = finops_repository.list_scan_events(
-            logging_client, project_id, finops_repository.LOOKBACK_DAYS
-        )
+        scan_events = finops_repository.parse_scan_events(raw_job_entries)
         finops_repository.write_scan_events_cache(
             storage_client, firestore_client, project_id, scan_events
         )

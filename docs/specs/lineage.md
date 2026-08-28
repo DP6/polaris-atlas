@@ -284,9 +284,14 @@ de "failed to fetch" recorrente em Lineage, Órfãs e Mapa de Acesso.
 infra em `infra/terraform/modules/cloud-run-job`) roda 1x/dia (D-1, cron
 `"0 3 * * *"` UTC via Cloud Scheduler) e, para cada projeto conhecido
 (`domains/admin` `hub_projects` ∪ projetos vistos via cache miss, ver
-`core/event_cache.py::list_seen_projects`), chama as mesmas funções de
-scan já existentes (`list_job_events`/`list_access_events`, inalteradas)
-e grava o resultado num cache compartilhado:
+`core/event_cache.py::list_seen_projects`), faz **um único scan** de
+`jobservice.jobcompleted` (via `core/logging_client.py::bigquery_job_events_filter`
++ `list_entries_with_retry`) e passa os `LogEntry` crus pros 3 parsers
+`parse_job_events`/`parse_access_events`/`parse_scan_events`
+(lineage/access/finops leem a mesma fonte) — desde 2026-08-28, antes eram
+3 scans idênticos que estouravam a cota `read_requests` em projeto de
+volume alto. `list_job_events` (scan+parse fundidos) fica pro request-path
+fallback. Grava o resultado num cache compartilhado:
 - Payload grande (lista de eventos serializada) → bucket GCS dedicado
   (`google_storage_bucket.event_cache`, `environments/{dev,prod}/main.tf`)
   — Firestore tem limite de 1MiB/doc, facilmente ultrapassado em 30 dias
@@ -385,7 +390,7 @@ apps/backend/src/observability_hub/
 | Nenhum evento de job no projeto raiz | `warning` populado (mesmo texto/causas da v1), `nodes`/`edges` vazios |
 | `max_hops` fora do intervalo 1–15 | HTTP 422 (validação do `Query(ge=1, le=15)`) |
 | Projeto nunca varrido pelo Job (cache miss) | Fallback síncrono (scan ao vivo), resultado gravado no cache pra próxima chamada — `cache_updated_at: null` só nesta resposta |
-| `429 TooManyRequests` no fallback ao vivo (cota `read_requests`/min do projeto, dev+prod compartilham) | `LoggingQuotaExceededError` → HTTP **503 + `Retry-After: 60`**, não um 500 "Failed to fetch". Antes disso, `core/logging_client.py::list_entries_with_retry` faz retry exponencial (backoff, deadline 30s) no 429/503 — a maioria dos picos nem chega ao 503 |
+| `429 TooManyRequests` no fallback ao vivo (cota `read_requests`/min do projeto, dev+prod compartilham) | `list_entries_with_retry` faz retry exponencial (backoff, deadline 30s); o 429 que persistir vira `LoggingQuotaExceededError`. No projeto **raiz** de `get_table_lineage`/`get_orphans`: degrada pra grafo/lista vazia com `warning` (não 503). Num projeto **não-raiz** durante a expansão: soft-fail (não expande a partir dele, o resto do grafo continua) — igual ao tratamento de `LoggingAccessDeniedError`. `main.py` ainda mapearia pra 503 num caminho não capturado |
 | `lookback_days` custom em `/orphans` | Cache ignorado (sempre scan ao vivo) — `JobEvent` não carrega timestamp por evento, não dá pra recortar um cache de 30 dias pra outra janela |
 | Job falha num projeto (acesso negado, projeto inexistente/descontinuado, ou qualquer outro erro) | Logado e pulado — não derruba o refresh dos demais projetos conhecidos |
 | Admin dispara o gatilho manual enquanto o ciclo diário já está rodando | Duas execuções do Job em paralelo — sem deduplicação na v1, ambas terminam gravando o mesmo resultado (idempotente) |

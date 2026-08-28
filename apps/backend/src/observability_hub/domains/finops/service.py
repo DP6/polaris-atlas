@@ -21,7 +21,7 @@ from observability_hub.core.bigquery import (
     resolve_dataset_region,
 )
 from observability_hub.core.config import settings
-from observability_hub.core.exceptions import InvalidSamplePercentError
+from observability_hub.core.exceptions import InvalidSamplePercentError, LoggingQuotaExceededError
 from observability_hub.domains.finops import repository, sql_builder
 from observability_hub.domains.finops.repository import ScanEvent, TableRefTuple
 from observability_hub.domains.finops.schemas import (
@@ -82,6 +82,33 @@ _COLUMN_TYPE_PARTIAL_RESULT_WARNING = (
     "{total} tabelas."
 )
 
+_QUOTA_WARNING = (
+    "O limite de leitura de audit logs do projeto '{project_id}' foi atingido "
+    "temporariamente (cota do Cloud Logging, compartilhada entre ambientes). "
+    "Os números voltam assim que o cache for atualizado — um admin do Hub "
+    "pode forçar agora em Administração → 'Atualizar caches'; senão, "
+    "recarregue em alguns minutos."
+)
+
+
+def _scan_events_or_quota_warning(
+    logging_client: cloud_logging.Client,
+    storage_client: storage.Client,
+    firestore_client: firestore.Client,
+    project_id: str,
+) -> tuple[list[ScanEvent], datetime | None, str | None]:
+    """Cache frio + cota do Cloud Logging saturada → degrada pra resultado
+    vazio com aviso em vez de 503 (mesmo tratamento de
+    domains/access/service.py e do waste scanner 6.2 de storage). Retorna
+    (events, cache_updated_at, quota_warning)."""
+    try:
+        events, cache_updated_at = repository.get_scan_events_cached(
+            logging_client, storage_client, firestore_client, project_id
+        )
+        return events, cache_updated_at, None
+    except LoggingQuotaExceededError:
+        return [], None, _QUOTA_WARNING.format(project_id=project_id)
+
 
 def _human_bytes(num_bytes: int) -> str:
     value = float(num_bytes)
@@ -129,7 +156,7 @@ def scan_partition_candidates(
             continue  # pequena demais pra valer a pena sinalizar
         size_candidates.append((dataset_id, table_id, bq_table))
 
-    events, cache_updated_at = repository.get_scan_events_cached(
+    events, cache_updated_at, quota_warning = _scan_events_or_quota_warning(
         logging_client, storage_client, firestore_client, project_id
     )
     billed_bytes_by_table: dict[tuple[str, str], int] = {}
@@ -188,11 +215,14 @@ def scan_partition_candidates(
         lookback_days=_PARTITION_CANDIDATE_LOOKBACK_DAYS,
         candidates=candidates,
         cache_updated_at=cache_updated_at,
-        warning=_EMPTY_RESULT_WARNING.format(
-            days=_PARTITION_CANDIDATE_LOOKBACK_DAYS, project_id=project_id
-        )
-        if not events
-        else None,
+        warning=quota_warning
+        or (
+            _EMPTY_RESULT_WARNING.format(
+                days=_PARTITION_CANDIDATE_LOOKBACK_DAYS, project_id=project_id
+            )
+            if not events
+            else None
+        ),
     )
 
 
@@ -234,7 +264,7 @@ def get_budget(
     # abaixo. Nos ~1 dia/ano em que lookback_days passa de 30 (fim de mês
     # de 31 dias), o começo do mês pode faltar — já coberto pelo
     # _BUDGET_RETENTION_CAVEAT, comportamento pré-existente.
-    events, cache_updated_at = repository.get_scan_events_cached(
+    events, cache_updated_at, quota_warning = _scan_events_or_quota_warning(
         logging_client, storage_client, firestore_client, project_id
     )
 
@@ -303,11 +333,14 @@ def get_budget(
         projected_month_total_usd=round(daily_average * days_in_month, 6),
     )
 
-    warning = None
-    if not events:
+    if quota_warning is not None:
+        warning = quota_warning
+    elif not events:
         warning = _EMPTY_RESULT_WARNING.format(days=lookback_days, project_id=project_id)
     elif lookback_days > 30:
         warning = _BUDGET_RETENTION_CAVEAT.format(days=lookback_days)
+    else:
+        warning = None
 
     return BudgetResponse(
         project_id=project_id,

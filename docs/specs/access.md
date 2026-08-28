@@ -194,7 +194,7 @@ duplicado aqui. Diferenças específicas deste domínio:
 | Job executado pela própria SA de runtime do Hub (`backend-run@<projeto-do-hub>.iam.gserviceaccount.com`) | Excluído da agregação — profiling/PII rodado pela UI usa essa SA pra consultar o BigQuery, não é um consumidor externo real (ver "Exclusão da SA do próprio Hub") |
 | Job de outra service account (ex: pipeline externo) | Conta normalmente, `is_service_account: true` |
 | Projeto nunca varrido pelo Job de refresh (cache miss) | Fallback síncrono (scan ao vivo), resultado gravado no cache pra próxima chamada — `cache_updated_at: null` só nesta resposta |
-| `429 TooManyRequests` no fallback ao vivo (cota `read_requests`/min do projeto, dev+prod compartilham) | `LoggingQuotaExceededError` → HTTP **503 + `Retry-After: 60`**, não um 500 "Failed to fetch". Antes disso, `core/logging_client.py::list_entries_with_retry` faz retry exponencial (backoff, deadline 30s) no 429/503 — a maioria dos picos nem chega ao 503 |
+| `429 TooManyRequests` no fallback ao vivo (cota `read_requests`/min do projeto, dev+prod compartilham) | `list_entries_with_retry` faz retry exponencial (backoff, deadline 30s) no 429/503; o que persistir vira `LoggingQuotaExceededError`, que o service **degrada pra resposta vazia com `warning`** (não 503) — mesmo tratamento best-effort de `storage`. O `warning` orienta usar Administração → "Atualizar caches". `main.py` ainda mapearia pra 503 se algum caminho não capturasse |
 
 ---
 

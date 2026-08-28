@@ -401,6 +401,20 @@ def test_list_job_events_parses_valid_entries_and_skips_invalid_ones():
     assert 'resource.type="bigquery_resource"' in call_kwargs["filter_"]
 
 
+def test_parse_job_events_is_pure_and_skips_invalid_entries():
+    valid_payload = {
+        "serviceData": {
+            "jobCompletedEvent": {
+                "job": {"jobName": {"jobId": "job1"}, "jobStatistics": {"referencedTables": []}}
+            }
+        }
+    }
+
+    events = repository.parse_job_events([_entry(valid_payload), _entry(None), _entry({})])
+
+    assert [e.job_id for e in events] == ["job1"]
+
+
 def test_list_job_events_uses_custom_lookback_days():
     client = MagicMock()
     client.list_entries.return_value = []

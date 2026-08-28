@@ -25,6 +25,7 @@ fetch" no browser).
 
 import json
 import logging
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 
 from google.api_core import exceptions as gapi_exceptions
@@ -34,6 +35,23 @@ from google.cloud import logging as cloud_logging
 from observability_hub.core.exceptions import LoggingAccessDeniedError, LoggingQuotaExceededError
 
 logger = logging.getLogger(__name__)
+
+
+def bigquery_job_events_filter(lookback_days: int) -> str:
+    """Filtro do Cloud Logging pros eventos de job completado do BigQuery
+    (`jobservice.jobcompleted`, formato legado AuditData) — a MESMA fonte
+    lida por domains/lineage, domains/access e domains/finops. Centralizado
+    aqui pra jobs/refresh_event_cache.py poder fazer UM scan e alimentar os
+    3 parsers (parse_job_events/parse_access_events/parse_scan_events), em
+    vez de 3 scans idênticos que triplicavam a leitura da cota
+    read_requests do projeto."""
+    cutoff = (datetime.now(UTC) - timedelta(days=lookback_days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return (
+        'resource.type="bigquery_resource" '
+        'protoPayload.methodName="jobservice.jobcompleted" '
+        f'timestamp>="{cutoff}"'
+    )
+
 
 # Cota `logging.googleapis.com/read_requests` (60/min por projeto, default)
 # — um scan paginado de 30 dias de audit log estoura fácil sob

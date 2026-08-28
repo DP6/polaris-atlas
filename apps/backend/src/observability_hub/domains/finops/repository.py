@@ -20,7 +20,7 @@ import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 
 from google.api_core.exceptions import Forbidden
 from google.cloud import bigquery, firestore, storage
@@ -29,7 +29,10 @@ from google.cloud import logging as cloud_logging
 from observability_hub.core import event_cache
 from observability_hub.core.config import settings
 from observability_hub.core.exceptions import ProjectAccessDeniedError
-from observability_hub.core.logging_client import list_entries_with_retry
+from observability_hub.core.logging_client import (
+    bigquery_job_events_filter,
+    list_entries_with_retry,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -156,19 +159,20 @@ def list_scan_events(
     lookback_days > 30 esbarra na retenção padrão dos audit logs do Cloud
     Logging (30 dias, salvo bucket/sink customizado) — ver
     docs/specs/finops-waste-scanner.md, "Casos de borda"."""
-    cutoff = (datetime.now(UTC) - timedelta(days=lookback_days)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    filter_ = (
-        'resource.type="bigquery_resource" '
-        'protoPayload.methodName="jobservice.jobcompleted" '
-        f'timestamp>="{cutoff}"'
-    )
     entries = list_entries_with_retry(
         client,
         resource_names=[f"projects/{project_id}"],
-        filter_=filter_,
+        filter_=bigquery_job_events_filter(lookback_days),
         page_size=_PAGE_SIZE,
         project_id=project_id,
     )
+    return parse_scan_events(entries)
+
+
+def parse_scan_events(entries: list[cloud_logging.LogEntry]) -> list[ScanEvent]:
+    """Parsing puro (sem I/O) — separado de list_scan_events pra
+    jobs/refresh_event_cache.py alimentar lineage/access/finops de um scan
+    único do Cloud Logging (ver core/logging_client.py::bigquery_job_events_filter)."""
     return [event for entry in entries if (event := _parse_entry(entry)) is not None]
 
 

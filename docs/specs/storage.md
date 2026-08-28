@@ -237,14 +237,16 @@ existentes, então não há novo recurso GCP pra registrar em
 **429 no fallback ao vivo** (2026-08-28): se o scan ao vivo em cache miss
 estourar a cota `read_requests`/min do projeto (dev+prod compartilham o
 balde), `get_read_object_keys_cached` levanta `LoggingQuotaExceededError`.
-Diferente dos outros domínios (que devolvem HTTP 503), aqui
 `_read_object_keys_or_warning` **degrada pra warning** `config_based` —
 mesmo tratamento de `LoggingAccessDeniedError`, porque a checagem 6.2 é
 best-effort e um 429 transitório não deve derrubar `waste-candidates`
-inteiro (a checagem 6.1 já é útil sozinha). Antes de chegar ao
-`LoggingQuotaExceededError`, `core/logging_client.py::list_entries_with_retry`
-faz retry exponencial (backoff, deadline 30s) no 429/503 — a maioria dos
-picos nem chega ao warning.
+inteiro (a checagem 6.1 já é útil sozinha). `domains/access`,
+`domains/lineage` e `domains/finops` adotaram o mesmo padrão de degradar
+pra `warning` (2026-08-28) — o 503 de `main.py` virou só rede de
+segurança. Antes de chegar ao `LoggingQuotaExceededError`,
+`core/logging_client.py::list_entries_with_retry` faz retry exponencial
+(backoff, deadline 30s) no 429/503 — a maioria dos picos nem chega ao
+warning.
 
 ### 6.3 Estimativa de economia
 

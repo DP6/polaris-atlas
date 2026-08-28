@@ -27,14 +27,17 @@ import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 
 from google.cloud import bigquery, firestore, storage
 from google.cloud import logging as cloud_logging
 
 from observability_hub.core import event_cache
 from observability_hub.core.config import settings
-from observability_hub.core.logging_client import list_entries_with_retry
+from observability_hub.core.logging_client import (
+    bigquery_job_events_filter,
+    list_entries_with_retry,
+)
 
 LOOKBACK_DAYS = 30
 _PAGE_SIZE = 1000
@@ -159,19 +162,20 @@ def list_job_events(
     domains/lineage/service.py. lookback_days ajustável só usado por
     get_orphans — get_table_lineage/upstream/downstream continuam no
     default do módulo (LOOKBACK_DAYS)."""
-    cutoff = (datetime.now(UTC) - timedelta(days=lookback_days)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    filter_ = (
-        'resource.type="bigquery_resource" '
-        'protoPayload.methodName="jobservice.jobcompleted" '
-        f'timestamp>="{cutoff}"'
-    )
     entries = list_entries_with_retry(
         client,
         resource_names=[f"projects/{project_id}"],
-        filter_=filter_,
+        filter_=bigquery_job_events_filter(lookback_days),
         page_size=_PAGE_SIZE,
         project_id=project_id,
     )
+    return parse_job_events(entries)
+
+
+def parse_job_events(entries: list[cloud_logging.LogEntry]) -> list[JobEvent]:
+    """Parsing puro (sem I/O) — separado de list_job_events pra
+    jobs/refresh_event_cache.py alimentar lineage/access/finops de um scan
+    único do Cloud Logging (ver core/logging_client.py::bigquery_job_events_filter)."""
     return [event for entry in entries if (event := _parse_entry(entry)) is not None]
 
 
