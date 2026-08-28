@@ -72,6 +72,74 @@ def test_set_cache_metadata_writes_expected_shape():
     assert data["cached_at"] is not None
 
 
+def test_set_cache_metadata_persists_window_fields():
+    firestore_client = MagicMock()
+    firestore_client.collection.return_value.document.return_value.get.return_value.exists = False
+    from datetime import UTC, datetime
+
+    window_start = datetime(2026, 7, 28, tzinfo=UTC)
+    anchor = datetime(2026, 8, 28, 3, 0, tzinfo=UTC)
+
+    data = event_cache.set_cache_metadata(
+        firestore_client,
+        "lineage",
+        "proj",
+        event_count=5,
+        window_start=window_start,
+        last_scan_receive_ts=anchor,
+        last_full_scan_at=anchor,
+        mode="incremental",
+    )
+
+    assert data["window_start"] == window_start
+    assert data["last_scan_receive_ts"] == anchor
+    assert data["last_full_scan_at"] == anchor
+    assert data["mode"] == "incremental"
+
+
+def test_set_cache_metadata_preserves_last_full_scan_at_when_not_given():
+    firestore_client = MagicMock()
+    existing_doc = firestore_client.collection.return_value.document.return_value.get.return_value
+    existing_doc.exists = True
+    existing_doc.to_dict.return_value = {
+        "first_cached_at": "2026-01-01T00:00:00Z",
+        "last_full_scan_at": "2026-08-20T03:00:00Z",
+    }
+
+    data = event_cache.set_cache_metadata(
+        firestore_client, "lineage", "proj", event_count=1, mode="incremental"
+    )
+
+    assert data["last_full_scan_at"] == "2026-08-20T03:00:00Z"
+    assert data["first_cached_at"] == "2026-01-01T00:00:00Z"
+
+
+# --- merge_dedup -------------------------------------------------------------
+
+
+def test_merge_dedup_new_wins_on_key_collision():
+    from types import SimpleNamespace
+
+    existing = [SimpleNamespace(job_id="a", v=1), SimpleNamespace(job_id="b", v=1)]
+    new = [SimpleNamespace(job_id="b", v=2), SimpleNamespace(job_id="c", v=2)]
+
+    merged = event_cache.merge_dedup(existing, new, key=lambda e: e.job_id)
+
+    by_id = {e.job_id: e.v for e in merged}
+    assert by_id == {"a": 1, "b": 2, "c": 2}
+
+
+def test_merge_dedup_keeps_all_items_with_falsy_key():
+    from types import SimpleNamespace
+
+    existing = [SimpleNamespace(job_id=""), SimpleNamespace(job_id="")]
+    new = [SimpleNamespace(job_id="")]
+
+    merged = event_cache.merge_dedup(existing, new, key=lambda e: e.job_id)
+
+    assert len(merged) == 3
+
+
 def test_record_project_seen_writes_project_id():
     firestore_client = MagicMock()
 
@@ -91,3 +159,61 @@ def test_list_seen_projects_returns_document_ids():
     firestore_client.collection.return_value.stream.return_value = [doc_a, doc_b]
 
     assert event_cache.list_seen_projects(firestore_client) == ["proj-a", "proj-b"]
+
+
+def test_start_cache_run_creates_running_doc_and_returns_id():
+    firestore_client = MagicMock()
+    # _prune_cache_runs itera o stream — vazio, nada a apagar.
+    firestore_client.collection.return_value.order_by.return_value.stream.return_value = []
+
+    run_id = event_cache.start_cache_run(firestore_client, ["a", "b", "c"])
+
+    assert run_id
+    doc_ref = firestore_client.collection.return_value.document.return_value
+    written = doc_ref.set.call_args.args[0]
+    assert written["run_id"] == run_id
+    assert written["status"] == "running"
+    assert written["project_count"] == 3
+    assert written["projects"] == {}
+    assert written["finished_at"] is None
+
+
+def test_record_cache_run_project_updates_dotted_path():
+    firestore_client = MagicMock()
+
+    event_cache.record_cache_run_project(
+        firestore_client, "run-1", "proj-x", "ok", {"job_events": 5, "access_events": 2}
+    )
+
+    doc_ref = firestore_client.collection.return_value.document.return_value
+    firestore_client.collection.return_value.document.assert_called_with("run-1")
+    update_arg = doc_ref.update.call_args.args[0]
+    assert "projects.proj-x" in update_arg
+    entry = update_arg["projects.proj-x"]
+    assert entry["status"] == "ok"
+    assert entry["job_events"] == 5
+    assert entry["finished_at"] is not None
+
+
+def test_finish_cache_run_marks_done():
+    firestore_client = MagicMock()
+
+    event_cache.finish_cache_run(firestore_client, "run-1")
+
+    doc_ref = firestore_client.collection.return_value.document.return_value
+    update_arg = doc_ref.update.call_args.args[0]
+    assert update_arg["status"] == "done"
+    assert update_arg["finished_at"] is not None
+
+
+def test_list_cache_runs_orders_by_run_id_desc():
+    firestore_client = MagicMock()
+    query = firestore_client.collection.return_value.order_by.return_value.limit.return_value
+    query.stream.return_value = [MagicMock(to_dict=lambda: {"run_id": "r2"})]
+
+    runs = event_cache.list_cache_runs(firestore_client, limit=3)
+
+    assert runs == [{"run_id": "r2"}]
+    firestore_client.collection.return_value.order_by.assert_called_once()
+    _, kwargs = firestore_client.collection.return_value.order_by.call_args
+    assert kwargs.get("direction") is not None

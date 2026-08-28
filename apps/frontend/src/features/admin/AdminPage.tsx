@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AdminAccessRequestsTab } from '@/features/admin/AdminAccessRequestsTab'
+import { AdminCachesTab } from '@/features/admin/AdminCachesTab'
 import { AdminGroupsTab } from '@/features/admin/AdminGroupsTab'
 import { AdminProjectsTab } from '@/features/admin/AdminProjectsTab'
 import { AdminUsageTab } from '@/features/admin/AdminUsageTab'
@@ -13,6 +14,7 @@ const USERS_TAB = 'users'
 const PROJECTS_TAB = 'projects'
 const GROUPS_TAB = 'groups'
 const REQUESTS_TAB = 'requests'
+const CACHES_TAB = 'caches'
 const USAGE_TAB = 'usage'
 
 export function AdminPage() {
@@ -54,6 +56,7 @@ export function AdminPage() {
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value={CACHES_TAB}>Caches</TabsTrigger>
           <TabsTrigger value={USAGE_TAB}>Uso do Hub</TabsTrigger>
         </TabsList>
 
@@ -71,6 +74,10 @@ export function AdminPage() {
 
         <TabsContent value={REQUESTS_TAB}>
           <AdminAccessRequestsTab />
+        </TabsContent>
+
+        <TabsContent value={CACHES_TAB}>
+          <AdminCachesTab />
         </TabsContent>
 
         <TabsContent value={USAGE_TAB}>

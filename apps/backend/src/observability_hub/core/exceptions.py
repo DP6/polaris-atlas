@@ -22,6 +22,42 @@ class LoggingAccessDeniedError(Exception):
         super().__init__(f"Acesso negado aos audit logs do projeto '{project_id}'.")
 
 
+class LoggingQuotaExceededError(Exception):
+    """A cota `ReadRequestsPerMinutePerProject` do Cloud Logging
+    (`logging.googleapis.com/read_requests`, default 60/min) foi estourada
+    no projeto — 429 TooManyRequests ao paginar audit logs. É transitória
+    (por minuto) e do projeto inteiro: dev e prod compartilham o balde
+    (topologia single-project). Distinta de LoggingAccessDeniedError (falta
+    de IAM, permanente) e do caso "resultado vazio ambíguo" (que vira
+    warning, não erro). main.py mapeia pra HTTP 503 + Retry-After.
+
+    Levantada hoje por domains/finops (fallback ao vivo de
+    get_scan_events_cached); o retry com backoff que suaviza a maioria dos
+    429 antes de chegar aqui entra depois em core/logging_client.py
+    (list_entries_with_retry, ver CHANGELOG)."""
+
+    def __init__(self, project_id: str, retry_after: int = 60) -> None:
+        self.project_id = project_id
+        self.retry_after = retry_after
+        super().__init__(
+            f"Cota de leitura de audit logs do projeto '{project_id}' atingida "
+            "temporariamente — tente novamente em instantes."
+        )
+
+
+class EventCacheNotReadyError(Exception):
+    """O cache de audit log do projeto ainda não foi gerado (nenhum blob no
+    GCS) e o request path não escaneia mais ao vivo em cache miss (o scan
+    completo só roda no job diário ou no gatilho manual de admin — modelo
+    incremental, ver docs/specs/lineage.md). Os serviços de lineage/access/
+    finops/storage capturam essa exceção e degradam pra resposta vazia com
+    um warning; main.py mapeia pra HTTP 503 como rede de segurança."""
+
+    def __init__(self, project_id: str) -> None:
+        self.project_id = project_id
+        super().__init__(f"O cache de audit log do projeto '{project_id}' ainda não foi gerado.")
+
+
 class StorageAccessDeniedError(Exception):
     """A SA de runtime não tem roles/storage.objectViewer no projeto alvo —
     levantada por domains/storage ao consultar buckets/objetos via Cloud

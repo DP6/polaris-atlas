@@ -17,7 +17,19 @@ os.environ.setdefault("OBSERVABILITY_HUB_EVENT_CACHE_BUCKET_NAME", "test-project
 import pytest
 
 from observability_hub.core import bigquery as bigquery_module
+from observability_hub.core import logging_client as logging_client_module
 from observability_hub.core import secrets as secrets_module
+
+
+@pytest.fixture(autouse=True)
+def _fast_logging_retry(monkeypatch):
+    """list_entries_with_retry usa backoff exponencial real (deadline de
+    30s) — nenhum teste unitário deve exercitar isso de verdade. Zera o
+    deadline: o Retry faz 1 tentativa e, se ela falhar com erro
+    retentável, levanta RetryError na hora (sem dormir). Os testes de
+    tests/unit/core/test_logging_client.py que precisam validar a
+    mecânica de retry restauram um deadline próprio + patcham time.sleep."""
+    monkeypatch.setattr(logging_client_module, "_RETRY_TIMEOUT_SECONDS", 0.0)
 
 
 @pytest.fixture(autouse=True)

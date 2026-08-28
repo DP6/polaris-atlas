@@ -127,9 +127,11 @@ def test_scan_partition_candidates_passes_datasets_through_to_repository(monkeyp
 
     monkeypatch.setattr(service.repository, "list_all_table_refs", fake_list_all_table_refs)
     monkeypatch.setattr(service, "get_tables_metadata", lambda client, refs: {})
-    monkeypatch.setattr(service.repository, "list_scan_events", lambda *a, **kw: [])
+    monkeypatch.setattr(service.repository, "get_scan_events_cached", lambda *a, **kw: ([], None))
 
-    service.scan_partition_candidates(_fake_client(), MagicMock(), "proj", datasets=["RAW"])
+    service.scan_partition_candidates(
+        _fake_client(), MagicMock(), MagicMock(), MagicMock(), "proj", datasets=["RAW"]
+    )
 
     assert captured["datasets"] == ["RAW"]
 
@@ -147,10 +149,10 @@ def test_scan_partition_candidates_filters_by_requested_tables(monkeypatch):
             ("RAW", "crm_accounts"): ["created_at"],
         },
     )
-    monkeypatch.setattr(service.repository, "list_scan_events", lambda *a, **kw: [])
+    monkeypatch.setattr(service.repository, "get_scan_events_cached", lambda *a, **kw: ([], None))
 
     result = service.scan_partition_candidates(
-        _fake_client(), MagicMock(), "proj", tables=["RAW.crm_leads"]
+        _fake_client(), MagicMock(), MagicMock(), MagicMock(), "proj", tables=["RAW.crm_leads"]
     )
 
     assert [c.table_id for c in result.candidates] == ["crm_leads"]
@@ -162,9 +164,11 @@ def test_scan_partition_candidates_excludes_small_tables(monkeypatch):
         all_tables=[("RAW", "small_table")],
         metadata={"proj.RAW.small_table": _bq_table(num_bytes=1000)},
     )
-    monkeypatch.setattr(service.repository, "list_scan_events", lambda *a, **kw: [])
+    monkeypatch.setattr(service.repository, "get_scan_events_cached", lambda *a, **kw: ([], None))
 
-    result = service.scan_partition_candidates(_fake_client(), MagicMock(), "proj")
+    result = service.scan_partition_candidates(
+        _fake_client(), MagicMock(), MagicMock(), MagicMock(), "proj"
+    )
 
     assert result.candidates == []
 
@@ -179,9 +183,11 @@ def test_scan_partition_candidates_excludes_already_partitioned_tables(monkeypat
             )
         },
     )
-    monkeypatch.setattr(service.repository, "list_scan_events", lambda *a, **kw: [])
+    monkeypatch.setattr(service.repository, "get_scan_events_cached", lambda *a, **kw: ([], None))
 
-    result = service.scan_partition_candidates(_fake_client(), MagicMock(), "proj")
+    result = service.scan_partition_candidates(
+        _fake_client(), MagicMock(), MagicMock(), MagicMock(), "proj"
+    )
 
     assert result.candidates == []
 
@@ -193,9 +199,11 @@ def test_scan_partition_candidates_excludes_tables_without_date_like_column(monk
         metadata={"proj.RAW.big_table": _bq_table(num_bytes=2_000_000_000)},
         date_columns_by_table={},
     )
-    monkeypatch.setattr(service.repository, "list_scan_events", lambda *a, **kw: [])
+    monkeypatch.setattr(service.repository, "get_scan_events_cached", lambda *a, **kw: ([], None))
 
-    result = service.scan_partition_candidates(_fake_client(), MagicMock(), "proj")
+    result = service.scan_partition_candidates(
+        _fake_client(), MagicMock(), MagicMock(), MagicMock(), "proj"
+    )
 
     assert result.candidates == []
 
@@ -210,9 +218,13 @@ def test_scan_partition_candidates_includes_candidate_with_observed_cost_and_sav
         date_columns_by_table={("RAW", "big_table"): ["event_date"]},
     )
     events = [_event([("proj", "RAW", "big_table")], _now(), total_billed_bytes=10**12)]
-    monkeypatch.setattr(service.repository, "list_scan_events", lambda *a, **kw: events)
+    monkeypatch.setattr(
+        service.repository, "get_scan_events_cached", lambda *a, **kw: (events, None)
+    )
 
-    result = service.scan_partition_candidates(_fake_client(), MagicMock(), "proj")
+    result = service.scan_partition_candidates(
+        _fake_client(), MagicMock(), MagicMock(), MagicMock(), "proj"
+    )
 
     assert len(result.candidates) == 1
     candidate = result.candidates[0]
@@ -235,9 +247,11 @@ def test_scan_partition_candidates_no_savings_estimate_without_observed_cost(mon
         metadata={"proj.RAW.big_table": _bq_table(num_bytes=2_000_000_000)},
         date_columns_by_table={("RAW", "big_table"): ["event_date"]},
     )
-    monkeypatch.setattr(service.repository, "list_scan_events", lambda *a, **kw: [])
+    monkeypatch.setattr(service.repository, "get_scan_events_cached", lambda *a, **kw: ([], None))
 
-    result = service.scan_partition_candidates(_fake_client(), MagicMock(), "proj")
+    result = service.scan_partition_candidates(
+        _fake_client(), MagicMock(), MagicMock(), MagicMock(), "proj"
+    )
 
     assert len(result.candidates) == 1
     candidate = result.candidates[0]
@@ -259,9 +273,11 @@ def test_scan_partition_candidates_resolves_region_once_per_dataset(monkeypatch)
     )
     resolve_mock = MagicMock(return_value="US")
     monkeypatch.setattr(service, "resolve_dataset_region", resolve_mock)
-    monkeypatch.setattr(service.repository, "list_scan_events", lambda *a, **kw: [])
+    monkeypatch.setattr(service.repository, "get_scan_events_cached", lambda *a, **kw: ([], None))
 
-    result = service.scan_partition_candidates(_fake_client(), MagicMock(), "proj")
+    result = service.scan_partition_candidates(
+        _fake_client(), MagicMock(), MagicMock(), MagicMock(), "proj"
+    )
 
     assert len(result.candidates) == 2
     assert resolve_mock.call_count == 1
@@ -281,9 +297,13 @@ def test_scan_partition_candidates_sorts_by_observed_cost_descending(monkeypatch
         _event([("proj", "RAW", "cheap")], _now(), total_billed_bytes=10**9),
         _event([("proj", "RAW", "expensive")], _now(), total_billed_bytes=10**13),
     ]
-    monkeypatch.setattr(service.repository, "list_scan_events", lambda *a, **kw: events)
+    monkeypatch.setattr(
+        service.repository, "get_scan_events_cached", lambda *a, **kw: (events, None)
+    )
 
-    result = service.scan_partition_candidates(_fake_client(), MagicMock(), "proj")
+    result = service.scan_partition_candidates(
+        _fake_client(), MagicMock(), MagicMock(), MagicMock(), "proj"
+    )
 
     assert [c.table_id for c in result.candidates] == ["expensive", "cheap"]
 
@@ -292,7 +312,66 @@ def test_scan_partition_candidates_sorts_by_observed_cost_descending(monkeypatch
 
 
 def _stub_budget_events(monkeypatch, events):
-    monkeypatch.setattr(service.repository, "list_scan_events", lambda *a, **kw: events)
+    monkeypatch.setattr(
+        service.repository, "get_scan_events_cached", lambda *a, **kw: (events, None)
+    )
+
+
+def _stub_quota_exceeded(monkeypatch):
+    def _raise(*a, **kw):
+        raise service.LoggingQuotaExceededError("proj")
+
+    monkeypatch.setattr(service.repository, "get_scan_events_cached", _raise)
+
+
+def test_scan_partition_candidates_degrades_to_warning_on_quota_exceeded(monkeypatch):
+    _stub_partition_common(
+        monkeypatch,
+        all_tables=[("RAW", "big_table")],
+        metadata={"proj.RAW.big_table": _bq_table(num_bytes=2_000_000_000)},
+        date_columns_by_table={("RAW", "big_table"): ["event_date"]},
+    )
+    _stub_quota_exceeded(monkeypatch)
+
+    result = service.scan_partition_candidates(
+        _fake_client(), MagicMock(), MagicMock(), MagicMock(), "proj"
+    )
+
+    # Sem eventos de custo observado -> candidatas ainda listadas (a parte
+    # que vem do BigQuery), mas sem savings e com o aviso de cota.
+    assert result.cache_updated_at is None
+    assert result.warning is not None
+    assert "limite de leitura de audit logs" in result.warning
+
+
+def test_get_budget_degrades_to_warning_on_quota_exceeded(monkeypatch):
+    _stub_quota_exceeded(monkeypatch)
+
+    result = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj")
+
+    assert result.groups == []
+    assert result.top_queries == []
+    assert result.cache_updated_at is None
+    assert result.warning is not None
+    assert "limite de leitura de audit logs" in result.warning
+
+
+def test_get_budget_degrades_to_warning_when_cache_not_ready(monkeypatch):
+    """Modelo incremental: cache ainda não gerado pro projeto -> resposta
+    vazia com aviso "cache não gerado", não um 503."""
+
+    def _raise(*a, **kw):
+        raise service.EventCacheNotReadyError("proj")
+
+    monkeypatch.setattr(service.repository, "get_scan_events_cached", _raise)
+
+    result = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj")
+
+    assert result.groups == []
+    assert result.top_queries == []
+    assert result.cache_updated_at is None
+    assert result.warning is not None
+    assert "ainda não foi gerado" in result.warning
 
 
 def _last_day_of_previous_month():
@@ -306,7 +385,9 @@ def test_get_budget_groups_by_table(monkeypatch):
     ]
     _stub_budget_events(monkeypatch, events)
 
-    result = service.get_budget(MagicMock(), "proj", group_by=BudgetGroupBy.TABLE)
+    result = service.get_budget(
+        MagicMock(), MagicMock(), MagicMock(), "proj", group_by=BudgetGroupBy.TABLE
+    )
 
     groups = {g.key: g for g in result.groups}
     assert set(groups) == {"proj.RAW.a", "proj.TRUSTED.b"}
@@ -325,7 +406,9 @@ def test_get_budget_groups_by_dataset(monkeypatch):
     ]
     _stub_budget_events(monkeypatch, events)
 
-    result = service.get_budget(MagicMock(), "proj", group_by=BudgetGroupBy.DATASET)
+    result = service.get_budget(
+        MagicMock(), MagicMock(), MagicMock(), "proj", group_by=BudgetGroupBy.DATASET
+    )
 
     groups = {g.key: g for g in result.groups}
     assert set(groups) == {"proj.RAW", "proj.TRUSTED"}
@@ -359,7 +442,9 @@ def test_get_budget_groups_by_user(monkeypatch):
     ]
     _stub_budget_events(monkeypatch, events)
 
-    result = service.get_budget(MagicMock(), "proj", group_by=BudgetGroupBy.USER)
+    result = service.get_budget(
+        MagicMock(), MagicMock(), MagicMock(), "proj", group_by=BudgetGroupBy.USER
+    )
 
     groups = {g.key: g for g in result.groups}
     assert groups["ana@dp6.com.br"].job_count == 2
@@ -377,7 +462,9 @@ def test_get_budget_groups_by_day(monkeypatch):
     ]
     _stub_budget_events(monkeypatch, events)
 
-    result = service.get_budget(MagicMock(), "proj", group_by=BudgetGroupBy.DAY)
+    result = service.get_budget(
+        MagicMock(), MagicMock(), MagicMock(), "proj", group_by=BudgetGroupBy.DAY
+    )
 
     assert len(result.groups) == 1
     assert result.groups[0].key == now.date().isoformat()
@@ -389,7 +476,9 @@ def test_get_budget_groups_by_month(monkeypatch):
     events = [_event([("proj", "RAW", "a")], now, total_billed_bytes=10**9)]
     _stub_budget_events(monkeypatch, events)
 
-    result = service.get_budget(MagicMock(), "proj", group_by=BudgetGroupBy.MONTH)
+    result = service.get_budget(
+        MagicMock(), MagicMock(), MagicMock(), "proj", group_by=BudgetGroupBy.MONTH
+    )
 
     assert result.groups[0].key == now.strftime("%Y-%m")
 
@@ -399,7 +488,9 @@ def test_get_budget_groups_by_year(monkeypatch):
     events = [_event([("proj", "RAW", "a")], now, total_billed_bytes=10**9)]
     _stub_budget_events(monkeypatch, events)
 
-    result = service.get_budget(MagicMock(), "proj", group_by=BudgetGroupBy.YEAR)
+    result = service.get_budget(
+        MagicMock(), MagicMock(), MagicMock(), "proj", group_by=BudgetGroupBy.YEAR
+    )
 
     assert result.groups[0].key == str(now.year)
 
@@ -414,7 +505,7 @@ def test_get_budget_skips_events_with_no_real_table_information_schema_only(monk
     events = [_event([("other-proj", "RAW", "a")], _now(), total_billed_bytes=10**12)]
     _stub_budget_events(monkeypatch, events)
 
-    result = service.get_budget(MagicMock(), "proj")
+    result = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj")
 
     assert result.groups == []
     assert result.top_queries == []
@@ -428,7 +519,7 @@ def test_get_budget_ranks_top_queries_by_cost(monkeypatch):
     ]
     _stub_budget_events(monkeypatch, events)
 
-    result = service.get_budget(MagicMock(), "proj")
+    result = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj")
 
     assert [q.job_id for q in result.top_queries] == ["expensive-job", "cheap-job"]
 
@@ -445,7 +536,7 @@ def test_get_budget_includes_query_text_and_tables_in_top_queries(monkeypatch):
     ]
     _stub_budget_events(monkeypatch, events)
 
-    result = service.get_budget(MagicMock(), "proj")
+    result = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj")
 
     assert result.top_queries[0].query_text == "SELECT * FROM a"
     assert result.top_queries[0].tables == ["proj.RAW.a"]
@@ -455,7 +546,7 @@ def test_get_budget_ignores_zero_cost_events(monkeypatch):
     events = [_event([("proj", "RAW", "a")], _now(), total_billed_bytes=0)]
     _stub_budget_events(monkeypatch, events)
 
-    result = service.get_budget(MagicMock(), "proj")
+    result = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj")
 
     assert result.groups == []
     assert result.top_queries == []
@@ -467,7 +558,7 @@ def test_get_budget_ignores_events_before_month_start(monkeypatch):
     ]
     _stub_budget_events(monkeypatch, events)
 
-    result = service.get_budget(MagicMock(), "proj")
+    result = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj")
 
     assert result.groups == []
 
@@ -476,7 +567,7 @@ def test_get_budget_ignores_events_from_other_projects(monkeypatch):
     events = [_event([("other-proj", "RAW", "a")], _now(), total_billed_bytes=10**12)]
     _stub_budget_events(monkeypatch, events)
 
-    result = service.get_budget(MagicMock(), "proj")
+    result = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj")
 
     assert result.groups == []
 
@@ -494,7 +585,7 @@ def test_get_budget_respects_limit(monkeypatch):
     ]
     _stub_budget_events(monkeypatch, events)
 
-    result = service.get_budget(MagicMock(), "proj", limit=2)
+    result = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj", limit=2)
 
     assert len(result.top_queries) == 2
 
@@ -503,7 +594,7 @@ def test_get_budget_computes_projection(monkeypatch):
     events = [_event([("proj", "RAW", "a")], _now(), total_billed_bytes=10**12)]
     _stub_budget_events(monkeypatch, events)
 
-    result = service.get_budget(MagicMock(), "proj")
+    result = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj")
 
     assert result.projection.days_elapsed == result.lookback_days
     assert result.projection.days_in_month >= result.projection.days_elapsed
@@ -524,7 +615,7 @@ def test_get_budget_computes_projection(monkeypatch):
 def test_get_budget_sets_warning_when_no_events(monkeypatch):
     _stub_budget_events(monkeypatch, [])
 
-    result = service.get_budget(MagicMock(), "proj")
+    result = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj")
 
     assert result.warning is not None
     assert "proj" in result.warning

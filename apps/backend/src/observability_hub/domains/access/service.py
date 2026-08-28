@@ -7,6 +7,7 @@ from google.cloud import firestore, storage
 from google.cloud import logging as cloud_logging
 
 from observability_hub.core.config import settings
+from observability_hub.core.exceptions import EventCacheNotReadyError, LoggingQuotaExceededError
 from observability_hub.domains.access import repository
 from observability_hub.domains.access.repository import TableRefTuple
 from observability_hub.domains.access.schemas import TableAccessEntry, TableAccessResponse
@@ -24,6 +25,20 @@ _EMPTY_RESULT_WARNING = (
     "--format=json (procure por 'auditConfigs' com service "
     "'bigquery.googleapis.com'); verifique as duas roles da SA com o mesmo "
     "comando, procurando por 'logging.viewer' e 'logging.privateLogViewer'."
+)
+
+_QUOTA_WARNING = (
+    "O limite de leitura de audit logs do projeto '{project_id}' foi atingido "
+    "temporariamente (cota do Cloud Logging, compartilhada entre ambientes). "
+    "O mapa de acesso volta assim que o cache for atualizado — um admin do "
+    "Hub pode forçar agora em Administração → Caches; senão, recarregue em "
+    "alguns minutos."
+)
+
+_CACHE_NOT_READY_WARNING = (
+    "O cache de audit log do projeto '{project_id}' ainda não foi gerado. Um "
+    "admin do Hub pode disparar agora em Administração → Caches → 'Atualizar "
+    "agora'; o ciclo diário também popula sozinho."
 )
 
 _DEFAULT_LIMIT = 20
@@ -58,9 +73,24 @@ def get_table_access(
     limit: int = _DEFAULT_LIMIT,
 ) -> TableAccessResponse:
     target: TableRefTuple = (project_id, dataset_id, table_id)
-    events, cache_updated_at = repository.get_access_events_cached(
-        logging_client, storage_client, firestore_client, project_id
-    )
+    try:
+        events, cache_updated_at = repository.get_access_events_cached(
+            logging_client, storage_client, firestore_client, project_id
+        )
+        quota_warning: str | None = None
+    except LoggingQuotaExceededError:
+        # Cache frio + cota do Cloud Logging saturada: degrada pra tela
+        # vazia com aviso em vez de 503 — o mapa de acesso não é crítico e
+        # o cache diário (ou o gatilho de admin) resolve. Mesmo tratamento
+        # de domains/storage/service.py pra o waste scanner 6.2.
+        events, cache_updated_at = [], None
+        quota_warning = _QUOTA_WARNING.format(project_id=project_id)
+    except EventCacheNotReadyError:
+        # Cache ainda não gerado pra este projeto (modelo incremental — o
+        # request path não escaneia mais ao vivo). Degrada igual à cota:
+        # tela vazia com aviso, o job popula.
+        events, cache_updated_at = [], None
+        quota_warning = _CACHE_NOT_READY_WARNING.format(project_id=project_id)
     hub_sa_email = _hub_runtime_sa_email()
 
     by_principal: dict[str, dict] = {}
@@ -104,6 +134,6 @@ def get_table_access(
         table_id=table_id,
         lookback_days=repository.LOOKBACK_DAYS,
         users=users[:limit],
-        warning=_empty_result_warning(project_id) if not events else None,
+        warning=quota_warning or (_empty_result_warning(project_id) if not events else None),
         cache_updated_at=cache_updated_at,
     )

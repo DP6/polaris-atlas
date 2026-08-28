@@ -1,10 +1,11 @@
 # Spec — Domínio: FinOps — Scanner de desperdício
 
-**Versão:** 1.2 (escopo por tabela em partition-candidates; "Tabelas sem
-uso" absorvida por Governança/`docs/specs/lineage.md`)
+**Versão:** 1.4 (cache de audit log **incremental**, mesmo padrão de
+lineage/access/storage — request path não escaneia mais ao vivo; ver
+"Fonte de dados" e "Critérios de aceite")
 **Status:** Aprovada
 **Fase:** 4 — FinOps (primeira frente: scanner de desperdício)
-**Última atualização:** 2026-08-25
+**Última atualização:** 2026-08-28
 
 ---
 
@@ -53,6 +54,54 @@ Combina duas fontes já usadas por outros domínios:
 `domains/finops/repository.py` duplica o parsing de audit log (não
 importa de `lineage`/`access` — nenhum domínio deste projeto importa de
 outro).
+
+**Revisado em 2026-08-28 — cache pré-computado, mesmo padrão de
+`domains/lineage`/`domains/access`/`domains/storage`**: até esta revisão,
+`GET .../partition-candidates` (e `.../budget`, ver `finops-budget.md`)
+chamava `list_scan_events` **direto no request path** — scan síncrono de
+30 dias de audit log a cada chamada. Volume alto o suficiente pra estourar
+a cota `logging.googleapis.com/read_requests` do projeto (60/min, default;
+dev+prod compartilham o balde na topologia single-project), o que
+propagava como `429 TooManyRequests` não tratado → 500 → "Failed to fetch"
+no browser. Bug real: 12 ocorrências em 7 dias num uso normal de tela.
+
+**Mecanismo** (idêntico ao documentado em `docs/specs/lineage.md` seção
+"Modelo incremental" e `storage.md` seção 6.2): `jobs/refresh_event_cache.py`
+(o mesmo Cloud Run Job diário, D-1, **sem recurso Terraform novo**) faz
+**um** scan de `jobservice.jobcompleted` por projeto e passa os `LogEntry`
+crus pros 3 parsers (`parse_job_events`/`parse_access_events`/
+`parse_scan_events` — lineage/access/finops leem a mesma fonte), gravando
+`ScanEvent` (com `timestamp` por evento) no cache compartilhado
+`core/event_cache.py` (payload no bucket GCS `event_cache_bucket_name`,
+metadado no Firestore; namespace `_CACHE_KIND = "finops_scan_events"`).
+Desde a v1.4, cada run é **incremental**: lê só o delta
+(`receiveTimestamp > último anchor`), faz merge (dedup por `job_id`) com o
+blob e evicta eventos com `timestamp` fora da janela rolante de 31 dias.
+Full scan só na 1ª execução, sem anchor no metadado, blob sumido, ou
+toggle "forçar completo" do admin.
+
+O endpoint lê `get_scan_events_cached()`. Cache hit → não toca Cloud
+Logging. Cache miss → `list_scan_events` **foi removida**; o request path
+não escaneia mais ao vivo: registra o projeto (`record_project_seen`) e
+levanta `EventCacheNotReadyError`, que `scan_partition_candidates`/
+`get_budget` degradam pra resposta com `warning` "cache ainda não gerado"
+(candidatas ainda vêm do BigQuery, sem savings; budget vazio) — mesmo
+bloco `except` de `LoggingQuotaExceededError`.
+
+**Cache de 30 dias serve os dois consumidores**: `ScanEvent` carrega
+`timestamp`, então o mesmo blob atende tanto `partition-candidates`
+(janela fixa de 30d) quanto `budget` (recorte month-to-date por filtro no
+service, ver `finops-budget.md`).
+
+**429 residual**: agora só o Job vê 429 (o request path não escaneia). O
+Job usa `list_entries_with_retry` (retry exponencial, deadline 30s); o
+429 persistente marca o projeto como `quota_exceeded` naquele run e
+`_refresh_project` segue pros demais. O 503 de `main.py` para
+`LoggingQuotaExceededError`/`EventCacheNotReadyError` virou rede de
+segurança.
+
+O refresh de finops fica no `try` principal do Job (não isolado como
+storage).
 
 ---
 
@@ -153,8 +202,10 @@ apps/backend/src/observability_hub/
 ├── domains/finops/
 │   ├── __init__.py
 │   ├── service.py
-│   ├── repository.py       # list_scan_events(), list_all_table_refs(), get_date_like_columns()
+│   ├── repository.py       # parse_scan_events() + get_scan_events_cached()/serialize/deserialize/read/write (cache), list_all_table_refs(), get_date_like_columns()
 │   └── schemas.py
+├── jobs/
+│   └── refresh_event_cache.py   # popula o cache de finops_scan_events pra cada projeto (D-1)
 └── tests/unit/finops/
     ├── test_service.py
     └── test_repository.py
@@ -173,8 +224,40 @@ apps/backend/src/observability_hub/
 | Tabela grande, não particionada, sem coluna DATE/DATETIME/TIMESTAMP | Não aparece — sem coluna candidata, sugestão não é viável |
 | Candidata sem custo observado nos últimos 30 dias | Aparece sem `estimated_savings_usd_*`/`savings_disclaimer` (ambos `null`) |
 | Nenhum evento de job no projeto | `warning` populado (mesmo texto/causas de lineage/access) |
+| Cache hit | `cache_updated_at` na resposta = quando o Job gerou o blob; Cloud Logging não é tocado |
+| Cache miss (v1.4) | Request path **não escaneia ao vivo**: registra o projeto e levanta `EventCacheNotReadyError` → `scan_partition_candidates`/`get_budget` degradam pra resposta com `warning` "cache ainda não gerado" (candidatas ainda vêm do BigQuery, sem savings; budget vazio) |
+| Falha ao ler o cache (GCS fora do ar, bucket sem IAM) | Logada e tratada como cache miss (`EventCacheNotReadyError`) — nunca 500 cru |
+| `429 TooManyRequests` (cota `read_requests`) | Só o Job de refresh escaneia; o 429 persistente marca `quota_exceeded` naquele run e o próximo ciclo tenta de novo. `main.py` mapeia `LoggingQuotaExceededError`/`EventCacheNotReadyError` pra 503 só como rede de segurança |
 
 ---
+
+## Critérios de aceite — cache de audit log (v1.4)
+
+Cobre `get_scan_events_cached` (usado por `partition-candidates` **e**
+`budget`, ver `finops-budget.md`) e o refresh no Job diário.
+
+| ID | Comportamento | Teste |
+|---|---|---|
+| AC-001 | Cache hit não chama `logging_client.list_entries` e devolve `cache_updated_at` do metadado | `test_get_scan_events_cached_returns_cache_hit_without_calling_list_entries` |
+| AC-002 | Cache miss **não** escaneia ao vivo — registra o projeto (`record_project_seen`) e levanta `EventCacheNotReadyError` | `test_get_scan_events_cached_raises_not_ready_and_records_project_on_miss` |
+| AC-003 | Falha ao ler o cache (qualquer exceção, não só miss) é tratada como cache miss, nunca propaga como 500 | `test_get_scan_events_cached_treats_cache_read_failure_as_miss` |
+| AC-004 | `scan_partition_candidates`/`get_budget` degradam `EventCacheNotReadyError` pra resposta com `warning` (não 503) | `test_get_budget_degrades_to_warning_when_cache_not_ready` |
+| AC-006 | `ScanEvent` sobrevive a serialize→deserialize (com e sem `timestamp`/`query_text`) | `test_serialize_deserialize_scan_events_round_trips`, `test_deserialize_scan_events_handles_no_timestamp_and_no_query_text` |
+| AC-007 | O Job grava o cache de `finops_scan_events` pra cada projeto, no `try` principal (junto de lineage/access) | `test_refresh_project_full_scan_writes_all_four_caches` |
+| AC-008 | Em modo incremental o Job faz merge do delta (dedup por `job_id`) com o blob e evicta eventos fora da janela de 31 dias | `test_refresh_project_incremental_uses_delta_filter_and_merges` |
+
+## Suposições
+
+| ID | Suposição | Status |
+|---|---|---|
+| ASM-001 | Um cache único de 30 dias de `ScanEvent` serve tanto `partition-candidates` (janela fixa 30d) quanto `budget` (recorte month-to-date por filtro no service), porque `ScanEvent` carrega `timestamp` por evento. Nos ~1 dia/ano em que a janela month-to-date passa de 30d (fim de mês de 31 dias), o começo do mês pode faltar — já coberto pelo `_BUDGET_RETENTION_CAVEAT` pré-existente, sem regressão. | confirmada |
+| ASM-002 | ~~finops e lineage lendo a mesma fonte com scans separados no Job é aceitável.~~ **Invalidada 2026-08-28**: no primeiro projeto de volume real (`observability-hub-dev`) os 3 scans idênticos (lineage/access/finops) estouravam a cota antes de gravar qualquer cache. Job passou a fazer **um** scan → 3 parsers (`bigquery_job_events_filter` + `parse_*`). | invalidada |
+
+## Perguntas em aberto
+
+| ID | Pergunta | Status |
+|---|---|---|
+| Q-001 | Expor `cache_updated_at` também nas respostas de finops (como lineage/access já fazem)? | respondida — sim, campo opcional aditivo, 2026-08-28 |
 
 ## Fora do escopo desta spec
 

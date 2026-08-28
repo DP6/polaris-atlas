@@ -63,6 +63,19 @@ class Settings(BaseSettings):
     # nome do bucket é globalmente único e prefixado por ambiente.
     event_cache_bucket_name: str
 
+    # Força o Cloud Run Job de refresh (jobs/refresh_event_cache.py) a
+    # fazer full scan da janela inteira em todos os projetos, em vez do
+    # delta incremental. Injetada só sob demanda pelo gatilho manual de
+    # admin com o toggle "forçar completo" ligado (core/run_client.py
+    # ::trigger_job_execution monta um RunJobRequest.Overrides com esta
+    # env); o ciclo diário do Scheduler nunca a seta.
+    cache_force_full: bool = False
+    # Restringe o Job de refresh a um subconjunto de projetos (separados
+    # por vírgula), em vez da união hub_projects ∪ "vistos". Vazio = todos
+    # (comportamento do ciclo diário). Injetada só pelo gatilho manual de
+    # admin quando o operador escolhe projetos específicos na tela.
+    cache_only_projects: str = ""
+
     log_level: str = "INFO"
     region_discovery_max_workers: int = 8
     # Preço on-demand do BigQuery por TiB processado (cloud.google.com/bigquery/pricing).
@@ -98,6 +111,10 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def cache_only_projects_list(self) -> list[str]:
+        return [p.strip() for p in self.cache_only_projects.split(",") if p.strip()]
 
 
 settings = Settings()

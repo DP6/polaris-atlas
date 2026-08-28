@@ -163,3 +163,67 @@ class ChecklistItem(BaseModel):
 class ProjectChecklistResponse(BaseModel):
     project_id: str
     items: list[ChecklistItem]
+
+
+# --- Acompanhamento do cache de audit log (Administração → Caches) ------------
+
+
+class EventCacheRunProject(BaseModel):
+    project_id: str
+    # "ok" | "access_denied" | "quota_exceeded" | "api_error" | "unexpected_error"
+    status: str
+    finished_at: datetime | None = None
+    job_events: int | None = None
+    access_events: int | None = None
+    scan_events: int | None = None
+    storage_read_object_keys: int | None = None
+    # Modelo incremental (jobs/refresh_event_cache.py): "full" | "incremental"
+    # deste projeto neste run, e o tamanho do delta lido (nº de LogEntry).
+    mode: str | None = None
+    raw_entries: int | None = None
+
+
+class EventCacheRun(BaseModel):
+    run_id: str
+    started_at: datetime
+    finished_at: datetime | None = None
+    status: str  # "running" | "done"
+    project_count: int
+    projects: list[EventCacheRunProject]
+
+
+class EventCacheKindStatus(BaseModel):
+    kind: str  # "lineage" | "access" | "finops_scan_events" | "storage_read_keys"
+    label: str
+    cached_at: datetime | None = None
+    event_count: int | None = None
+    # True = nenhum metadado no Firestore (o job nunca populou este
+    # domínio pra este projeto) — a tela mostra "nunca rodou" em vez de
+    # uma janela. Ver domains/admin/service.py::get_event_cache_status.
+    never_run: bool = True
+    # Piso da janela rolante do blob atual (evento mais antigo mantido) e
+    # "full" | "incremental" do último write do job — modelo incremental,
+    # ver jobs/refresh_event_cache.py.
+    window_start: datetime | None = None
+    last_full_scan_at: datetime | None = None
+    mode: str | None = None
+
+
+class EventCacheProjectStatus(BaseModel):
+    project_id: str
+    caches: list[EventCacheKindStatus]
+
+
+class EventCacheStatusResponse(BaseModel):
+    # Só freshness por projeto × domínio — o histórico de execuções vive
+    # em GET /event-cache/runs (EventCacheRunsResponse), com cadência de
+    # polling própria (ver docs/specs/admin.md, aba "Caches").
+    projects: list[EventCacheProjectStatus]
+
+
+class EventCacheRunsResponse(BaseModel):
+    # Todas as execuções retidas (~200, ver core/event_cache.py
+    # ::_CACHE_RUNS_KEEP) — a tela de Administração → Caches filtra e
+    # pagina no cliente, mesmo padrão das outras seções de analytics do
+    # admin (lista carregada inteira, corte no front).
+    runs: list[EventCacheRun]

@@ -5,6 +5,289 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Cache de audit log incremental (delta diário por `receiveTimestamp`)
+
+Continuação do trabalho de 429/custo do Cloud Logging. Depois de cache +
+retry + tela de acompanhamento, o modelo ainda era **full scan diário**
+da janela inteira (30d job / 90d storage), reescrevendo o blob. Num
+projeto de volume alto (`observability-hub-dev` ≈ 50 mil eventos/30d) o
+full scan diário ainda podia estourar a cota `read_requests` (o usuário
+subiu o limite de 60 → 200/min), e o cache de `access` chegou a **nunca
+popular** — o run abortava no 429 antes de gravá-lo.
+
+### O que foi feito
+
+- **Modelo incremental no Job** (`jobs/refresh_event_cache.py`). Cada run
+  lê só o delta — `receiveTimestamp > min(last_scan_receive_ts dos kinds)`
+  (não uma janela fixa de N dias, pra capturar logs ingeridos com
+  atraso) — faz `event_cache.merge_dedup` com o blob (dedup por `job_id`,
+  o evento novo vence) e evicta os eventos fora da janela rolante: **31
+  dias** pros domínios de job (`timestamp < hoje−31d`), **90 dias** pra
+  storage. Derruba a leitura diária de ~15 páginas/projeto pra ~1. O
+  **full scan** só roda na 1ª execução do projeto, sem `last_scan_receive_ts`
+  no metadado, blob sumido (lifecycle do bucket), ou toggle "forçar
+  completo".
+- **`set_cache_metadata` cresceu**: `window_start`, `last_scan_receive_ts`
+  (o anchor do próximo delta), `last_full_scan_at`, `mode`
+  (`full`/`incremental`). `first_cached_at`/`last_full_scan_at`
+  preservados entre runs.
+- **`JobEvent` ganhou `timestamp`** (`endTime or startTime or createTime`)
+  — necessário só pra a evicção de janela. `access`/`finops` já tinham;
+  os 3 `_parse_entry` passaram a usar o mesmo fallback de 3 campos.
+- **Request path parou de escanear ao vivo.** `get_job_events_cached`
+  (lookback default), `get_access_events_cached`, `get_scan_events_cached`,
+  `get_read_object_keys_cached`: cache miss → `record_project_seen` +
+  `EventCacheNotReadyError` (nova exceção). `list_access_events` e
+  `list_scan_events` **removidas**; `list_job_events` fica (só
+  `/orphans?lookback_days=<custom>`); `list_read_object_keys` virou
+  `scan_read_object_events`. Serviços de lineage/access/finops/storage
+  capturam `EventCacheNotReadyError` **junto** de `LoggingQuotaExceededError`
+  e degradam pra resposta vazia com `warning` "cache ainda não gerado".
+  `main.py` mapeia pra 503 só como rede de segurança.
+- **Cache de storage virou `dict[(bucket, objeto) → ISO da última
+  leitura]`** (era `set` sem data — não dava pra evictar por idade).
+  `_deserialize_read_object_keys` devolve `None` pro formato antigo →
+  força full scan. O consumidor devolve `set(cache.keys())`.
+- **Toggle "forçar completo"** no gatilho de admin:
+  `POST /api/v1/admin/event-cache/refresh?force_full=true` →
+  `run_v2.RunJobRequest.Overrides` injeta
+  `OBSERVABILITY_HUB_CACHE_FORCE_FULL=1` só naquela execução;
+  `core/config.py::settings.cache_force_full` (nunca lê `os.environ` fora
+  de config).
+- **Freshness da aba Caches** ganhou `never_run` ("nunca rodou" vs. uma
+  janela), `window_start`, `last_full_scan_at`, `mode`. Retenção de
+  execuções subiu 20 → 200.
+
+### Erros cometidos e aprendizados
+
+- `_JOB_KIND_SPECS` guardava **referências de função** capturadas no
+  import — o `monkeypatch` dos testes não pegava (o job usava a função
+  antiga). Corrigido guardando o módulo + o **nome** e resolvendo via
+  `getattr` no uso. Aprendizado: tabela de despacho num módulo
+  orquestrador que os testes precisam mockar tem que resolver os
+  callables tarde, não no load.
+- Stub de parser nos testes do job devolvia as entradas cruas (strings)
+  como "eventos" — quebrava no windowing novo (`e.timestamp`). O full
+  scan antigo não tocava os eventos, o incremental sim. Stubs de parser
+  agora devolvem objetos com `.job_id`/`.timestamp`.
+
+---
+
+## Tela de acompanhamento do cache de audit log (Administração → Caches)
+
+Pedido do usuário: não bastava o botão "Atualizar caches", precisava de
+uma tela com feedback granular — qual projeto já foi processado, com que
+status, quando cada cache foi gerado.
+
+### O que foi feito
+
+- **Job grava o progresso no Firestore.** `jobs/refresh_event_cache.main()`
+  cria um doc em `event_cache_runs` (`start_cache_run`), atualiza
+  `projects.{project_id}` conforme cada projeto termina
+  (`record_cache_run_project` — status `ok`/`access_denied`/
+  `quota_exceeded`/`api_error`/`unexpected_error` + contagens de eventos),
+  e marca `done` no fim (`finish_cache_run`, em `try/finally`).
+  `_refresh_project` passou a **retornar** `(status, counts)` em vez de só
+  logar. Mantém só as ~20 execuções mais recentes (`_prune_cache_runs`).
+- **Endpoint** `GET /api/v1/admin/event-cache/status` (`domains/admin/service.py::get_event_cache_status`):
+  últimas 5 execuções + freshness por projeto × domínio (lineage / access /
+  finops_scan_events / storage_read_keys), tudo do Firestore — **sem
+  tocar Cloud Logging nem o Cloud Run Admin API** (não precisa de
+  `roles/run.viewer` na SA de runtime). Polling barato.
+- **Tela** `AdminCachesTab` (nova aba "Caches" em Administração): cards de
+  execução (badge de status, duração, `N ok · M cota estourada · …`,
+  lista dos projetos com problema) + tabela de freshness por projeto
+  (relativo + contagem, colorido verde/amarelo/vermelho por idade). O
+  botão de disparo saiu do header do AdminPage pra dentro desta aba;
+  `refetchInterval` cai pra 8s enquanto há execução `running` pra ver os
+  projetos "acenderem" um a um.
+- Nova coleção Firestore `event_cache_runs` registrada em
+  `docs/gcp-components.md` (mesmo named database, sem recurso GCP novo).
+
+---
+
+## Um scan de audit log no job de refresh + 429 degrada pra warning (não 503) em access/lineage/finops
+
+Continuação do fix do 429 do Cloud Logging. Depois de cache + retry + 503,
+a tela de **Acesso** ainda dava erro em dev: 503 em vez de "Failed to
+fetch", mas ainda quebrada. Causa: o cache de `access` do projeto estava
+frio e o request path não conseguia populá-lo (scan ao vivo × cota
+saturada).
+
+### Diagnóstico
+
+`observability-hub-dev` como projeto alvo tem volume ALTO de
+`jobservice.jobcompleted` (são as próprias queries do Hub — profiling,
+PII, catálogo). O job diário `_refresh_project` fazia **3 scans idênticos
+de 30 dias** desse filtro (lineage, access, finops), triplicando o
+consumo da cota `read_requests`. Num projeto de volume alto isso estoura
+os 60/min no meio do primeiro projeto, o `_refresh_project` aborta, e
+**nenhum** dos 4 caches é gravado — então "Atualizar caches" também não
+resolvia.
+
+### O que foi feito
+
+- **Job faz UM scan, alimenta 3 parsers.**
+  `core/logging_client.py::bigquery_job_events_filter(lookback_days)`
+  centraliza o filtro compartilhado; cada repo ganhou um `parse_*`
+  público (`parse_job_events`/`parse_access_events`/`parse_scan_events`)
+  separado do `list_*` (que continua pro request-path fallback). O job
+  chama `list_entries_with_retry` uma vez e passa os `LogEntry` crus pros
+  3 parsers → ~3× menos leitura de cota no refresh.
+- **429 persistente degrada pra warning, não 503**, em access, lineage
+  (grafo + órfãs) e finops (partition-candidates + budget) — mesmo
+  tratamento que `storage` já dava pro waste scanner 6.2. A tela abre
+  vazia com um aviso ("limite de leitura de audit logs... um admin pode
+  forçar 'Atualizar caches'") em vez de um erro. Durante a expansão do
+  grafo de lineage, um projeto não-raiz com 429 vira soft-fail (não
+  expande a partir dele, o resto do grafo continua) — igual ao
+  tratamento de `LoggingAccessDeniedError` que já existia lá.
+- `LoggingQuotaExceededError` → HTTP 503 (`main.py`) continua como rede
+  de segurança pra qualquer caminho que não capture a exceção.
+- `tests/unit/jobs/test_refresh_event_cache.py` reescrito pro modelo de
+  scan único; testes de degradação nos 3 serviços.
+
+### Erros cometidos e aprendizados
+
+- A ideia de "3 scans idênticos, tradeoff aceito (1×/dia, fora do
+  request path)" — registrada no CHANGELOG do fix do cache de finops —
+  não sobreviveu ao primeiro projeto de volume real. O tradeoff só valia
+  enquanto o volume era baixo; virou a causa direta de o cache nunca
+  popular. Unificado agora.
+
+---
+
+## Retry com backoff no scan de audit log (core/logging_client.py::list_entries_with_retry)
+
+Terceira e última parte da frente do 429 do Cloud Logging (depois do
+cache de finops e do mapeamento 429 → 503 nos 4 domínios). Os fixes
+anteriores tornavam o 429 um 503 limpo; este faz a **maioria** dos 429
+nem chegar lá.
+
+### O que foi feito
+
+- Novo `core/logging_client.py::list_entries_with_retry(client, *,
+  resource_names, filter_, page_size, project_id)` — materializa a
+  paginação de `client.list_entries` numa lista com
+  `google.api_core.retry.Retry` (backoff exponencial, `initial=1s`,
+  `max=10s`, `timeout=30s`) em `TooManyRequests`/`ResourceExhausted`
+  (429) e `ServiceUnavailable` (503). Mapeia `Forbidden` →
+  `LoggingAccessDeniedError` e 429 persistente (após o deadline) →
+  `LoggingQuotaExceededError`.
+- Os 4 call sites (`finops.list_scan_events`, `lineage.list_job_events`,
+  `access.list_access_events`, `storage.list_read_object_keys`) passaram
+  a usar o helper — some o `try/except Forbidden` copiado em cada um e o
+  `except TooManyRequests` naked que os fixes anteriores tinham colocado
+  nos `get_*_cached`.
+- `jobs/refresh_event_cache.py`: `_refresh_project` e
+  `_refresh_storage_read_keys` ganharam `except LoggingQuotaExceededError`
+  (agora que `list_*` pode levantá-la em vez de um `GoogleAPICallError`
+  cru) — status `quota_exceeded` no log, não derruba os demais projetos.
+- `tests/conftest.py`: fixture autouse `_fast_logging_retry` zera
+  `_RETRY_TIMEOUT_SECONDS` — nenhum teste unitário exercita backoff real
+  (sem isso o suite ia de 3s pra ~110s). `tests/unit/core/test_logging_client.py`
+  novo cobre a mecânica do retry com deadline/sleep próprios.
+
+### Descoberta técnica (registrada no fix anterior, confirmada aqui)
+
+O transporte REST do client (`_use_grpc=False`, obrigatório — ver
+docstring do módulo) **não aceita `retry=` nativo** e o 429 estoura no
+meio da paginação (`_get_next_page_response`). Por isso o retry envolve o
+scan inteiro: um 429 na página 8 re-executa da página 1. Aceitável — é
+raro, tem backoff, e fora do request path (o job diário) o custo não
+importa. `ResourceExhausted` é subclasse de `TooManyRequests` no
+`google-api-core` instalado (2.34), então um predicado só cobre as duas
+formas do 429.
+
+### Erros cometidos e aprendizados
+
+- Primeira rodada de testes rodou o backoff de verdade (deadline de 30s ×
+  ~4 testes de cota) e o suite foi de 3s pra 110s. Corrigido com a
+  fixture autouse no conftest zerando o deadline — a lição é que
+  qualquer retry com sleep real precisa de um kill-switch de teste
+  global, não patch caso a caso.
+
+---
+
+## FinOps passa a ler audit log via cache pré-computado (fix do 429 → "Failed to fetch")
+
+Usuário reportou `google.api_core.exceptions.TooManyRequests: 429` nos
+logs (`logging.googleapis.com/read_requests`, cota
+`ReadRequestsPerMinutePerProject` = 60/min, default), correlacionado com
+"Failed to fetch" recorrentes no app. Stack apontava
+`finops/repository.py::list_scan_events` via
+`GET /api/v1/finops/{project}/partition-candidates`.
+
+### Diagnóstico
+
+`finops` foi o único domínio que leu Cloud Logging que **não** tinha sido
+migrado pro cache diário quando `lineage`/`access` (e depois `storage`,
+commit `bb54830`) foram. `scan_partition_candidates` e `get_budget`
+chamavam `list_scan_events` **direto no request path** — scan síncrono de
+30 dias de `jobservice.jobcompleted` a cada request. Com `page_size=1000`,
+cada scan vira N chamadas paginadas de `entries.list`; um projeto ativo
++ o refetch do TanStack Query estoura 60/min num uso normal de tela (12
+ocorrências em 7 dias). O `429` não era capturado (só `Forbidden` era) →
+500 não tratado → "Failed to fetch". Cota é global por projeto e dev+prod
+compartilham o balde (topologia single-project), o que amplifica.
+
+### O que foi feito (fix 1 de 2 — este é o cache; o retro com backoff vem depois)
+
+- `domains/finops/repository.py` ganhou o mesmo quarteto de
+  `domains/access`: `serialize/deserialize_scan_events`,
+  `read/write_scan_events_cache`, `get_scan_events_cached`, sobre o
+  `core/event_cache.py` compartilhado (GCS + Firestore), namespace
+  `_CACHE_KIND = "finops_scan_events"`. **Nenhum recurso Terraform novo** —
+  reaproveita bucket/Firestore/Job já existentes.
+- `jobs/refresh_event_cache.py` (o mesmo Job diário D-1) agora também
+  varre `list_scan_events` pra cada projeto conhecido, no `try` principal
+  (não isolado como storage): finops lê a mesma fonte que lineage
+  (`jobservice.jobcompleted`), então se `list_job_events` passou, este
+  passa. `ScanEvent` carrega `timestamp` por evento, então **um cache de
+  30 dias serve os dois consumidores** — `partition-candidates` (janela
+  fixa) e `budget` (recorte month-to-date por filtro no service).
+- `domains/finops/service.py` / `api/v1/finops.py`: os 2 endpoints
+  passaram a receber `storage_client` + `firestore_client` via `Depends`
+  e ler `get_scan_events_cached` em vez de escanear ao vivo.
+- `PartitionCandidatesResponse` / `BudgetResponse` ganharam
+  `cache_updated_at: datetime | None` (mesmo campo que `LineageGraphResponse`
+  já expõe; aditivo/opcional).
+- **Stopgap de 429 introduzido junto** (o fix 2 generaliza com retry): nova
+  `core/exceptions.py::LoggingQuotaExceededError` + handler em `main.py`
+  → HTTP **503 + `Retry-After: 60`**. Aplicado no fallback ao vivo dos
+  **quatro** domínios que leem Cloud Logging, não só finops — durante a
+  validação em dev, `Acesso` deu "Failed to fetch" pelo mesmo motivo
+  (cache frio + cota saturada + `TooManyRequests` não capturado, só
+  `Forbidden` era). `get_scan_events_cached`/`get_access_events_cached`/
+  `get_job_events_cached` mapeiam `TooManyRequests` → 503;
+  `get_read_object_keys_cached` também, mas `storage/service.py` degrada
+  pra warning "config_based" (checagem 6.2 é best-effort, não deve
+  derrubar `waste-candidates` inteiro).
+- `docs/specs/finops-waste-scanner.md` bump v1.3 (mecanismo + AC-001 a
+  AC-008 + Suposições), `finops-budget.md` bump v1.3 (cross-ref);
+  `lineage.md`/`access.md`/`storage.md` ganharam a linha de "429 → 503"
+  em Casos de borda.
+
+### Não fez parte desta mudança (fica pro fix 2)
+
+`core/logging_client.py::list_entries_with_retry` — retry com backoff
+(`google.api_core.retry.Retry` envolvendo a paginação inteira, já que o
+transporte REST `_use_grpc=False` não aceita `retry=` nativo) aplicado
+aos 4 call sites de `list_entries` (finops, lineage, access, storage),
+substituindo o `except TooManyRequests` naked do finops. Ordem invertida
+a pedido do usuário: fix 1 (cache) mata o bug visível já; fix 2 (retry)
+suaviza o 429 residual de cache miss / do Job.
+
+### Erros cometidos e aprendizados
+
+- Nenhuma quebra nova nesta mudança. Aprendizado do diagnóstico: a cota
+  `read_requests` conta **páginas** de `entries.list`, não "scans" — o
+  `page_size=1000` que parecia otimização de latência era multiplicador
+  de consumo de cota. O cache elimina isso do request path; o retry do
+  fix 2 cobre o resíduo.
+
+---
+
 ## Cache TTL em 3 endpoints sem cache de Catalog/Freshness
 
 Continuação da mesma investigação de custo de Cloud Run (ver item

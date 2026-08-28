@@ -2,7 +2,11 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from observability_hub.core.exceptions import LoggingAccessDeniedError
+from observability_hub.core.exceptions import (
+    EventCacheNotReadyError,
+    LoggingAccessDeniedError,
+    LoggingQuotaExceededError,
+)
 from observability_hub.domains.storage import service
 from observability_hub.domains.storage.schemas import BucketSummary
 
@@ -125,7 +129,15 @@ def _blob(size, name="obj.csv"):
     return SimpleNamespace(size=size, name=name, custom_time=None, updated=_UPDATED)
 
 
-def _mock_waste_deps(monkeypatch, buckets, eligible_by_bucket, read_keys=None, forbidden=False):
+def _mock_waste_deps(
+    monkeypatch,
+    buckets,
+    eligible_by_bucket,
+    read_keys=None,
+    forbidden=False,
+    quota_exceeded=False,
+    cache_not_ready=False,
+):
     monkeypatch.setattr(service.repository, "list_buckets", lambda client, project_id: buckets)
     monkeypatch.setattr(
         service.repository,
@@ -136,6 +148,10 @@ def _mock_waste_deps(monkeypatch, buckets, eligible_by_bucket, read_keys=None, f
     def _read_keys(logging_client, storage_client, firestore_client, project_id):
         if forbidden:
             raise LoggingAccessDeniedError(project_id)
+        if quota_exceeded:
+            raise LoggingQuotaExceededError(project_id)
+        if cache_not_ready:
+            raise EventCacheNotReadyError(project_id)
         return read_keys or set()
 
     monkeypatch.setattr(service.repository, "get_read_object_keys_cached", _read_keys)
@@ -242,6 +258,42 @@ def test_get_waste_candidates_degrades_gracefully_on_forbidden(monkeypatch):
     assert candidate.usage_confirmed_object_count == 0
     assert candidate.usage_confirmed_size_bytes == 0
     assert result.usage_check_warning is not None
+
+
+def test_get_waste_candidates_degrades_gracefully_on_quota_exceeded(monkeypatch):
+    """429 na cota de leitura de audit log é transitório e a checagem 6.2
+    é best-effort — degrada pra config_based com aviso, não derruba
+    waste-candidates inteiro com um 503."""
+    buckets = [_bucket("processed", lifecycle_rules=[])]
+    eligible = [_blob(100, name="a.csv")]
+    _mock_waste_deps(monkeypatch, buckets, {"processed": eligible}, quota_exceeded=True)
+
+    result = service.get_waste_candidates(
+        MagicMock(), MagicMock(), MagicMock(), "observability-hub-dev", 60
+    )
+
+    candidate = result.candidates[0]
+    assert candidate.confidence == "config_based"
+    assert candidate.usage_confirmed_object_count == 0
+    assert result.usage_check_warning is not None
+
+
+def test_get_waste_candidates_degrades_gracefully_when_cache_not_ready(monkeypatch):
+    """Modelo incremental: cache de storage read-keys ainda não gerado —
+    checagem 6.2 é best-effort, degrada pra config_based com aviso."""
+    buckets = [_bucket("processed", lifecycle_rules=[])]
+    eligible = [_blob(100, name="a.csv")]
+    _mock_waste_deps(monkeypatch, buckets, {"processed": eligible}, cache_not_ready=True)
+
+    result = service.get_waste_candidates(
+        MagicMock(), MagicMock(), MagicMock(), "observability-hub-dev", 60
+    )
+
+    candidate = result.candidates[0]
+    assert candidate.confidence == "config_based"
+    assert candidate.usage_confirmed_object_count == 0
+    assert result.usage_check_warning is not None
+    assert "ainda não foi gerado" in result.usage_check_warning
 
 
 def test_get_waste_candidates_degrades_gracefully_on_empty_read_keys(monkeypatch):

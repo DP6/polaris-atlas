@@ -1,4 +1,4 @@
-import { LogOut, Send, ShieldCheck } from 'lucide-react'
+import { LogOut, PanelLeft, PanelLeftClose, Send, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ThemeToggle } from '@/components/ThemeToggle'
@@ -10,7 +10,14 @@ import { useCurrentUser, useLogout } from '@/features/auth/hooks'
 import { LogoutDialog } from '@/features/auth/LogoutDialog'
 import { ProjectSelector } from '@/features/projects/ProjectSelector'
 
-export function Topbar() {
+interface TopbarProps {
+  // Só é passado quando existe uma sidebar pra recolher (há projeto
+  // selecionado); undefined esconde o botão.
+  onToggleSidebar?: () => void
+  sidebarCollapsed: boolean
+}
+
+export function Topbar({ onToggleSidebar, sidebarCollapsed }: TopbarProps) {
   const userQuery = useCurrentUser()
   const logoutMutation = useLogout()
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -20,6 +27,27 @@ export function Topbar() {
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-4 border-b-2 border-primary bg-background px-4">
+      {onToggleSidebar && (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                className="-ml-1 text-muted-foreground"
+                onClick={onToggleSidebar}
+                aria-label={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+              />
+            }
+          >
+            {sidebarCollapsed ? <PanelLeft size={16} /> : <PanelLeftClose size={16} />}
+          </TooltipTrigger>
+          <TooltipContent>
+            {sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+          </TooltipContent>
+        </Tooltip>
+      )}
+
       <div className="flex items-center gap-3">
         <span className="dp6-divider h-6 w-0.5 bg-primary" />
         <span className="text-lg font-bold tracking-wide">dp6</span>

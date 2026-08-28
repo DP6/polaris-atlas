@@ -17,18 +17,16 @@ jobChange).
 import json
 import logging
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 
-from google.api_core.exceptions import Forbidden
 from google.cloud import firestore, storage
 from google.cloud import logging as cloud_logging
 
 from observability_hub.core import event_cache
 from observability_hub.core.config import settings
-from observability_hub.core.exceptions import LoggingAccessDeniedError
+from observability_hub.core.exceptions import EventCacheNotReadyError
 
 LOOKBACK_DAYS = 30
-_PAGE_SIZE = 1000
 _CACHE_KIND = "access"
 
 logger = logging.getLogger(__name__)
@@ -77,7 +75,9 @@ def _parse_entry(entry: cloud_logging.LogEntry) -> AccessEvent | None:
     job_stats = job.get("jobStatistics", {})
     raw_referenced = job_stats.get("referencedTables", [])
     referenced = [ref for r in raw_referenced if (ref := _parse_table_ref(r)) is not None]
-    timestamp = _parse_timestamp(job_stats.get("endTime"))
+    timestamp = _parse_timestamp(
+        job_stats.get("endTime") or job_stats.get("startTime") or job_stats.get("createTime")
+    )
 
     job_config = job.get("jobConfiguration", {})
     destination_raw = job_config.get("query", {}).get("destinationTable") or job_config.get(
@@ -103,33 +103,12 @@ def _parse_entry(entry: cloud_logging.LogEntry) -> AccessEvent | None:
     )
 
 
-def list_access_events(client: cloud_logging.Client, project_id: str) -> list[AccessEvent]:
-    """Levanta LoggingAccessDeniedError se a SA de runtime não tiver
-    roles/logging.viewer no projeto. Lista vazia (sem erro) é o resultado
-    tanto de "nenhum job rodou na janela" quanto de "Data Access audit
-    logs desabilitados" — indistinguível por aqui, ver aviso estático em
-    domains/access/service.py.
-
-    Só cobre acessos originados por jobs que rodaram NESTE projeto — um
-    job rodando em outro projeto que referencia uma tabela deste projeto
-    (leitura cross-project) não aparece aqui, porque o audit log dele
-    vive no projeto onde o job rodou, não no projeto da tabela lida (ver
-    docs/specs/access.md, "Casos de borda")."""
-    cutoff = (datetime.now(UTC) - timedelta(days=LOOKBACK_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    filter_ = (
-        'resource.type="bigquery_resource" '
-        'protoPayload.methodName="jobservice.jobcompleted" '
-        f'timestamp>="{cutoff}"'
-    )
-    try:
-        entries = client.list_entries(
-            resource_names=[f"projects/{project_id}"],
-            filter_=filter_,
-            page_size=_PAGE_SIZE,
-        )
-        return [event for entry in entries if (event := _parse_entry(entry)) is not None]
-    except Forbidden as exc:
-        raise LoggingAccessDeniedError(project_id) from exc
+def parse_access_events(entries: list[cloud_logging.LogEntry]) -> list[AccessEvent]:
+    """Parsing puro (sem I/O) — jobs/refresh_event_cache.py faz UM scan de
+    `jobservice.jobcompleted` e passa as entradas cruas pros 3 parsers
+    (lineage/access/finops). Não há mais `list_access_events`: o request
+    path lê só do cache (modelo incremental), quem escaneia é o job."""
+    return [event for entry in entries if (event := _parse_entry(entry)) is not None]
 
 
 # --- Cache de audit log (job periódico + fallback do request path) ---------
@@ -185,6 +164,11 @@ def write_access_events_cache(
     firestore_client: firestore.Client,
     project_id: str,
     events: list[AccessEvent],
+    *,
+    window_start: datetime | None = None,
+    last_scan_receive_ts: datetime | None = None,
+    last_full_scan_at: datetime | None = None,
+    mode: str | None = None,
 ) -> None:
     event_cache.write_cache_bytes(
         storage_client,
@@ -192,7 +176,16 @@ def write_access_events_cache(
         _cache_blob_path(project_id),
         serialize_access_events(events),
     )
-    event_cache.set_cache_metadata(firestore_client, _CACHE_KIND, project_id, len(events))
+    event_cache.set_cache_metadata(
+        firestore_client,
+        _CACHE_KIND,
+        project_id,
+        len(events),
+        window_start=window_start,
+        last_scan_receive_ts=last_scan_receive_ts,
+        last_full_scan_at=last_full_scan_at,
+        mode=mode,
+    )
 
 
 def get_access_events_cached(
@@ -201,29 +194,21 @@ def get_access_events_cached(
     firestore_client: firestore.Client,
     project_id: str,
 ) -> tuple[list[AccessEvent], datetime | None]:
-    """Endpoint de access não tem lookback_days variável (sempre
-    LOOKBACK_DAYS) — cache sempre elegível, diferente de lineage/orphans.
-    cached_at None significa que o dado veio ao vivo nesta chamada.
-    Qualquer falha ao ler/gravar o cache é logada e ignorada — o cache é
-    uma otimização, uma falha nele nunca deve derrubar a resposta pro
-    usuário (ver domains/lineage/repository.py::get_job_events_cached,
-    mesmo racional)."""
+    """Modelo incremental — o request path NÃO escaneia mais ao vivo em
+    cache miss (o scan roda só no job diário ou no gatilho manual de admin).
+    Cache hit -> (eventos, cached_at). Cache miss -> registra o projeto
+    (`record_project_seen`) e levanta `EventCacheNotReadyError`, que
+    domains/access/service.py degrada pra resposta vazia com warning."""
     try:
         cached = read_access_events_cache(storage_client, firestore_client, project_id)
     except Exception:
         logger.exception(
-            "Falha ao ler cache de access para %s — caindo pro scan ao vivo", project_id
+            "Falha ao ler cache de access para %s — tratando como cache miss", project_id
         )
-    else:
-        if cached is not None:
-            return cached
+        cached = None
 
-    events = list_access_events(client, project_id)
+    if cached is not None:
+        return cached
 
-    try:
-        write_access_events_cache(storage_client, firestore_client, project_id, events)
-        event_cache.record_project_seen(firestore_client, project_id)
-    except Exception:
-        logger.exception("Falha ao gravar cache de access para %s", project_id)
-
-    return events, None
+    event_cache.record_project_seen(firestore_client, project_id)
+    raise EventCacheNotReadyError(project_id)

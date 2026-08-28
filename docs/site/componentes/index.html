@@ -233,8 +233,46 @@
 
   .open-note strong { color: var(--color-text-primary); }
 
+  /* --- Menu lateral recolhível ------------------------------------------- */
+
+  .toc { transition: width 0.18s ease; }
+
+  .menu-collapsed .toc {
+    width: 0;
+    padding: 0;
+    overflow: hidden;
+    border-right: none;
+  }
+
+  .menu-toggle {
+    position: fixed;
+    top: 52px;
+    left: 260px;
+    transform: translateX(-50%);
+    z-index: 25;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 1px solid var(--color-border);
+    background: #fff;
+    box-shadow: 0 2px 6px rgba(29, 29, 27, 0.14);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    line-height: 1;
+    color: var(--color-text-primary);
+    transition: left 0.18s ease;
+    padding: 0;
+  }
+
+  .menu-toggle:hover { background: var(--color-bg-muted); }
+  .menu-collapsed .menu-toggle { left: 8px; transform: none; }
+
   @media (max-width: 900px) {
     .toc { display: none; }
+    .menu-toggle { display: none; }
     .content { padding: 24px 20px 80px; }
     .site-tabs { overflow-x: auto; }
     .site-tabs-brand { display: none; }
@@ -242,6 +280,14 @@
     table.components { min-width: 640px; }
   }
 </style>
+<script>
+  // Aplica o estado recolhido antes do primeiro paint (sem "pisca").
+  try {
+    if (localStorage.getItem('oh-site:menu-collapsed') === '1') {
+      document.documentElement.classList.add('menu-collapsed');
+    }
+  } catch (e) {}
+</script>
 </head>
 <body>
   <div class="page">
@@ -254,6 +300,7 @@
     </header>
 
     <div class="layout">
+      <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Ocultar menu">‹</button>
       <nav class="toc" id="toc">
         <div class="toc-group-label">Categorias</div>
         <a href="#cloud-run">Cloud Run (serviços)</a>
@@ -297,7 +344,7 @@
 
         <section class="doc-section" id="jobs">
           <h2>Job de cache + Cloud Scheduler</h2>
-          <p class="section-summary">Popula 1x/dia o cache de lineage/mapa de acesso (audit log do BigQuery).</p>
+          <p class="section-summary">Popula 1×/dia, de forma incremental, o cache de audit log do BigQuery que alimenta lineage, mapa de acesso, FinOps e o scanner de Storage.</p>
           <div class="table-wrap">
             <table class="components">
               <thead><tr><th>Recurso</th><th>Tipo</th><th>Ambiente</th><th>Gerenciado por</th></tr></thead>
@@ -413,6 +460,25 @@
       { rootMargin: '-20% 0px -70% 0px' },
     );
     sections.forEach((s) => observer.observe(s));
+
+    // Menu lateral recolhível — estado compartilhado entre as abas do site.
+    (function () {
+      const KEY = 'oh-site:menu-collapsed';
+      const root = document.documentElement;
+      const btn = document.getElementById('menu-toggle');
+      if (!btn) return;
+      function sync() {
+        const collapsed = root.classList.contains('menu-collapsed');
+        btn.textContent = collapsed ? '›' : '‹';
+        btn.setAttribute('aria-label', collapsed ? 'Mostrar menu' : 'Ocultar menu');
+      }
+      sync();
+      btn.addEventListener('click', () => {
+        const collapsed = root.classList.toggle('menu-collapsed');
+        try { localStorage.setItem(KEY, collapsed ? '1' : '0'); } catch (e) {}
+        sync();
+      });
+    })();
   </script>
 </body>
 </html>

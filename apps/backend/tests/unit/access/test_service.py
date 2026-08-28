@@ -255,6 +255,50 @@ def test_get_table_access_sets_warning_when_no_events(monkeypatch):
     assert "proj" in result.warning
 
 
+def test_get_table_access_degrades_to_warning_on_quota_exceeded(monkeypatch):
+    """Cache frio + cota do Cloud Logging saturada -> tela vazia com aviso,
+    não um 503 que o front vira 'Failed to fetch'."""
+
+    def _raise(*a, **kw):
+        raise service.LoggingQuotaExceededError("proj")
+
+    monkeypatch.setattr(service.repository, "get_access_events_cached", _raise)
+    monkeypatch.setattr(
+        service.settings, "runtime_sa_email", "backend-run@hub.iam.gserviceaccount.com"
+    )
+
+    result = service.get_table_access(
+        MagicMock(), MagicMock(), MagicMock(), "proj", "RAW", "crm_leads"
+    )
+
+    assert result.users == []
+    assert result.cache_updated_at is None
+    assert result.warning is not None
+    assert "limite de leitura de audit logs" in result.warning
+
+
+def test_get_table_access_degrades_to_warning_when_cache_not_ready(monkeypatch):
+    """Modelo incremental: cache ainda não gerado pro projeto -> tela
+    vazia com aviso "cache não gerado", não um 503."""
+
+    def _raise(*a, **kw):
+        raise service.EventCacheNotReadyError("proj")
+
+    monkeypatch.setattr(service.repository, "get_access_events_cached", _raise)
+    monkeypatch.setattr(
+        service.settings, "runtime_sa_email", "backend-run@hub.iam.gserviceaccount.com"
+    )
+
+    result = service.get_table_access(
+        MagicMock(), MagicMock(), MagicMock(), "proj", "RAW", "crm_leads"
+    )
+
+    assert result.users == []
+    assert result.cache_updated_at is None
+    assert result.warning is not None
+    assert "ainda não foi gerado" in result.warning
+
+
 # --- exclusão da SA de runtime do próprio Hub -------------------------------------
 
 

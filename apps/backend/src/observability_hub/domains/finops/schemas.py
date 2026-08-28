@@ -22,6 +22,10 @@ class PartitionCandidatesResponse(BaseModel):
     project_id: str
     lookback_days: int
     candidates: list[PartitionCandidate]
+    # Quando o cache de audit log lido foi gerado (job diário ou
+    # write-through de outra requisição). None = dado veio ao vivo nesta
+    # chamada (cache miss). Mesmo campo de LineageGraphResponse.
+    cache_updated_at: datetime | None = None
     warning: str | None = None
 
 
@@ -68,6 +72,7 @@ class BudgetResponse(BaseModel):
     total_cost_usd: float
     top_queries: list[CostlyQuery]
     projection: CostProjection
+    cache_updated_at: datetime | None = None
     warning: str | None = None
 
 

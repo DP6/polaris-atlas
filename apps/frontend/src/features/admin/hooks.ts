@@ -15,9 +15,34 @@ export const ADMIN_PROJECTS_QUERY_KEY = ['admin-projects']
 export const ADMIN_GROUPS_QUERY_KEY = ['admin-groups']
 export const ADMIN_ACCESS_REQUESTS_QUERY_KEY = ['admin-access-requests']
 
+export const ADMIN_EVENT_CACHE_STATUS_QUERY_KEY = ['admin-event-cache-status']
+export const ADMIN_EVENT_CACHE_RUNS_QUERY_KEY = ['admin-event-cache-runs']
+
 export function useRefreshEventCache() {
-  return useMutation({
-    mutationFn: adminApi.refreshEventCache,
+  return useMutation<void, Error, { forceFull: boolean; projects: string[] }>({
+    mutationFn: (opts) => adminApi.refreshEventCache(opts),
+  })
+}
+
+// Freshness por projeto × domínio — polling constante e barato (só
+// Firestore). Não sabe se há execução em andamento; quem dita a cadência
+// rápida é useEventCacheRuns.
+export function useEventCacheStatus() {
+  return useQuery({
+    queryKey: ADMIN_EVENT_CACHE_STATUS_QUERY_KEY,
+    queryFn: adminApi.getEventCacheStatus,
+    refetchInterval: 30_000,
+  })
+}
+
+// Histórico de execuções — polling rápido (8s) enquanto há uma execução
+// `running` pra ver os projetos "acenderem" um a um, lento em repouso.
+export function useEventCacheRuns() {
+  return useQuery({
+    queryKey: ADMIN_EVENT_CACHE_RUNS_QUERY_KEY,
+    queryFn: adminApi.getEventCacheRuns,
+    refetchInterval: (query) =>
+      query.state.data?.runs.some((r) => r.status === 'running') ? 8_000 : 45_000,
   })
 }
 

@@ -1,10 +1,15 @@
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 from google.api_core.exceptions import Forbidden
 
-from observability_hub.core.exceptions import LoggingAccessDeniedError, ProjectAccessDeniedError
+from observability_hub.core import event_cache as event_cache_module
+from observability_hub.core.exceptions import (
+    EventCacheNotReadyError,
+    ProjectAccessDeniedError,
+)
 from observability_hub.domains.finops import repository
 
 
@@ -184,37 +189,135 @@ def test_parse_entry_returns_none_when_job_completed_event_missing():
     assert repository._parse_entry(_entry({})) is None
 
 
-# --- list_scan_events -----------------------------------------------------------
+# --- parse_scan_events -------------------------------------------------------
+#
+# list_scan_events foi removida no modelo de cache incremental — o request
+# path não escaneia mais o Cloud Logging ao vivo, quem escaneia é
+# jobs/refresh_event_cache.py (que passa entradas cruas pra parse_*).
 
 
-def test_list_scan_events_raises_logging_access_denied():
-    client = MagicMock()
-    client.list_entries.side_effect = Forbidden("denied")
-
-    with pytest.raises(LoggingAccessDeniedError):
-        repository.list_scan_events(client, "observability-hub-dev", 30)
-
-
-def test_list_scan_events_parses_valid_entries_and_skips_invalid_ones():
+def test_parse_scan_events_is_pure_and_skips_invalid_entries():
     valid_payload = {
         "serviceData": {
             "jobCompletedEvent": {
                 "job": {
-                    "jobStatistics": {"endTime": "2026-08-14T10:00:00Z", "referencedTables": []}
+                    "jobName": {"jobId": "job1"},
+                    "jobStatistics": {"endTime": "2026-08-14T10:00:00Z", "referencedTables": []},
                 }
             }
         }
     }
+
+    events = repository.parse_scan_events([_entry(valid_payload), _entry(None), _entry({})])
+
+    assert [e.job_id for e in events] == ["job1"]
+
+
+# --- serialize/deserialize_scan_events ----------------------------------------
+
+
+def test_serialize_deserialize_scan_events_round_trips():
+    events = [
+        repository.ScanEvent(
+            timestamp=datetime(2026, 8, 14, 10, 0, tzinfo=UTC),
+            referenced_tables=[("proj", "RAW", "a"), ("proj", "GOLD", "b")],
+            total_billed_bytes=10485760,
+            job_id="job1",
+            principal_email="ana@dp6.com.br",
+            query_text="SELECT 1",
+        )
+    ]
+
+    round_tripped = repository.deserialize_scan_events(repository.serialize_scan_events(events))
+
+    assert round_tripped == events
+
+
+def test_deserialize_scan_events_handles_no_timestamp_and_no_query_text():
+    events = [
+        repository.ScanEvent(
+            timestamp=None,
+            referenced_tables=[],
+            total_billed_bytes=0,
+            job_id="job1",
+            principal_email="ana@dp6.com.br",
+            query_text=None,
+        )
+    ]
+
+    round_tripped = repository.deserialize_scan_events(repository.serialize_scan_events(events))
+
+    assert round_tripped == events
+    assert round_tripped[0].timestamp is None
+    assert round_tripped[0].query_text is None
+
+
+# --- get_scan_events_cached --------------------------------------------------
+
+
+def _scan_event(job_id="job1"):
+    return repository.ScanEvent(
+        timestamp=datetime(2026, 8, 14, 10, 0, tzinfo=UTC),
+        referenced_tables=[],
+        total_billed_bytes=0,
+        job_id=job_id,
+        principal_email="ana@dp6.com.br",
+        query_text=None,
+    )
+
+
+def test_get_scan_events_cached_returns_cache_hit_without_calling_list_entries(monkeypatch):
     client = MagicMock()
-    client.list_entries.return_value = [_entry(valid_payload), _entry(None)]
+    cached_events = [_scan_event("cached-job")]
+    cached_at = object()
+    monkeypatch.setattr(
+        repository, "read_scan_events_cache", lambda *a, **kw: (cached_events, cached_at)
+    )
 
-    events = repository.list_scan_events(client, "observability-hub-dev", 30)
+    events, returned_cached_at = repository.get_scan_events_cached(
+        client, MagicMock(), MagicMock(), "proj"
+    )
 
-    assert len(events) == 1
-    client.list_entries.assert_called_once()
-    call_kwargs = client.list_entries.call_args.kwargs
-    assert call_kwargs["resource_names"] == ["projects/observability-hub-dev"]
-    assert 'resource.type="bigquery_resource"' in call_kwargs["filter_"]
+    assert events == cached_events
+    assert returned_cached_at is cached_at
+    client.list_entries.assert_not_called()
+
+
+def test_get_scan_events_cached_raises_not_ready_and_records_project_on_miss(monkeypatch):
+    """Modelo incremental: cache miss não escaneia mais ao vivo — registra
+    o projeto (pro job pegá-lo) e levanta EventCacheNotReadyError, que
+    domains/finops/service.py degrada pra resposta vazia com warning."""
+    client = MagicMock()
+    monkeypatch.setattr(repository, "read_scan_events_cache", lambda *a, **kw: None)
+    seen_calls = []
+    monkeypatch.setattr(
+        event_cache_module, "record_project_seen", lambda *a, **kw: seen_calls.append((a, kw))
+    )
+
+    with pytest.raises(EventCacheNotReadyError) as exc_info:
+        repository.get_scan_events_cached(client, MagicMock(), MagicMock(), "proj")
+
+    assert exc_info.value.project_id == "proj"
+    assert len(seen_calls) == 1
+    client.list_entries.assert_not_called()
+
+
+def test_get_scan_events_cached_treats_cache_read_failure_as_miss(monkeypatch):
+    """Falha ao LER o cache (bucket sem IAM -> Forbidden, não tratado por
+    read_cache_bytes que só pega NotFound) é logada e tratada como cache
+    miss — EventCacheNotReadyError, nunca um 500 cru."""
+    client = MagicMock()
+    monkeypatch.setattr(
+        repository,
+        "read_scan_events_cache",
+        lambda *a, **kw: (_ for _ in ()).throw(Forbidden("no access to bucket")),
+    )
+    monkeypatch.setattr(event_cache_module, "record_project_seen", lambda *a, **kw: None)
+
+    with pytest.raises(EventCacheNotReadyError):
+        repository.get_scan_events_cached(client, MagicMock(), MagicMock(), "proj")
+
+    client.list_entries.assert_not_called()
 
 
 # --- list_all_table_refs -------------------------------------------------------

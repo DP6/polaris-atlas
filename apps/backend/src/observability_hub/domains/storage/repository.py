@@ -4,14 +4,16 @@ aprendeu da forma difícil (core/logging_client.py): o client de Storage
 também é REST, não gRPC — um 403 aqui levanta
 google.api_core.exceptions.Forbidden, não PermissionDenied.
 
-`list_read_object_keys` (final do arquivo) é diferente das demais funções
-— fala com Cloud Logging, não com o client de Storage, pra checagem 6.2
-do waste scanner (objeto sem leitura recente). Payload é o proto padrão
-`google.cloud.audit.AuditLog` (`resource.type="gcs_bucket"`), **não** o
-formato legado `AuditData`/`jobCompletedEvent` que domains/lineage e
-domains/access usam pra job do BigQuery — confirmado ao vivo em dev
-(2026-08-18, leitura real de objeto + `gcloud logging read`), payload
-diferente o bastante que não dá pra reaproveitar o parser deles.
+`scan_read_object_events` (final do arquivo) é diferente das demais
+funções — fala com Cloud Logging, não com o client de Storage, pra
+checagem 6.2 do waste scanner (objeto sem leitura recente). Só o Job de
+refresh a chama (modelo de cache incremental — o request path não
+escaneia mais ao vivo, lê só de `get_read_object_keys_cached`). Payload é
+o proto padrão `google.cloud.audit.AuditLog` (`resource.type="gcs_bucket"`),
+**não** o formato legado `AuditData`/`jobCompletedEvent` que
+domains/lineage e domains/access usam pra job do BigQuery — confirmado ao
+vivo em dev (2026-08-18, leitura real de objeto + `gcloud logging read`),
+payload diferente o bastante que não dá pra reaproveitar o parser deles.
 """
 
 import json
@@ -25,11 +27,17 @@ from google.cloud import logging as cloud_logging
 
 from observability_hub.core import event_cache
 from observability_hub.core.config import settings
-from observability_hub.core.exceptions import LoggingAccessDeniedError, StorageAccessDeniedError
+from observability_hub.core.exceptions import EventCacheNotReadyError, StorageAccessDeniedError
+from observability_hub.core.logging_client import LOGGING_PAGE_SIZE, list_entries_with_retry
 from observability_hub.core.storage_client import list_bucket_objects_cached
 
+# Cache incremental: chave = (bucket, objeto), valor = ISO da leitura mais
+# recente vista pra essa chave. Antes era um `set` (sem timestamp), o que
+# impedia o merge incremental (não dá pra evictar chave "antiga" sem saber
+# a data). Ver docs/specs/storage.md.
+ReadObjectKeys = dict[tuple[str, str], str]
+
 _OBJECT_READ_METHOD = "storage.objects.get"
-_LOGGING_PAGE_SIZE = 1000
 # Janela do scanner 6.2 (objeto sem leitura recente) — ver
 # docs/specs/storage.md seção 6.2. Único valor de referência: service.py
 # e jobs/refresh_event_cache.py importam daqui em vez de duplicar.
@@ -166,61 +174,73 @@ def _parse_resource_name(resource_name: str | None) -> tuple[str, str] | None:
     return bucket_name, object_name
 
 
-def list_read_object_keys(
-    logging_client: cloud_logging.Client, project_id: str, lookback_days: int
-) -> set[tuple[str, str]]:
-    """Conjunto de (bucket_name, object_name) com pelo menos uma leitura de
-    conteúdo (`storage.objects.get`) nos últimos `lookback_days` dias.
-    Levanta LoggingAccessDeniedError se a SA não tiver roles/
-    logging.viewer no projeto — mesma classe de erro que domains/lineage/
-    domains/access já usam pra Cloud Logging.
+def scan_read_object_events(
+    logging_client: cloud_logging.Client,
+    project_id: str,
+    *,
+    lookback_days: int = LOOKBACK_DAYS,
+    since_receive_ts: datetime | None = None,
+    page_pause: float = 0.0,
+) -> ReadObjectKeys:
+    """`{(bucket, objeto): ISO da leitura mais recente vista}` a partir dos
+    audit logs de `storage.objects.get`.
 
-    Conjunto vazio (sem erro) é ambíguo por natureza — pode significar
-    "nenhuma leitura na janela" ou "Data Access audit log DATA_READ do
-    GCS desabilitado no projeto" (config separada da do BigQuery, ver
-    docs/onboarding-cliente.md). Quem chama decide como comunicar essa
-    ambiguidade (domains/storage/service.py)."""
-    cutoff = (datetime.now(UTC) - timedelta(days=lookback_days)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    filter_ = (
-        'resource.type="gcs_bucket" '
-        f'protoPayload.methodName="{_OBJECT_READ_METHOD}" '
-        f'timestamp>="{cutoff}"'
+    - `since_receive_ts` setado → delta incremental (`receiveTimestamp>"..."`).
+    - senão → full scan (`timestamp>="hoje−lookback_days"`).
+
+    Levanta LoggingAccessDeniedError (sem roles/logging.viewer) ou
+    LoggingQuotaExceededError (429 persistente após o retry). Dict vazio
+    (sem erro) é ambíguo — "nenhuma leitura na janela" ou "Data Access
+    audit log DATA_READ do GCS desabilitado" (ver docs/onboarding-cliente.md);
+    quem chama decide como comunicar (domains/storage/service.py)."""
+    base = f'resource.type="gcs_bucket" protoPayload.methodName="{_OBJECT_READ_METHOD}" '
+    if since_receive_ts is not None:
+        filter_ = base + f'receiveTimestamp>"{since_receive_ts.strftime("%Y-%m-%dT%H:%M:%S.%fZ")}"'
+    else:
+        cutoff = (datetime.now(UTC) - timedelta(days=lookback_days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        filter_ = base + f'timestamp>="{cutoff}"'
+
+    entries = list_entries_with_retry(
+        logging_client,
+        resource_names=[f"projects/{project_id}"],
+        filter_=filter_,
+        page_size=LOGGING_PAGE_SIZE,
+        project_id=project_id,
+        page_pause=page_pause,
     )
-    try:
-        entries = logging_client.list_entries(
-            resource_names=[f"projects/{project_id}"],
-            filter_=filter_,
-            page_size=_LOGGING_PAGE_SIZE,
-        )
-        keys = set()
-        for entry in entries:
-            payload = entry.payload if isinstance(entry.payload, dict) else None
-            if payload is None:
-                continue
-            key = _parse_resource_name(payload.get("resourceName"))
-            if key is not None:
-                keys.add(key)
-        return keys
-    except Forbidden as exc:
-        raise LoggingAccessDeniedError(project_id) from exc
+    keys: ReadObjectKeys = {}
+    for entry in entries:
+        payload = entry.payload if isinstance(entry.payload, dict) else None
+        if payload is None:
+            continue
+        key = _parse_resource_name(payload.get("resourceName"))
+        if key is None:
+            continue
+        ts = entry.timestamp.isoformat() if entry.timestamp else ""
+        if ts > keys.get(key, ""):
+            keys[key] = ts
+    return keys
 
 
-# --- Cache de audit log (job periódico + fallback do request path) ---------
-#
-# Antes desta seção, o endpoint de waste-candidates chamava
-# list_read_object_keys() direto no request path — um scan síncrono de 90
-# dias de audit log a cada chamada, mesmo problema estrutural que
-# domains/lineage/domains/access já tinham e resolveram com este mesmo
-# padrão (job diário + core/event_cache.py). Ver CHANGELOG.md,
-# "Diagnóstico de custo do Cloud Run".
+# --- Cache de audit log (job periódico incremental) -----------------------------
 
 
-def _serialize_read_object_keys(keys: set[tuple[str, str]]) -> bytes:
-    return json.dumps([list(key) for key in sorted(keys)]).encode("utf-8")
+def _serialize_read_object_keys(keys: ReadObjectKeys) -> bytes:
+    return json.dumps([[b, o, ts] for (b, o), ts in sorted(keys.items())]).encode("utf-8")
 
 
-def _deserialize_read_object_keys(data: bytes) -> set[tuple[str, str]]:
-    return {tuple(pair) for pair in json.loads(data.decode("utf-8"))}
+def _deserialize_read_object_keys(data: bytes) -> ReadObjectKeys | None:
+    """None => formato antigo (`[[b, o], ...]`, sem timestamp) ou corrompido
+    — o job trata como "sem base incremental" e faz full scan."""
+    raw = json.loads(data.decode("utf-8"))
+    if not isinstance(raw, list):
+        return None
+    result: ReadObjectKeys = {}
+    for row in raw:
+        if not isinstance(row, list) or len(row) != 3:
+            return None
+        result[(row[0], row[1])] = row[2]
+    return result
 
 
 def _cache_blob_path(project_id: str) -> str:
@@ -229,8 +249,8 @@ def _cache_blob_path(project_id: str) -> str:
 
 def read_read_object_keys_cache(
     storage_client: storage.Client, project_id: str
-) -> set[tuple[str, str]] | None:
-    """None em cache miss."""
+) -> ReadObjectKeys | None:
+    """None em cache miss OU formato antigo (ver _deserialize_read_object_keys)."""
     data = event_cache.read_cache_bytes(
         storage_client, settings.event_cache_bucket_name, _cache_blob_path(project_id)
     )
@@ -243,7 +263,12 @@ def write_read_object_keys_cache(
     storage_client: storage.Client,
     firestore_client: firestore.Client,
     project_id: str,
-    keys: set[tuple[str, str]],
+    keys: ReadObjectKeys,
+    *,
+    window_start: datetime | None = None,
+    last_scan_receive_ts: datetime | None = None,
+    last_full_scan_at: datetime | None = None,
+    mode: str | None = None,
 ) -> None:
     event_cache.write_cache_bytes(
         storage_client,
@@ -251,7 +276,16 @@ def write_read_object_keys_cache(
         _cache_blob_path(project_id),
         _serialize_read_object_keys(keys),
     )
-    event_cache.set_cache_metadata(firestore_client, _CACHE_KIND, project_id, len(keys))
+    event_cache.set_cache_metadata(
+        firestore_client,
+        _CACHE_KIND,
+        project_id,
+        len(keys),
+        window_start=window_start,
+        last_scan_receive_ts=last_scan_receive_ts,
+        last_full_scan_at=last_full_scan_at,
+        mode=mode,
+    )
 
 
 def get_read_object_keys_cached(
@@ -260,30 +294,20 @@ def get_read_object_keys_cached(
     firestore_client: firestore.Client,
     project_id: str,
 ) -> set[tuple[str, str]]:
-    """Lê o cache pré-computado (job periódico ou fallback de outra
-    requisição); em cache miss, escaneia ao vivo e grava pra próxima
-    chamada (auto-cura) — mesmo racional de
-    domains/access/repository.py::get_access_events_cached. Levanta
-    LoggingAccessDeniedError (não capturada aqui) quando o scan ao vivo
-    falha por falta de roles/logging.viewer — quem chama decide como
-    comunicar isso (domains/storage/service.py)."""
+    """Só lê o cache pré-computado — o request path NÃO escaneia mais ao
+    vivo (modelo incremental: o scan roda só no job diário ou no gatilho
+    manual). Cache hit → conjunto de chaves. Cache miss → registra o
+    projeto (pra o próximo run do job pegá-lo) e levanta
+    EventCacheNotReadyError, que domains/storage/service.py degrada pra
+    warning best-effort."""
     try:
         cached = read_read_object_keys_cache(storage_client, project_id)
     except Exception:
-        logger.exception(
-            "Falha ao ler cache de storage read-keys para %s — caindo pro scan ao vivo",
-            project_id,
-        )
-    else:
-        if cached is not None:
-            return cached
+        logger.exception("Falha ao ler cache de storage read-keys para %s", project_id)
+        cached = None
 
-    keys = list_read_object_keys(logging_client, project_id, LOOKBACK_DAYS)
+    if cached is not None:
+        return set(cached.keys())
 
-    try:
-        write_read_object_keys_cache(storage_client, firestore_client, project_id, keys)
-        event_cache.record_project_seen(firestore_client, project_id)
-    except Exception:
-        logger.exception("Falha ao gravar cache de storage read-keys para %s", project_id)
-
-    return keys
+    event_cache.record_project_seen(firestore_client, project_id)
+    raise EventCacheNotReadyError(project_id)

@@ -948,5 +948,138 @@ def test_trigger_event_cache_refresh_calls_run_client_with_environment_job_name(
     service.trigger_event_cache_refresh(run_client)
 
     assert len(calls) == 1
-    args, _ = calls[0]
+    args, kwargs = calls[0]
     assert args == (run_client, "dp6-ci-polaris", "us-central1", "backend-dev-refresh-cache")
+    assert kwargs == {"force_full": False, "only_projects": None}
+
+
+def test_trigger_event_cache_refresh_forwards_force_full(monkeypatch):
+    monkeypatch.setattr(service, "get_runtime_project", lambda: "dp6-ci-polaris")
+    monkeypatch.setattr(service.settings, "region", "us-central1")
+    monkeypatch.setattr(service.settings, "environment", "dev")
+    calls = []
+    monkeypatch.setattr(service, "trigger_job_execution", lambda *a, **kw: calls.append((a, kw)))
+
+    service.trigger_event_cache_refresh(MagicMock(), force_full=True)
+
+    assert calls[0][1] == {"force_full": True, "only_projects": None}
+
+
+def test_trigger_event_cache_refresh_forwards_project_selection(monkeypatch):
+    monkeypatch.setattr(service, "get_runtime_project", lambda: "dp6-ci-polaris")
+    monkeypatch.setattr(service.settings, "region", "us-central1")
+    monkeypatch.setattr(service.settings, "environment", "dev")
+    calls = []
+    monkeypatch.setattr(service, "trigger_job_execution", lambda *a, **kw: calls.append((a, kw)))
+
+    service.trigger_event_cache_refresh(MagicMock(), projects=["proj-a", "proj-b"])
+
+    assert calls[0][1] == {"force_full": False, "only_projects": ["proj-a", "proj-b"]}
+
+
+def test_trigger_event_cache_refresh_empty_project_list_means_all(monkeypatch):
+    monkeypatch.setattr(service, "get_runtime_project", lambda: "dp6-ci-polaris")
+    monkeypatch.setattr(service.settings, "region", "us-central1")
+    monkeypatch.setattr(service.settings, "environment", "dev")
+    calls = []
+    monkeypatch.setattr(service, "trigger_job_execution", lambda *a, **kw: calls.append((a, kw)))
+
+    service.trigger_event_cache_refresh(MagicMock(), projects=[])
+
+    assert calls[0][1] == {"force_full": False, "only_projects": None}
+
+
+def test_list_event_cache_runs_builds_runs_from_firestore(monkeypatch):
+    client = MagicMock()
+
+    captured_limit = {}
+
+    def _list_cache_runs(c, limit=200):
+        captured_limit["limit"] = limit
+        return [
+            {
+                "run_id": "20260828T030000000000Z",
+                "started_at": "2026-08-28T03:00:00Z",
+                "finished_at": "2026-08-28T03:04:00Z",
+                "status": "done",
+                "project_count": 2,
+                "projects": {
+                    "proj-b": {"status": "quota_exceeded", "finished_at": "2026-08-28T03:02:00Z"},
+                    "proj-a": {
+                        "status": "ok",
+                        "finished_at": "2026-08-28T03:01:00Z",
+                        "job_events": 10,
+                        "access_events": 4,
+                        "scan_events": 7,
+                        "storage_read_object_keys": 0,
+                        "mode": "incremental",
+                        "raw_entries": 42,
+                    },
+                },
+            }
+        ]
+
+    monkeypatch.setattr(service.event_cache, "list_cache_runs", _list_cache_runs)
+
+    result = service.list_event_cache_runs(client)
+
+    # traz tudo que está retido (default do list_cache_runs), não só 5
+    assert captured_limit["limit"] == 200
+    assert len(result.runs) == 1
+    run = result.runs[0]
+    assert run.status == "done"
+    # projetos ordenados (proj-a antes de proj-b)
+    assert [p.project_id for p in run.projects] == ["proj-a", "proj-b"]
+    assert run.projects[0].job_events == 10
+    assert run.projects[0].mode == "incremental"
+    assert run.projects[0].raw_entries == 42
+    assert run.projects[1].status == "quota_exceeded"
+
+
+def test_get_event_cache_status_builds_project_freshness_only(monkeypatch):
+    client = MagicMock()
+
+    monkeypatch.setattr(
+        service.repository,
+        "list_projects",
+        lambda c: [{"project_id": "proj-a"}, {"project_id": "*"}],
+    )
+    monkeypatch.setattr(service.event_cache, "list_seen_projects", lambda c: ["proj-b"])
+
+    def _meta(c, kind, project_id):
+        if project_id == "proj-a" and kind == "lineage":
+            return {
+                "cached_at": "2026-08-28T03:01:00Z",
+                "event_count": 10,
+                "window_start": "2026-07-28T03:00:00Z",
+                "last_full_scan_at": "2026-08-20T03:00:00Z",
+                "mode": "incremental",
+            }
+        return None
+
+    monkeypatch.setattr(service.event_cache, "get_cache_metadata", _meta)
+
+    result = service.get_event_cache_status(client)
+
+    # /status não carrega mais o histórico de execuções (foi pro /runs)
+    assert not hasattr(result, "runs")
+    # wildcard "*" NÃO entra na lista de projetos; proj-a e proj-b entram
+    assert [p.project_id for p in result.projects] == ["proj-a", "proj-b"]
+    # 4 domínios por projeto, na ordem canônica
+    assert [k.kind for k in result.projects[0].caches] == [
+        "lineage",
+        "access",
+        "finops_scan_events",
+        "storage_read_keys",
+    ]
+    assert result.projects[0].caches[0].event_count == 10
+    assert result.projects[0].caches[1].cached_at is None
+
+    # freshness distingue "nunca rodou" de janela conhecida + expõe modo
+    lineage_cache = result.projects[0].caches[0]
+    assert lineage_cache.never_run is False
+    assert lineage_cache.mode == "incremental"
+    assert lineage_cache.window_start is not None
+    assert lineage_cache.window_start.year == 2026 and lineage_cache.window_start.month == 7
+    assert lineage_cache.last_full_scan_at is not None
+    assert result.projects[0].caches[1].never_run is True

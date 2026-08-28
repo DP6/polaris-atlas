@@ -81,6 +81,25 @@ domínio hoje opera com IAM a nível de dataset ou tabela):
 > Data Access. As duas roles são necessárias juntas, não uma ou outra.
 > ([doc oficial](https://docs.cloud.google.com/logging/docs/access-control))
 
+> **Org policy do cliente (`iam.allowedPolicyMemberDomains`):** num projeto
+> de cliente cuja organização restringe binding de IAM ao próprio domínio,
+> o `add-iam-policy-binding` das SAs do Hub (externas ao cliente) falha com
+> `One or more users named in the policy do not belong to a permitted
+> customer`. É o mesmo tipo de barreira que já mordeu o próprio repo em
+> 2026-08-21 (`iam.allowedPolicyMemberDomains` bloqueando `allUsers` no
+> Cloud Run — ver "Registro de acessos concedidos", linha do `roles/iap.admin`).
+> Solução do lado do cliente: um admin da **organização** aplica exceção
+> da constraint no projeto alvo, ou adiciona o customer ID do Cloud
+> Identity da DP6 (projeto `dp6-ci-polaris`, número `209825626529`) à
+> allowlist. Documentado no `onboarding-cliente-entrega.md` como aviso
+> antes dos comandos da seção 2.
+
+**Cliente real recebe as duas SAs.** A instância `dev` do Hub é usada pelo
+time DP6 pra validar o onboarding antes de liberar o `prod` pro cliente —
+conceder o mesmo conjunto de roles às duas SAs de uma vez evita um segundo
+round-trip com o admin do cliente. O `onboarding-cliente-entrega.md` já
+traz o `for SA_EMAIL in (dev, prod)` pronto.
+
 ```bash
 SA_EMAIL="backend-prod-run@dp6-ci-polaris.iam.gserviceaccount.com"  # ou backend-dev-run@...
 
@@ -131,11 +150,11 @@ ver seção 8 de `docs/specs/storage.md`).
 
 ## 3. Data Access audit logs do BigQuery — habilitar
 
-`roles/logging.viewer` sozinho não é suficiente. Lineage e tabelas órfãs
-dependem de o evento `jobCompletedEvent` estar sendo escrito nos logs, e
-isso só acontece se **Data Access audit logs** do BigQuery estiverem
-habilitados no projeto — Admin Activity logs (sempre ativos, não precisam
-de configuração) não incluem esse evento.
+`roles/logging.viewer` sozinho não é suficiente. Lineage, tabelas órfãs,
+mapa de acesso e FinOps (budget) dependem de o evento `jobCompletedEvent`
+estar sendo escrito nos logs, e isso só acontece se **Data Access audit
+logs** do BigQuery estiverem habilitados no projeto — Admin Activity logs
+(sempre ativos, não precisam de configuração) não incluem esse evento.
 
 Sem isso, os endpoints de lineage respondem `200 OK` com uma lista vazia e
 um aviso — não é um erro, mas o dado fica sempre vazio até habilitar.
@@ -192,12 +211,13 @@ motivo.
 - Secret Manager, Artifact Registry, Cloud Run, Firestore — recursos
   internos do Hub, vivem só em `dp6-ci-polaris` (ou no par de projetos
   usado pra hospedar aquela instância do Hub), nunca no projeto alvo.
-- Cache pré-computado de audit log de lineage/mapa de acesso (job diário
-  D-1 + bucket GCS, ver `docs/specs/lineage.md`) — mesmo racional: o
-  bucket, o Cloud Run Job e o Cloud Scheduler vivem só no projeto do
-  Hub. As roles `logging.viewer`/`logging.privateLogViewer` desta seção
-  continuam sendo as únicas necessárias no projeto alvo; nenhuma
-  concessão nova é exigida dele por causa do cache.
+- Cache pré-computado de audit log de lineage/mapa de acesso/FinOps/
+  Storage (job diário D-1 incremental + bucket GCS, ver
+  `docs/specs/lineage.md`) — mesmo racional: o bucket, o Cloud Run Job e
+  o Cloud Scheduler vivem só no projeto do Hub. As roles
+  `logging.viewer`/`logging.privateLogViewer` desta seção continuam sendo
+  as únicas necessárias no projeto alvo; nenhuma concessão nova é exigida
+  dele por causa do cache.
 - Nada permanente — todo acesso concedido aqui é revogável a qualquer
   momento sem efeito colateral no resto do projeto alvo (seção 5).
 
@@ -206,17 +226,23 @@ motivo.
 ## Checklist resumido
 
 ```
+[ ] (cliente cross-org) exceção de iam.allowedPolicyMemberDomains no
+    projeto alvo, ou customer ID da DP6 na allowlist — sem isso o
+    add-iam-policy-binding das SAs externas falha (ver seção 2)
 [ ] bigquery.googleapis.com habilitada no projeto alvo
 [ ] logging.googleapis.com habilitada no projeto alvo
-[ ] roles/bigquery.metadataViewer concedida à SA do Hub
-[ ] roles/bigquery.jobUser concedida à SA do Hub
-[ ] roles/bigquery.dataViewer concedida à SA do Hub
-[ ] roles/logging.viewer concedida à SA do Hub
-[ ] roles/logging.privateLogViewer concedida à SA do Hub — sem ela,
+[ ] roles/bigquery.metadataViewer concedida à(s) SA(s) do Hub
+[ ] roles/bigquery.jobUser concedida à(s) SA(s) do Hub
+[ ] roles/bigquery.dataViewer concedida à(s) SA(s) do Hub
+[ ] roles/logging.viewer concedida à(s) SA(s) do Hub
+[ ] roles/logging.privateLogViewer concedida à(s) SA(s) do Hub — sem ela,
     logging.viewer sozinha NÃO mostra Data Access audit logs (falha
     silenciosa, sem erro, só resultado sempre vazio)
+[ ] (cliente real) as roles acima concedidas às DUAS SAs (backend-dev-run
+    e backend-prod-run) — não só a de prod
 [ ] Data Access audit logs (DATA_READ + DATA_WRITE) do BigQuery habilitados
-    — só necessário se o cliente for usar lineage/tabelas órfãs/mapa de acesso
+    — só necessário se o cliente for usar lineage/tabelas órfãs/mapa de
+    acesso/FinOps (budget)
 [ ] storage.googleapis.com habilitada no projeto alvo — só necessário se o
     cliente for usar o domínio storage
 [ ] roles/storage.bucketViewer concedida à SA do Hub — idem, necessária

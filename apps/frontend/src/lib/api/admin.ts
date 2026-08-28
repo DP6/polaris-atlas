@@ -4,6 +4,8 @@ import type {
   AccessRequestAnalyticsResponse,
   AccessRequestStatus,
   AccessRequestsListResponse,
+  EventCacheRunsResponse,
+  EventCacheStatusResponse,
   FavoritesAnalyticsResponse,
   HubGroup,
   HubGroupsListResponse,
@@ -27,10 +29,33 @@ import type {
 
 export const adminApi = {
   // Dispara sob demanda o Cloud Run Job de refresh do cache de audit log
-  // (lineage/acesso/órfãs) — mesma execução completa do ciclo diário
-  // automático (ver docs/specs/lineage.md). 202 sem corpo relevante: só
+  // (lineage/acesso/órfãs/FinOps/Storage). 202 sem corpo relevante: só
   // confirma o disparo, não espera o Job terminar.
-  refreshEventCache: () => httpClient.post<void>('/api/v1/admin/event-cache/refresh'),
+  // - forceFull=true (toggle "forçar completo"): re-escaneia a janela
+  //   inteira em vez do delta incremental.
+  // - projects: restringe o scan a esses project_id; vazio = todos.
+  refreshEventCache: ({
+    forceFull = false,
+    projects = [],
+  }: {
+    forceFull?: boolean
+    projects?: string[]
+  } = {}) => {
+    const params = new URLSearchParams()
+    if (forceFull) params.set('force_full', 'true')
+    for (const p of projects) params.append('project', p)
+    const qs = params.toString()
+    return httpClient.post<void>(`/api/v1/admin/event-cache/refresh${qs ? `?${qs}` : ''}`)
+  },
+
+  // Freshness do cache de audit log por projeto × domínio — tudo do
+  // Firestore, barato de fazer polling frequente.
+  getEventCacheStatus: () =>
+    httpClient.get<EventCacheStatusResponse>('/api/v1/admin/event-cache/status'),
+
+  // Histórico completo de execuções do Job de refresh (~200 retidas) — a
+  // tela filtra e pagina no cliente.
+  getEventCacheRuns: () => httpClient.get<EventCacheRunsResponse>('/api/v1/admin/event-cache/runs'),
 
   listUsers: () => httpClient.get<HubUsersListResponse>('/api/v1/admin/users'),
 

@@ -12,7 +12,11 @@ from google.cloud import bigquery, firestore, storage
 from google.cloud import logging as cloud_logging
 
 from observability_hub.core.bigquery import discover_regions, get_tables_metadata
-from observability_hub.core.exceptions import LoggingAccessDeniedError
+from observability_hub.core.exceptions import (
+    EventCacheNotReadyError,
+    LoggingAccessDeniedError,
+    LoggingQuotaExceededError,
+)
 from observability_hub.core.pricing import estimate_bigquery_storage_cost_usd
 from observability_hub.domains.lineage import repository
 from observability_hub.domains.lineage.repository import JobEvent, TableRefTuple
@@ -38,6 +42,20 @@ _EMPTY_RESULT_WARNING = (
     "--format=json (procure por 'auditConfigs' com service "
     "'bigquery.googleapis.com'); verifique as duas roles da SA com o mesmo "
     "comando, procurando por 'logging.viewer' e 'logging.privateLogViewer'."
+)
+
+_QUOTA_WARNING = (
+    "O limite de leitura de audit logs do projeto '{project_id}' foi atingido "
+    "temporariamente (cota do Cloud Logging, compartilhada entre ambientes). "
+    "O grafo volta assim que o cache for atualizado — um admin do Hub pode "
+    "forçar agora em Administração → Caches; senão, recarregue em alguns "
+    "minutos."
+)
+
+_CACHE_NOT_READY_WARNING = (
+    "O cache de audit log do projeto '{project_id}' ainda não foi gerado. Um "
+    "admin do Hub pode disparar agora em Administração → Caches → 'Atualizar "
+    "agora'; o ciclo diário também popula sozinho."
 )
 
 _MAX_HOPS_DEFAULT = 8
@@ -124,7 +142,10 @@ def _get_project_events(
         events, _ = repository.get_job_events_cached(
             logging_client, storage_client, firestore_client, project_id
         )
-    except LoggingAccessDeniedError:
+    except (LoggingAccessDeniedError, LoggingQuotaExceededError, EventCacheNotReadyError):
+        # Sem acesso, cota do Cloud Logging saturada, ou cache ainda não
+        # gerado pra este projeto (modelo incremental): não expande a
+        # partir deste projeto, mas o resto do grafo continua.
         denied_projects.add(project_id)
         return None
     events_cache[project_id] = events
@@ -248,9 +269,27 @@ def get_table_lineage(
     max_hops: int = _MAX_HOPS_DEFAULT,
 ) -> LineageGraphResponse:
     root: TableRefTuple = (project_id, dataset_id, table_id)
-    root_events, cache_updated_at = repository.get_job_events_cached(
-        logging_client, storage_client, firestore_client, project_id
-    )
+    try:
+        root_events, cache_updated_at = repository.get_job_events_cached(
+            logging_client, storage_client, firestore_client, project_id
+        )
+    except (LoggingQuotaExceededError, EventCacheNotReadyError) as exc:
+        # Cota do Cloud Logging saturada, ou cache ainda não gerado
+        # (modelo incremental): grafo vazio com aviso em vez de 503 (mesmo
+        # tratamento de domains/access e domains/finops).
+        template = (
+            _CACHE_NOT_READY_WARNING if isinstance(exc, EventCacheNotReadyError) else _QUOTA_WARNING
+        )
+        return LineageGraphResponse(
+            root=TableRef(project_id=project_id, dataset_id=dataset_id, table_id=table_id),
+            nodes=[],
+            edges=[],
+            lookback_days=repository.LOOKBACK_DAYS,
+            max_hops=max_hops,
+            truncated=False,
+            warning=template.format(project_id=project_id),
+            cache_updated_at=None,
+        )
 
     events_cache: dict[str, list[JobEvent]] = {project_id: root_events}
     denied_projects: set[str] = set()
@@ -314,9 +353,29 @@ def get_orphans(
 ) -> OrphansResponse:
     regions = discover_regions(project_id, client=client)
     all_tables = repository.list_all_table_refs(client, project_id, regions, datasets=datasets)
-    events, cache_updated_at = repository.get_job_events_cached(
-        logging_client, storage_client, firestore_client, project_id, lookback_days=lookback_days
-    )
+    try:
+        events, cache_updated_at = repository.get_job_events_cached(
+            logging_client,
+            storage_client,
+            firestore_client,
+            project_id,
+            lookback_days=lookback_days,
+        )
+    except (LoggingQuotaExceededError, EventCacheNotReadyError) as exc:
+        # Sem os eventos de job não dá pra saber o que é órfã (tudo
+        # pareceria órfão) — retorna vazio com aviso em vez de 503. Cache
+        # ainda não gerado (modelo incremental) tem o mesmo efeito prático
+        # que a cota estourada aqui.
+        template = (
+            _CACHE_NOT_READY_WARNING if isinstance(exc, EventCacheNotReadyError) else _QUOTA_WARNING
+        )
+        return OrphansResponse(
+            project_id=project_id,
+            orphans=[],
+            lookback_days=lookback_days,
+            warning=template.format(project_id=project_id),
+            cache_updated_at=None,
+        )
 
     consumed: set[tuple[str, str]] = set()
     for event in events:

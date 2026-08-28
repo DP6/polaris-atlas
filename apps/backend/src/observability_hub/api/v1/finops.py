@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, Query
-from google.cloud import bigquery
+from google.cloud import bigquery, firestore, storage
 from google.cloud import logging as cloud_logging
 
 from observability_hub.core.auth import require_project_access
 from observability_hub.core.bigquery import get_client
+from observability_hub.core.firestore import get_firestore_client
 from observability_hub.core.logging_client import get_logging_client
+from observability_hub.core.storage_client import get_storage_client
 from observability_hub.domains.finops import service
 from observability_hub.domains.finops.schemas import (
     BudgetGroupBy,
@@ -27,9 +29,17 @@ def get_partition_candidates(
     tables: list[str] | None = Query(default=None),
     client: bigquery.Client = Depends(get_client),
     logging_client: cloud_logging.Client = Depends(get_logging_client),
+    storage_client: storage.Client = Depends(get_storage_client),
+    firestore_client: firestore.Client = Depends(get_firestore_client),
 ) -> PartitionCandidatesResponse:
     return service.scan_partition_candidates(
-        client, logging_client, project_id, datasets=datasets, tables=tables
+        client,
+        logging_client,
+        storage_client,
+        firestore_client,
+        project_id,
+        datasets=datasets,
+        tables=tables,
     )
 
 
@@ -39,8 +49,12 @@ def get_budget(
     group_by: BudgetGroupBy = Query(default=BudgetGroupBy.TABLE),
     limit: int = Query(default=10, ge=1, le=50),
     logging_client: cloud_logging.Client = Depends(get_logging_client),
+    storage_client: storage.Client = Depends(get_storage_client),
+    firestore_client: firestore.Client = Depends(get_firestore_client),
 ) -> BudgetResponse:
-    return service.get_budget(logging_client, project_id, group_by=group_by, limit=limit)
+    return service.get_budget(
+        logging_client, storage_client, firestore_client, project_id, group_by=group_by, limit=limit
+    )
 
 
 @router.post(
