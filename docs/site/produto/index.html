@@ -780,10 +780,18 @@
       sections.forEach((s) => observer.observe(s));
     }
 
-    sidebarToggle.addEventListener('click', () => {
-      const collapsed = appEl.classList.toggle('sidebar-collapsed');
+    // Estado do menu compartilhado com as outras abas do site (localStorage).
+    const MENU_KEY = 'oh-site:menu-collapsed';
+    function syncSidebarToggle(collapsed) {
+      appEl.classList.toggle('sidebar-collapsed', collapsed);
       sidebarToggle.textContent = collapsed ? '›' : '‹';
       sidebarToggle.setAttribute('aria-label', collapsed ? 'Mostrar menu' : 'Ocultar menu');
+    }
+    try { syncSidebarToggle(localStorage.getItem(MENU_KEY) === '1'); } catch (e) {}
+    sidebarToggle.addEventListener('click', () => {
+      const collapsed = !appEl.classList.contains('sidebar-collapsed');
+      syncSidebarToggle(collapsed);
+      try { localStorage.setItem(MENU_KEY, collapsed ? '1' : '0'); } catch (e) {}
     });
 
     const lightbox = document.getElementById('lightbox');

@@ -211,12 +211,13 @@ motivo.
 - Secret Manager, Artifact Registry, Cloud Run, Firestore — recursos
   internos do Hub, vivem só em `dp6-ci-polaris` (ou no par de projetos
   usado pra hospedar aquela instância do Hub), nunca no projeto alvo.
-- Cache pré-computado de audit log de lineage/mapa de acesso (job diário
-  D-1 + bucket GCS, ver `docs/specs/lineage.md`) — mesmo racional: o
-  bucket, o Cloud Run Job e o Cloud Scheduler vivem só no projeto do
-  Hub. As roles `logging.viewer`/`logging.privateLogViewer` desta seção
-  continuam sendo as únicas necessárias no projeto alvo; nenhuma
-  concessão nova é exigida dele por causa do cache.
+- Cache pré-computado de audit log de lineage/mapa de acesso/FinOps/
+  Storage (job diário D-1 incremental + bucket GCS, ver
+  `docs/specs/lineage.md`) — mesmo racional: o bucket, o Cloud Run Job e
+  o Cloud Scheduler vivem só no projeto do Hub. As roles
+  `logging.viewer`/`logging.privateLogViewer` desta seção continuam sendo
+  as únicas necessárias no projeto alvo; nenhuma concessão nova é exigida
+  dele por causa do cache.
 - Nada permanente — todo acesso concedido aqui é revogável a qualquer
   momento sem efeito colateral no resto do projeto alvo (seção 5).
 

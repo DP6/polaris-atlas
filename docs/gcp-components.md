@@ -74,7 +74,7 @@ todo o resto.
 
 | Recurso | Tipo | App | Ambiente | Gerenciado por | Observações |
 |---|---|---|---|---|---|
-| `backend-dev-refresh-cache` | Cloud Run Job | observability-hub | dev | terraform (`modules/cloud-run-job/main.tf`) | Roda 1x/dia (D-1), popula cache de audit log de lineage/acesso/finops (partition-candidates + budget)/storage (waste scanner 6.2). Sem recurso GCP novo — reaproveita bucket `event_cache` + Firestore |
+| `backend-dev-refresh-cache` | Cloud Run Job | observability-hub | dev | terraform (`modules/cloud-run-job/main.tf`) | Roda 1x/dia (D-1), popula **incrementalmente** (delta por `receiveTimestamp` + evicção de janela rolante) o cache de audit log de lineage/acesso/finops (partition-candidates + budget)/storage (waste scanner 6.2). Gatilho manual de admin aceita overrides de env `OBSERVABILITY_HUB_CACHE_FORCE_FULL` / `_ONLY_PROJECTS` só naquela execução. Sem recurso GCP novo — reaproveita bucket `event_cache` + Firestore |
 | `backend-prod-refresh-cache` | Cloud Run Job | observability-hub | prod | terraform | |
 | `backend-dev-refresh-cache-scheduler` | Cloud Scheduler job | observability-hub | dev | terraform | Cron `0 3 * * *` UTC |
 | `backend-prod-refresh-cache-scheduler` | Cloud Scheduler job | observability-hub | prod | terraform | |
