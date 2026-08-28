@@ -31,9 +31,12 @@ export function ApiErrorNotice({ error, action, showFix = true }: ApiErrorNotice
   const fix = showFix && error instanceof ApiError ? error.body?.fix : undefined
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-status-error/30 bg-status-error/10 p-3 text-sm text-status-error">
+    <div
+      role="alert"
+      className="flex flex-col gap-2 rounded-lg border border-status-error/30 bg-status-error/10 p-3 text-sm text-status-error-foreground"
+    >
       <div className="flex flex-wrap items-center gap-2">
-        <CircleAlert size={16} className="shrink-0" />
+        <CircleAlert size={16} className="shrink-0" aria-hidden="true" />
         <span className="flex-1">{message}</span>
         {action && (
           <Button size="sm" variant="outline" onClick={action.onClick}>
