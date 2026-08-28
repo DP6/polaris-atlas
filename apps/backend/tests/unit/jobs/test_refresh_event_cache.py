@@ -532,6 +532,42 @@ def test_main_propagates_force_full_from_settings(monkeypatch):
     assert seen == [True]
 
 
+def test_main_restricts_to_cache_only_projects_from_settings(monkeypatch):
+    """cache_only_projects (seleção do gatilho de admin) SUBSTITUI a união
+    hub_projects ∪ "vistos" — roda exatamente os projetos pedidos."""
+    monkeypatch.setattr(refresh_event_cache, "get_logging_client", lambda: MagicMock())
+    monkeypatch.setattr(refresh_event_cache, "get_storage_client", lambda: MagicMock())
+    monkeypatch.setattr(refresh_event_cache, "get_firestore_client", lambda: MagicMock())
+    known_calls = []
+    monkeypatch.setattr(
+        refresh_event_cache,
+        "_known_projects",
+        lambda firestore_client: known_calls.append(1) or ["a", "b", "c"],
+    )
+    monkeypatch.setattr(refresh_event_cache.settings, "cache_force_full", False)
+    monkeypatch.setattr(refresh_event_cache.settings, "cache_only_projects", "b, c")
+    refreshed = []
+    monkeypatch.setattr(
+        refresh_event_cache,
+        "_refresh_project",
+        lambda lc, sc, fc, pid, *, force_full: refreshed.append(pid) or ("ok", {}),
+    )
+    monkeypatch.setattr(
+        refresh_event_cache.event_cache, "start_cache_run", lambda fc, projects: "run-1"
+    )
+    monkeypatch.setattr(
+        refresh_event_cache.event_cache, "record_cache_run_project", lambda *a, **kw: None
+    )
+    monkeypatch.setattr(
+        refresh_event_cache.event_cache, "finish_cache_run", lambda fc, run_id: None
+    )
+
+    refresh_event_cache.main()
+
+    assert refreshed == ["b", "c"]
+    assert known_calls == []  # _known_projects nem é consultado
+
+
 def test_main_processes_all_projects_even_when_one_does_not_exist(monkeypatch):
     """Regressão end-to-end do bug real: usa _refresh_project de verdade
     (não mockado) — só o scan de audit log é mockado, pra provar que

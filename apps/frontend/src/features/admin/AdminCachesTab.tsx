@@ -1,5 +1,12 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, ChevronDown, ChevronRight, RotateCw } from 'lucide-react'
+import {
+  AlertTriangle,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  ChevronsUpDown,
+  RotateCw,
+} from 'lucide-react'
 import { Fragment, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
@@ -7,7 +14,16 @@ import { PaginationBar } from '@/components/PaginationBar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
 import { Input } from '@/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Select,
   SelectContent,
@@ -123,18 +139,98 @@ function RunStatusBadge({ run }: { run: EventCacheRun }) {
   return <Badge className="border-status-ok/30 bg-status-ok/10 text-status-ok">concluída</Badge>
 }
 
+function ProjectScopePicker({
+  knownProjects,
+  selected,
+  onChange,
+}: {
+  knownProjects: string[]
+  selected: string[]
+  onChange: (next: string[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const label =
+    selected.length === 0
+      ? 'Todos os projetos'
+      : selected.length === 1
+        ? selected[0]
+        : `${selected.length} projetos`
+
+  function toggle(projectId: string) {
+    onChange(
+      selected.includes(projectId)
+        ? selected.filter((p) => p !== projectId)
+        : [...selected, projectId],
+    )
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={
+          <Button
+            variant="outline"
+            size="sm"
+            role="combobox"
+            aria-expanded={open}
+            disabled={knownProjects.length === 0}
+            className="max-w-52 justify-between font-normal"
+          />
+        }
+      >
+        <span className="truncate text-left text-xs">{label}</span>
+        <ChevronsUpDown className="size-3.5 shrink-0 opacity-50" />
+      </PopoverTrigger>
+      <PopoverContent className="w-(--anchor-width) p-0" align="end">
+        <Command>
+          <CommandInput placeholder="Filtrar projeto…" />
+          <CommandList>
+            <CommandEmpty>Nenhum projeto.</CommandEmpty>
+            {selected.length > 0 && (
+              <CommandGroup>
+                <CommandItem value="__clear__" onSelect={() => onChange([])}>
+                  <span className="text-muted-foreground">Limpar seleção (rodar todos)</span>
+                </CommandItem>
+              </CommandGroup>
+            )}
+            <CommandGroup>
+              {knownProjects.map((projectId) => (
+                <CommandItem key={projectId} value={projectId} onSelect={() => toggle(projectId)}>
+                  <Check
+                    className={cn(
+                      'size-4 shrink-0',
+                      selected.includes(projectId) ? 'opacity-100' : 'opacity-0',
+                    )}
+                  />
+                  <span className="flex-1 truncate font-mono text-xs">{projectId}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 function SummaryCard({
   run,
   onRefresh,
   forceFull,
   setForceFull,
   refreshing,
+  knownProjects,
+  selectedProjects,
+  setSelectedProjects,
 }: {
   run: EventCacheRun | undefined
   onRefresh: () => void
   forceFull: boolean
   setForceFull: (v: boolean) => void
   refreshing: boolean
+  knownProjects: string[]
+  selectedProjects: string[]
+  setSelectedProjects: (next: string[]) => void
 }) {
   const done = run?.projects.length ?? 0
   const problems = run ? failedProjects(run) : []
@@ -168,19 +264,26 @@ function SummaryCard({
         </div>
 
         <div className="flex flex-col items-end gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={refreshing}
-            onClick={onRefresh}
-          >
-            <RotateCw
-              size={14}
-              className={refreshing || run?.status === 'running' ? 'animate-spin' : undefined}
+          <div className="flex items-center gap-2">
+            <ProjectScopePicker
+              knownProjects={knownProjects}
+              selected={selectedProjects}
+              onChange={setSelectedProjects}
             />
-            {run?.status === 'running' ? 'Atualizando…' : 'Atualizar agora'}
-          </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={refreshing}
+              onClick={onRefresh}
+            >
+              <RotateCw
+                size={14}
+                className={refreshing || run?.status === 'running' ? 'animate-spin' : undefined}
+              />
+              {run?.status === 'running' ? 'Atualizando…' : 'Atualizar agora'}
+            </Button>
+          </div>
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Checkbox
               id="cache-force-full"
@@ -262,6 +365,7 @@ export function AdminCachesTab() {
   const queryClient = useQueryClient()
 
   const [forceFull, setForceFull] = useState(false)
+  const [selectedProjects, setSelectedProjects] = useState<string[]>([])
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   const [statusFilter, setStatusFilter] = useState<string>(STATUS_FILTER_ALL)
@@ -272,6 +376,7 @@ export function AdminCachesTab() {
 
   const runs = runsQuery.data?.runs ?? []
   const projects = statusQuery.data?.projects ?? []
+  const knownProjects = projects.map((p) => p.project_id)
   const kindLabels = projects[0]?.caches.map((c) => c.label) ?? []
   const currentRun = runs.find((r) => r.status === 'running') ?? runs[0]
 
@@ -294,20 +399,25 @@ export function AdminCachesTab() {
   const pageRuns = filteredRuns.slice(pagination.start, pagination.end)
 
   function refresh() {
-    refreshMutation.mutate(forceFull, {
-      onSuccess: () => {
-        toast.success(
-          forceFull
-            ? 'Atualização completa disparada — acompanhe o progresso abaixo.'
-            : 'Atualização disparada — acompanhe o progresso abaixo.',
-        )
-        setTimeout(() => {
-          queryClient.invalidateQueries({ queryKey: ADMIN_EVENT_CACHE_RUNS_QUERY_KEY })
-          queryClient.invalidateQueries({ queryKey: ADMIN_EVENT_CACHE_STATUS_QUERY_KEY })
-        }, 2_000)
+    refreshMutation.mutate(
+      { forceFull, projects: selectedProjects },
+      {
+        onSuccess: () => {
+          const scope =
+            selectedProjects.length === 0
+              ? 'todos os projetos'
+              : `${selectedProjects.length} projeto${selectedProjects.length > 1 ? 's' : ''}`
+          toast.success(
+            `Atualização ${forceFull ? 'completa ' : ''}disparada para ${scope} — acompanhe o progresso abaixo.`,
+          )
+          setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey: ADMIN_EVENT_CACHE_RUNS_QUERY_KEY })
+            queryClient.invalidateQueries({ queryKey: ADMIN_EVENT_CACHE_STATUS_QUERY_KEY })
+          }, 2_000)
+        },
+        onError: () => toast.error('Não foi possível disparar a atualização.'),
       },
-      onError: () => toast.error('Não foi possível disparar a atualização.'),
-    })
+    )
   }
 
   function toggleExpand(runId: string) {
@@ -327,8 +437,9 @@ export function AdminCachesTab() {
         </p>
         <p className="text-xs text-muted-foreground">
           Recomputado 1×/dia (D-1, 03:00 UTC) de forma incremental — cada ciclo lê só o delta e
-          desliza a janela. "Forçar completo" re-escaneia tudo. A tela faz polling e mostra cada
-          projeto sendo processado.
+          desliza a janela. No disparo manual dá pra escolher projetos (padrão: todos) e marcar
+          "forçar completo" (re-escaneia a janela inteira). A tela faz polling e mostra cada projeto
+          sendo processado.
         </p>
       </div>
 
@@ -349,6 +460,9 @@ export function AdminCachesTab() {
             forceFull={forceFull}
             setForceFull={setForceFull}
             refreshing={refreshMutation.isPending}
+            knownProjects={knownProjects}
+            selectedProjects={selectedProjects}
+            setSelectedProjects={setSelectedProjects}
           />
         )}
       </section>

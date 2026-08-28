@@ -249,15 +249,20 @@ def retention_funnel(
 @router.post("/event-cache/refresh", status_code=202)
 def refresh_event_cache(
     force_full: bool = Query(default=False),
+    project: list[str] = Query(default=[]),
     run_client: run_v2.JobsClient = Depends(get_run_client),
 ) -> None:
     """Dispara sob demanda o Cloud Run Job de refresh do cache de audit
     log (lineage, access, finops e storage) — mesmo Job do ciclo diário
     automático (ver docs/specs/lineage.md). 202 porque a execução do Job
     é assíncrona: este endpoint só confirma o disparo, não espera o
-    resultado. `force_full=true` (toggle "forçar completo" da tela) faz o
-    Job re-escanear a janela inteira em vez do delta incremental."""
-    service.trigger_event_cache_refresh(run_client, force_full=force_full)
+    resultado.
+
+    - `force_full=true` (toggle "forçar completo" da tela) faz o Job
+      re-escanear a janela inteira em vez do delta incremental.
+    - `project=a&project=b` restringe o scan a esses projetos; ausente =
+      todos (união hub_projects ∪ "vistos")."""
+    service.trigger_event_cache_refresh(run_client, force_full=force_full, projects=project or None)
 
 
 @router.get("/event-cache/status", response_model=EventCacheStatusResponse)

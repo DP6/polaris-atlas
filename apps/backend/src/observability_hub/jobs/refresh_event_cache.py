@@ -325,9 +325,20 @@ def main() -> None:
     firestore_client = get_firestore_client()
 
     force_full = settings.cache_force_full
-    projects = _known_projects(firestore_client)
+    only_projects = settings.cache_only_projects_list
+    # only_projects (escolha explícita do gatilho de admin) SUBSTITUI a
+    # união hub_projects ∪ "vistos" — roda exatamente os projetos pedidos,
+    # nada mais. Vazio = todos (ciclo diário do Scheduler).
+    projects = sorted(only_projects) if only_projects else _known_projects(firestore_client)
     logger.info(
-        json.dumps({"status": "start", "project_count": len(projects), "force_full": force_full})
+        json.dumps(
+            {
+                "status": "start",
+                "project_count": len(projects),
+                "force_full": force_full,
+                "only_projects": only_projects or None,
+            }
+        )
     )
 
     # Registro de execução no Firestore (event_cache_runs) — lido pela tela

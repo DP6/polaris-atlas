@@ -30,13 +30,23 @@ import type {
 export const adminApi = {
   // Dispara sob demanda o Cloud Run Job de refresh do cache de audit log
   // (lineage/acesso/órfãs/FinOps/Storage). 202 sem corpo relevante: só
-  // confirma o disparo, não espera o Job terminar. forceFull=true (toggle
-  // "forçar completo") faz o Job re-escanear a janela inteira em vez do
-  // delta incremental.
-  refreshEventCache: (forceFull = false) =>
-    httpClient.post<void>(
-      `/api/v1/admin/event-cache/refresh${forceFull ? '?force_full=true' : ''}`,
-    ),
+  // confirma o disparo, não espera o Job terminar.
+  // - forceFull=true (toggle "forçar completo"): re-escaneia a janela
+  //   inteira em vez do delta incremental.
+  // - projects: restringe o scan a esses project_id; vazio = todos.
+  refreshEventCache: ({
+    forceFull = false,
+    projects = [],
+  }: {
+    forceFull?: boolean
+    projects?: string[]
+  } = {}) => {
+    const params = new URLSearchParams()
+    if (forceFull) params.set('force_full', 'true')
+    for (const p of projects) params.append('project', p)
+    const qs = params.toString()
+    return httpClient.post<void>(`/api/v1/admin/event-cache/refresh${qs ? `?${qs}` : ''}`)
+  },
 
   // Freshness do cache de audit log por projeto × domínio — tudo do
   // Firestore, barato de fazer polling frequente.

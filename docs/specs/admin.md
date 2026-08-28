@@ -1,10 +1,11 @@
 # Spec — Domínio: Admin (controle de acesso por usuário × projeto)
 
 **Versão:** 1.10 (aba "Caches" — cache de audit log incremental: toggle
-"forçar completo", freshness com `never_run`/`window_start`/`mode`,
-histórico de execuções em `GET /event-cache/runs` (separado de `/status`)
-com card de resumo + tabela filtrável/paginada no cliente, retenção de
-200 execuções; ver "Acompanhamento do cache de audit log")
+"forçar completo" + **multi-seleção de projetos** no disparo manual,
+freshness com `never_run`/`window_start`/`mode`, histórico de execuções em
+`GET /event-cache/runs` (separado de `/status`) com card de resumo +
+tabela filtrável/paginada no cliente, retenção de 200 execuções; ver
+"Acompanhamento do cache de audit log")
 **Status:** Aprovada
 **Fase:** Transversal (não faz parte do roadmap de observabilidade de `docs/prd.md`) — plataforma
 **Última atualização:** 2026-08-28
@@ -373,14 +374,23 @@ Administração dá visibilidade granular disso:
   (`domains/admin/service.py::trigger_event_cache_refresh` →
   `core/run_client.py`; a SA de runtime precisa de `roles/run.invoker`
   **sobre o Job**, concedido no módulo Terraform `cloud-run-job`).
-  Aceita `?force_full=true` (toggle **"forçar completo"** da tela): o Job
-  ignora o delta incremental e re-escaneia a janela inteira de todos os
-  projetos nessa execução. É injetado como env
-  `OBSERVABILITY_HUB_CACHE_FORCE_FULL=1` só naquela execução, via
-  `run_v2.RunJobRequest.Overrides` (`core/config.py::settings.cache_force_full`).
-Dois endpoints, **só a partir do Firestore** (nada de Cloud Logging nem
-Cloud Run Admin API — evita depender de `roles/run.viewer`), com cadências
-de polling separadas:
+  Dois modificadores, injetados como env só naquela execução via
+  `run_v2.RunJobRequest.Overrides` (o ciclo diário do Scheduler nunca os
+  seta):
+  - `?force_full=true` (toggle **"forçar completo"** da tela) →
+    `OBSERVABILITY_HUB_CACHE_FORCE_FULL=1`: o Job ignora o delta
+    incremental e re-escaneia a janela inteira
+    (`core/config.py::settings.cache_force_full`).
+  - `?project=a&project=b` (multi-seleção de projetos na tela) →
+    `OBSERVABILITY_HUB_CACHE_ONLY_PROJECTS=a,b`: o Job roda **só** esses
+    projetos, **substituindo** a união `hub_projects` ∪ "vistos"
+    (`settings.cache_only_projects` / `_list`). Ausente = todos. A tela
+    lista os `project_id` que já aparecem na freshness (dropdown, sem
+    texto livre).
+
+**Leitura de estado** — dois endpoints, **só a partir do Firestore** (nada
+de Cloud Logging nem Cloud Run Admin API — evita depender de
+`roles/run.viewer`), com cadências de polling separadas:
 
 - **Freshness**: `GET /api/v1/admin/event-cache/status`
   (`get_event_cache_status`) — pra cada projeto conhecido (união
@@ -408,8 +418,10 @@ de polling separadas:
   escaneia mais o Cloud Logging no request path**.
 - **Frontend** (`AdminCachesTab.tsx`): **card de resumo** da execução
   atual/última (badge de status, `N/M` projetos, duração, modo, lista dos
-  projetos com problema) + botão "Atualizar agora" com checkbox **"forçar
-  completo"**; **tabela de execuções** (linha = resumo do run, linha
+  projetos com problema) + botão "Atualizar agora" com **seletor de
+  projetos** (Popover + Command, multi-seleção dos `project_id` da
+  freshness; vazio = todos) e checkbox **"forçar completo"**; **tabela de
+  execuções** (linha = resumo do run, linha
   expansível com o detalhe por projeto) **filtrável** — status (runs com
   ao menos um projeto naquele status), projeto (substring), período (data
   de `started_at`), "só com falha" — e **paginada**. Filtro e paginação

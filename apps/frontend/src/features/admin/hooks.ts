@@ -19,8 +19,8 @@ export const ADMIN_EVENT_CACHE_STATUS_QUERY_KEY = ['admin-event-cache-status']
 export const ADMIN_EVENT_CACHE_RUNS_QUERY_KEY = ['admin-event-cache-runs']
 
 export function useRefreshEventCache() {
-  return useMutation<void, Error, boolean>({
-    mutationFn: (forceFull) => adminApi.refreshEventCache(forceFull),
+  return useMutation<void, Error, { forceFull: boolean; projects: string[] }>({
+    mutationFn: (opts) => adminApi.refreshEventCache(opts),
   })
 }
 

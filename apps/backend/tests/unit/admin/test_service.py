@@ -950,7 +950,7 @@ def test_trigger_event_cache_refresh_calls_run_client_with_environment_job_name(
     assert len(calls) == 1
     args, kwargs = calls[0]
     assert args == (run_client, "dp6-ci-polaris", "us-central1", "backend-dev-refresh-cache")
-    assert kwargs == {"force_full": False}
+    assert kwargs == {"force_full": False, "only_projects": None}
 
 
 def test_trigger_event_cache_refresh_forwards_force_full(monkeypatch):
@@ -962,7 +962,31 @@ def test_trigger_event_cache_refresh_forwards_force_full(monkeypatch):
 
     service.trigger_event_cache_refresh(MagicMock(), force_full=True)
 
-    assert calls[0][1] == {"force_full": True}
+    assert calls[0][1] == {"force_full": True, "only_projects": None}
+
+
+def test_trigger_event_cache_refresh_forwards_project_selection(monkeypatch):
+    monkeypatch.setattr(service, "get_runtime_project", lambda: "dp6-ci-polaris")
+    monkeypatch.setattr(service.settings, "region", "us-central1")
+    monkeypatch.setattr(service.settings, "environment", "dev")
+    calls = []
+    monkeypatch.setattr(service, "trigger_job_execution", lambda *a, **kw: calls.append((a, kw)))
+
+    service.trigger_event_cache_refresh(MagicMock(), projects=["proj-a", "proj-b"])
+
+    assert calls[0][1] == {"force_full": False, "only_projects": ["proj-a", "proj-b"]}
+
+
+def test_trigger_event_cache_refresh_empty_project_list_means_all(monkeypatch):
+    monkeypatch.setattr(service, "get_runtime_project", lambda: "dp6-ci-polaris")
+    monkeypatch.setattr(service.settings, "region", "us-central1")
+    monkeypatch.setattr(service.settings, "environment", "dev")
+    calls = []
+    monkeypatch.setattr(service, "trigger_job_execution", lambda *a, **kw: calls.append((a, kw)))
+
+    service.trigger_event_cache_refresh(MagicMock(), projects=[])
+
+    assert calls[0][1] == {"force_full": False, "only_projects": None}
 
 
 def test_list_event_cache_runs_builds_runs_from_firestore(monkeypatch):
