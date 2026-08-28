@@ -174,14 +174,14 @@ function ProjectScopePicker({
             role="combobox"
             aria-expanded={open}
             disabled={knownProjects.length === 0}
-            className="max-w-52 justify-between font-normal"
+            className="w-56 justify-between font-normal"
           />
         }
       >
         <span className="truncate text-left text-xs">{label}</span>
         <ChevronsUpDown className="size-3.5 shrink-0 opacity-50" />
       </PopoverTrigger>
-      <PopoverContent className="w-(--anchor-width) p-0" align="end">
+      <PopoverContent className="w-[min(22rem,calc(100vw-2rem))] max-w-none p-0" align="end">
         <Command>
           <CommandInput placeholder="Filtrar projeto…" />
           <CommandList>
@@ -202,7 +202,7 @@ function ProjectScopePicker({
                       selected.includes(projectId) ? 'opacity-100' : 'opacity-0',
                     )}
                   />
-                  <span className="flex-1 truncate font-mono text-xs">{projectId}</span>
+                  <span className="flex-1 break-all font-mono text-xs">{projectId}</span>
                 </CommandItem>
               ))}
             </CommandGroup>
