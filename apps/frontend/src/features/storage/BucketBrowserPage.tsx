@@ -2,6 +2,7 @@ import { ChevronRight, File, Folder } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
 import { Button } from '@/components/ui/button'
 import {
@@ -72,37 +73,37 @@ export function BucketBrowserPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">{bucketName}</h1>
-          <div className="mt-1 flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
-            <Link to="/storage" className="hover:text-primary">
-              Buckets
-            </Link>
-            <ChevronRight size={12} />
+      <PageHeader
+        title={bucketName}
+        actions={
+          <RefreshButton isRefreshing={query.isFetching} onRefresh={() => query.refetch()} />
+        }
+      />
+
+      <nav
+        aria-label="Trilha de navegação"
+        className="-mt-3 flex flex-wrap items-center gap-1 text-muted-foreground text-sm"
+      >
+        <Link to="/storage" className="hover:text-primary">
+          Buckets
+        </Link>
+        <ChevronRight size={12} aria-hidden="true" />
+        <button type="button" onClick={() => navigateToPrefix('')} className="hover:text-primary">
+          {bucketName}
+        </button>
+        {breadcrumbSegments(prefix).map((segment) => (
+          <span key={segment.prefix} className="flex items-center gap-1">
+            <ChevronRight size={12} aria-hidden="true" />
             <button
               type="button"
-              onClick={() => navigateToPrefix('')}
+              onClick={() => navigateToPrefix(segment.prefix)}
               className="hover:text-primary"
             >
-              {bucketName}
+              {segment.label}
             </button>
-            {breadcrumbSegments(prefix).map((segment) => (
-              <span key={segment.prefix} className="flex items-center gap-1">
-                <ChevronRight size={12} />
-                <button
-                  type="button"
-                  onClick={() => navigateToPrefix(segment.prefix)}
-                  className="hover:text-primary"
-                >
-                  {segment.label}
-                </button>
-              </span>
-            ))}
-          </div>
-        </div>
-        <RefreshButton isRefreshing={query.isFetching} onRefresh={() => query.refetch()} />
-      </div>
+          </span>
+        ))}
+      </nav>
 
       <Table>
         <TableHeader>

@@ -1,5 +1,6 @@
 import { Star } from 'lucide-react'
 import { useLocation, useParams } from 'react-router-dom'
+import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
 import { AssetsTable } from '@/features/catalog/AssetsTable'
 import { useDatasets, useTables } from '@/features/catalog/hooks'
@@ -44,10 +45,10 @@ export function CatalogDatasetPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold">{tablesQuery.data.dataset_id}</h1>
+      <PageHeader
+        title={
+          <span className="inline-flex items-center gap-2">
+            {tablesQuery.data.dataset_id}
             <button
               type="button"
               onClick={() =>
@@ -66,18 +67,20 @@ export function CatalogDatasetPage() {
                 className={isDatasetFavorite ? 'fill-primary text-primary' : undefined}
               />
             </button>
-          </div>
-          <p className="text-sm text-muted-foreground">{tablesQuery.data.total_tables} ativos</p>
-        </div>
-        <RefreshButton
-          isRefreshing={isRefreshing}
-          onRefresh={() => {
-            tablesQuery.refetch()
-            datasetsQuery.refetch()
-            freshnessQuery.refetch()
-          }}
-        />
-      </div>
+          </span>
+        }
+        description={`${tablesQuery.data.total_tables} ativos`}
+        actions={
+          <RefreshButton
+            isRefreshing={isRefreshing}
+            onRefresh={() => {
+              tablesQuery.refetch()
+              datasetsQuery.refetch()
+              freshnessQuery.refetch()
+            }}
+          />
+        }
+      />
 
       <KpiCards
         items={[

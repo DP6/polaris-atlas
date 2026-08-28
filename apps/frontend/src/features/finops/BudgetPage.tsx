@@ -13,6 +13,7 @@ import {
   YAxis,
 } from 'recharts'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { SqlPreview } from '@/components/SqlPreview'
@@ -96,14 +97,10 @@ export function BudgetPage() {
   if (!hasRun) {
     return (
       <div className="flex flex-col gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">FinOps — Budget de custo</h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Estima o custo do mês corrente via audit logs de jobs do BigQuery (bytes cobrados) +
-            preço público on-demand — sem depender do Cloud Billing Export. Escolha o agrupamento e
-            o limite de itens antes de rodar.
-          </p>
-        </div>
+        <PageHeader
+          title="FinOps — Budget de custo"
+          description="Estima o custo do mês corrente via audit logs de jobs do BigQuery (bytes cobrados) + preço público on-demand — sem depender do Cloud Billing Export. Escolha o agrupamento e o limite de itens antes de rodar."
+        />
 
         <div className="flex flex-col gap-4 rounded-lg border border-border p-4">
           <div>
@@ -162,21 +159,18 @@ export function BudgetPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">FinOps — Budget de custo</h1>
-          <p className="text-sm text-muted-foreground">
-            Custo por agrupamento e queries mais caras do mês corrente — estimativa baseada em bytes
-            escaneados, cobrança on-demand.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setHasRun(false)}>
-            Nova busca
-          </Button>
-          <RefreshButton isRefreshing={query.isFetching} onRefresh={() => query.refetch()} />
-        </div>
-      </div>
+      <PageHeader
+        title="FinOps — Budget de custo"
+        description="Custo por agrupamento e queries mais caras do mês corrente — estimativa baseada em bytes escaneados, cobrança on-demand."
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setHasRun(false)}>
+              Nova busca
+            </Button>
+            <RefreshButton isRefreshing={query.isFetching} onRefresh={() => query.refetch()} />
+          </>
+        }
+      />
 
       {query.isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}
       {query.isError && <ApiErrorNotice error={query.error} />}

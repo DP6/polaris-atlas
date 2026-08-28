@@ -2,6 +2,7 @@ import { ChevronDown, Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { Badge } from '@/components/ui/badge'
@@ -64,14 +65,14 @@ export function FinOpsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold">FinOps — Scanner de desperdício</h1>
-        <p className="text-sm text-muted-foreground">
-          Candidatas a particionamento e sugestões de tipo de coluna, com estimativa de custo.
-          Tabelas sem uso ficou só em Governança &gt; "Tabelas sem consumidor", pra não duplicar a
-          mesma informação em dois lugares.
-        </p>
-      </div>
+      <PageHeader
+        title="FinOps — Scanner de desperdício"
+        description={
+          'Candidatas a particionamento e sugestões de tipo de coluna, com estimativa de custo. ' +
+          'Tabelas sem uso ficou só em Governança > "Tabelas sem consumidor", pra não duplicar a ' +
+          'mesma informação em dois lugares.'
+        }
+      />
 
       <Tabs defaultValue={PARTITION_TAB}>
         <TabsList className="w-fit">

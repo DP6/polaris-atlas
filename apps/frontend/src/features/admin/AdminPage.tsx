@@ -1,5 +1,4 @@
-import { ArrowLeft } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { PageHeader } from '@/components/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AdminAccessRequestsTab } from '@/features/admin/AdminAccessRequestsTab'
@@ -23,22 +22,11 @@ export function AdminPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <Link
-        to="/"
-        className="flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft size={14} />
-        Voltar
-      </Link>
-
-      <div>
-        <h1 className="text-2xl font-bold">Administração — usuários e acesso</h1>
-        <p className="text-sm text-muted-foreground">
-          Controla quem é administrador do Hub e a quais projetos GCP cada usuário tem acesso. O
-          login em si continua controlado pela allowlist do OAuth (fora daqui) — isto aqui só
-          controla acesso a projeto dentro do Hub.
-        </p>
-      </div>
+      <PageHeader
+        back={{ to: '/', label: 'Voltar' }}
+        title="Administração — usuários e acesso"
+        description="Controla quem é administrador do Hub e a quais projetos GCP cada usuário tem acesso. O login em si continua controlado pela allowlist do OAuth (fora daqui) — isto aqui só controla acesso a projeto dentro do Hub."
+      />
 
       <Tabs defaultValue={USERS_TAB}>
         <TabsList className="w-fit">

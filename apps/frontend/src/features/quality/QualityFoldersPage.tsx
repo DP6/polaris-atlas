@@ -2,6 +2,7 @@ import { FolderPlus, Globe, Lock, Mail } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -42,25 +43,22 @@ export function QualityFoldersPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Pastas de profiling</h1>
-          <p className="text-sm text-muted-foreground">
-            Recortes salvos de runs de profiling pra comparar depois — ex: diferentes métodos de
-            unicidade ou janelas de data pra uma mesma tabela.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <RefreshButton
-            isRefreshing={foldersQuery.isFetching}
-            onRefresh={() => foldersQuery.refetch()}
-          />
-          <Button onClick={() => setCreateOpen(true)}>
-            <FolderPlus size={16} />
-            Nova pasta
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Pastas de profiling"
+        description="Recortes salvos de runs de profiling pra comparar depois — ex: diferentes métodos de unicidade ou janelas de data pra uma mesma tabela."
+        actions={
+          <>
+            <RefreshButton
+              isRefreshing={foldersQuery.isFetching}
+              onRefresh={() => foldersQuery.refetch()}
+            />
+            <Button onClick={() => setCreateOpen(true)}>
+              <FolderPlus size={16} />
+              Nova pasta
+            </Button>
+          </>
+        }
+      />
 
       {foldersQuery.isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}
       {foldersQuery.isError && <ApiErrorNotice error={foldersQuery.error} />}

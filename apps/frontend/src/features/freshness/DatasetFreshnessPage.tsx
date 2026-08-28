@@ -1,4 +1,5 @@
 import { useParams } from 'react-router-dom'
+import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
 import { useDatasetFreshness } from '@/features/freshness/hooks'
 import { SlaRow } from '@/features/freshness/SlaRow'
@@ -20,20 +21,18 @@ export function DatasetFreshnessPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">{freshnessQuery.data.dataset_id}</h1>
-          <p className="text-sm text-muted-foreground">
-            Freshness de {freshnessQuery.data.tables.length}{' '}
-            {freshnessQuery.data.tables.length === 1 ? 'tabela' : 'tabelas'} —{' '}
-            {freshnessQuery.data.location}
-          </p>
-        </div>
-        <RefreshButton
-          isRefreshing={freshnessQuery.isFetching}
-          onRefresh={() => freshnessQuery.refetch()}
-        />
-      </div>
+      <PageHeader
+        title={freshnessQuery.data.dataset_id}
+        description={`Freshness de ${freshnessQuery.data.tables.length} ${
+          freshnessQuery.data.tables.length === 1 ? 'tabela' : 'tabelas'
+        } — ${freshnessQuery.data.location}`}
+        actions={
+          <RefreshButton
+            isRefreshing={freshnessQuery.isFetching}
+            onRefresh={() => freshnessQuery.refetch()}
+          />
+        }
+      />
 
       <SlaRow counts={freshnessQuery.data.summary} />
 

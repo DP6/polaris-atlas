@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { CacheStalenessBadge } from '@/components/CacheStalenessBadge'
 import { DatasetScopeGate } from '@/components/DatasetScopeGate'
+import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { Button } from '@/components/ui/button'
@@ -163,27 +164,27 @@ export function OrphansPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Tabelas sem consumidor</h1>
-          <div className="flex items-center gap-2">
-            <p className="text-sm text-muted-foreground">
-              {data.orphans.length} tabelas sem consumidor conhecido nos últimos{' '}
-              {data.lookback_days} dias
-            </p>
+      <PageHeader
+        title="Tabelas sem consumidor"
+        description={
+          <span className="inline-flex flex-wrap items-center gap-2">
+            {data.orphans.length} tabelas sem consumidor conhecido nos últimos {data.lookback_days}{' '}
+            dias
             <CacheStalenessBadge cacheUpdatedAt={data.cache_updated_at} />
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setHasRun(false)}>
-            Nova busca
-          </Button>
-          <RefreshButton
-            isRefreshing={orphansQuery.isFetching}
-            onRefresh={() => orphansQuery.refetch()}
-          />
-        </div>
-      </div>
+          </span>
+        }
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setHasRun(false)}>
+              Nova busca
+            </Button>
+            <RefreshButton
+              isRefreshing={orphansQuery.isFetching}
+              onRefresh={() => orphansQuery.refetch()}
+            />
+          </>
+        }
+      />
 
       {data.warning && <WarningCallout>{data.warning}</WarningCallout>}
 

@@ -37,7 +37,7 @@ export function CollapsibleSection({
         <Heading
           className={cn(
             'm-0',
-            isSection ? 'font-semibold text-lg' : 'font-medium text-muted-foreground text-sm',
+            isSection ? 'font-bold text-title' : 'font-medium text-body text-muted-foreground',
           )}
         >
           <CollapsibleTrigger className="flex items-center gap-1.5 text-left hover:text-foreground">

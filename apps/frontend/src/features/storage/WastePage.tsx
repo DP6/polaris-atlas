@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { Badge } from '@/components/ui/badge'
@@ -139,17 +140,17 @@ export function WastePage() {
   if (!hasRun) {
     return (
       <div className="flex flex-col gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Scanner de desperdício</h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Sinaliza buckets com objetos em storage class STANDARD parados há muito tempo,
-            candidatos a mudar pra uma classe mais barata (Nearline/Coldline/Archive) — baseado em
-            idade do objeto + ausência de lifecycle rule já configurada. Quando o audit log de
-            leitura de objeto (DATA_READ) está habilitado no projeto, a confiança sobe pra "sem
-            leitura confirmada" em vez de só "configuração"; sem ele, a checagem degrada
-            graciosamente pra só idade + config, sem bloquear o resultado.
-          </p>
-        </div>
+        <PageHeader
+          title="Scanner de desperdício"
+          description={
+            'Sinaliza buckets com objetos em storage class STANDARD parados há muito tempo, ' +
+            'candidatos a mudar pra uma classe mais barata (Nearline/Coldline/Archive) — baseado ' +
+            'em idade do objeto + ausência de lifecycle rule já configurada. Quando o audit log ' +
+            'de leitura de objeto (DATA_READ) está habilitado no projeto, a confiança sobe pra ' +
+            '"sem leitura confirmada" em vez de só "configuração"; sem ele, a checagem degrada ' +
+            'graciosamente pra só idade + config, sem bloquear o resultado.'
+          }
+        />
 
         <div className="flex flex-col gap-4 rounded-lg border border-border p-4">
           <div>
@@ -181,23 +182,21 @@ export function WastePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Scanner de desperdício</h1>
-          <p className="text-sm text-muted-foreground">
-            {data.candidates.length} buckets candidatos a mudança de storage class
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setHasRun(false)}>
-            Nova busca
-          </Button>
-          <RefreshButton
-            isRefreshing={wasteQuery.isFetching}
-            onRefresh={() => wasteQuery.refetch()}
-          />
-        </div>
-      </div>
+      <PageHeader
+        title="Scanner de desperdício"
+        description={`${data.candidates.length} buckets candidatos a mudança de storage class`}
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setHasRun(false)}>
+              Nova busca
+            </Button>
+            <RefreshButton
+              isRefreshing={wasteQuery.isFetching}
+              onRefresh={() => wasteQuery.refetch()}
+            />
+          </>
+        }
+      />
 
       {data.usage_check_warning && <WarningCallout>{data.usage_check_warning}</WarningCallout>}
 
