@@ -1042,9 +1042,8 @@ def test_get_event_cache_status_builds_project_freshness_only(monkeypatch):
     monkeypatch.setattr(
         service.repository,
         "list_projects",
-        lambda c: [{"project_id": "proj-a"}, {"project_id": "*"}],
+        lambda c: [{"project_id": "proj-b"}, {"project_id": "proj-a"}, {"project_id": "*"}],
     )
-    monkeypatch.setattr(service.event_cache, "list_seen_projects", lambda c: ["proj-b"])
 
     def _meta(c, kind, project_id):
         if project_id == "proj-a" and kind == "lineage":
@@ -1063,7 +1062,7 @@ def test_get_event_cache_status_builds_project_freshness_only(monkeypatch):
 
     # /status não carrega mais o histórico de execuções (foi pro /runs)
     assert not hasattr(result, "runs")
-    # wildcard "*" NÃO entra na lista de projetos; proj-a e proj-b entram
+    # wildcard "*" NÃO entra na lista; só os hub_projects, ordenados
     assert [p.project_id for p in result.projects] == ["proj-a", "proj-b"]
     # 4 domínios por projeto, na ordem canônica
     assert [k.kind for k in result.projects[0].caches] == [

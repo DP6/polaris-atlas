@@ -296,10 +296,9 @@ def get_read_object_keys_cached(
 ) -> set[tuple[str, str]]:
     """Só lê o cache pré-computado — o request path NÃO escaneia mais ao
     vivo (modelo incremental: o scan roda só no job diário ou no gatilho
-    manual). Cache hit → conjunto de chaves. Cache miss → registra o
-    projeto (pra o próximo run do job pegá-lo) e levanta
+    manual). Cache hit → conjunto de chaves. Cache miss → levanta
     EventCacheNotReadyError, que domains/storage/service.py degrada pra
-    warning best-effort."""
+    warning best-effort. O job diário só cobre `hub_projects`."""
     try:
         cached = read_read_object_keys_cache(storage_client, project_id)
     except Exception:
@@ -309,5 +308,4 @@ def get_read_object_keys_cached(
     if cached is not None:
         return set(cached.keys())
 
-    event_cache.record_project_seen(firestore_client, project_id)
     raise EventCacheNotReadyError(project_id)

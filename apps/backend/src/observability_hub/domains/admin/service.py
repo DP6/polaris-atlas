@@ -341,7 +341,7 @@ def trigger_event_cache_refresh(
     - `force_full=True` (toggle "forçar completo" da tela) faz o Job
       ignorar o delta incremental e re-escanear a janela inteira.
     - `projects` (seleção da tela) restringe a esses project_id; None/vazio
-      = todos (união hub_projects ∪ "vistos", igual ao ciclo diário).
+      = todos os `hub_projects`, igual ao ciclo diário.
     Ver core/run_client.py."""
     job_name = f"backend-{settings.environment}-refresh-cache"
     trigger_job_execution(
@@ -355,15 +355,13 @@ def trigger_event_cache_refresh(
 
 
 def _known_cache_projects(client: firestore.Client) -> list[str]:
-    """Mesma união que jobs/refresh_event_cache.py::_known_projects varre —
-    hub_projects (menos o wildcard "*") ∪ projetos vistos via cache miss."""
-    from_admin = {
+    """Mesma lista que jobs/refresh_event_cache.py::_known_projects varre —
+    só `hub_projects` (menos um eventual doc com id "*")."""
+    return sorted(
         p["project_id"]
         for p in repository.list_projects(client)
         if p["project_id"] != _WILDCARD_PROJECT
-    }
-    from_seen = set(event_cache.list_seen_projects(client))
-    return sorted(from_admin | from_seen)
+    )
 
 
 def _to_event_cache_run(raw: dict) -> EventCacheRun:

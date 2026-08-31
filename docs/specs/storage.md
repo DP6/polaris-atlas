@@ -237,8 +237,9 @@ scanner 6.2 só faz `key in read_keys`).
 
 **Request path não escaneia mais ao vivo** (v1.4): `list_read_object_keys`
 foi removida. Cache hit → `set` das chaves. Cache miss (ou falha ao ler
-o blob) → registra o projeto (`record_project_seen`) e levanta
-`EventCacheNotReadyError`, que `_read_object_keys_or_warning` degrada pra
+o blob) → levanta `EventCacheNotReadyError` (o cache só é populado pelo
+run do Job, e só pra projetos de `hub_projects`), que
+`_read_object_keys_or_warning` degrada pra
 warning `config_based` "cache ainda não gerado" — mesmo bloco `except`
 de `LoggingAccessDeniedError`/`LoggingQuotaExceededError`, porque a
 checagem 6.2 é best-effort (a checagem 6.1 já é útil sozinha).

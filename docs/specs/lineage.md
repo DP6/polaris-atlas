@@ -283,9 +283,9 @@ de "failed to fetch" recorrente em Lineage, Órfãs e Mapa de Acesso.
 
 **Mecanismo**: um Cloud Run Job (`apps/backend/src/observability_hub/jobs/refresh_event_cache.py`,
 infra em `infra/terraform/modules/cloud-run-job`) roda 1x/dia (D-1, cron
-`"0 3 * * *"` UTC via Cloud Scheduler) e, para cada projeto conhecido
-(`domains/admin` `hub_projects` ∪ projetos vistos via cache miss, ver
-`core/event_cache.py::list_seen_projects`), faz **um único scan** de
+`"0 3 * * *"` UTC via Cloud Scheduler) e, para cada projeto registrado no
+ADM (`domains/admin` `hub_projects` — a única fonte, ver
+`jobs/refresh_event_cache.py::_known_projects` e ASM-003), faz **um único scan** de
 `jobservice.jobcompleted` (via `core/logging_client.py::bigquery_job_events_filter`
 + `list_entries_with_retry`) e passa os `LogEntry` crus pros 3 parsers
 `parse_job_events`/`parse_access_events`/`parse_scan_events`
@@ -331,8 +331,9 @@ O request path (`get_job_events_cached`, `get_access_events_cached`,
 `get_scan_events_cached`, `get_read_object_keys_cached`) **não escaneia
 mais o Cloud Logging ao vivo em cache miss**. Cache hit → devolve o dado.
 Cache miss (ou falha ao ler o blob — bucket sem permissão, GCS fora do
-ar) → registra o projeto (`record_project_seen`, pro próximo run do Job
-pegá-lo) e levanta `EventCacheNotReadyError`. Os serviços de
+ar) → levanta `EventCacheNotReadyError` (só o run do Job, diário ou
+manual, popula o cache; um projeto fora de `hub_projects` nunca sai desse
+estado). Os serviços de
 lineage/access/finops/storage capturam essa exceção **junto** de
 `LoggingQuotaExceededError` e degradam pra grafo/lista/tela vazia com um
 `warning` ("o cache ainda não foi gerado…"); `main.py` mapeia pra HTTP
@@ -413,7 +414,7 @@ apps/backend/src/observability_hub/
 | Job repetido diariamente na janela (mesma aresta) | Deduplicada — uma aresta por par `(source, target)`, não uma por job |
 | Nenhum evento de job no projeto raiz | `warning` populado (mesmo texto/causas da v1), `nodes`/`edges` vazios |
 | `max_hops` fora do intervalo 1–15 | HTTP 422 (validação do `Query(ge=1, le=15)`) |
-| Projeto nunca varrido pelo Job (cache miss) — modelo incremental v2.4 | Request path **não escaneia ao vivo**: registra o projeto (`record_project_seen`) e levanta `EventCacheNotReadyError` → serviço degrada pra grafo/lista vazia com `warning` "cache ainda não gerado". O próximo run do Job (diário ou gatilho manual) popula. `main.py` mapeia pra 503 só como rede de segurança |
+| Projeto nunca varrido pelo Job (cache miss) — modelo incremental v2.4 | Request path **não escaneia ao vivo**: levanta `EventCacheNotReadyError` → serviço degrada pra grafo/lista vazia com `warning` "cache ainda não gerado". O run do Job (diário ou gatilho manual) popula — mas só se o projeto estiver em `hub_projects` (ASM-003); um projeto não cadastrado fica permanentemente nesse estado. `main.py` mapeia pra 503 só como rede de segurança |
 | Projeto não-raiz sem cache durante a expansão (v2.4) | Soft-fail em `_get_project_events` — não expande a partir dele, resto do grafo intacto (igual a `LoggingAccessDeniedError`/`LoggingQuotaExceededError`) |
 | `429 TooManyRequests` (cota `read_requests`/min do projeto) — só no Job de refresh ou no scan custom de `/orphans` (v2.4: request path comum não escaneia mais) | `list_entries_with_retry` faz retry exponencial (backoff, deadline 30s); o 429 persistente vira `LoggingQuotaExceededError` → mesma degradação pra vazio+`warning` do cache-não-gerado |
 | `lookback_days` custom em `/orphans` | Único caminho do request path que ainda escaneia ao vivo (`list_job_events`) — opt-out explícito |
@@ -429,9 +430,9 @@ apps/backend/src/observability_hub/
 | ID | Comportamento | Testado em |
 |---|---|---|
 | AC-001 | Cache hit não chama `client.list_entries` (Cloud Logging) | `test_get_job_events_cached_returns_cache_hit_without_calling_list_entries` |
-| AC-002 | Cache miss (lookback default) **não** escaneia ao vivo — registra o projeto e levanta `EventCacheNotReadyError` | `test_get_job_events_cached_raises_not_ready_and_records_project_on_miss` |
+| AC-002 | Cache miss (lookback default) **não** escaneia ao vivo — levanta `EventCacheNotReadyError` | `test_get_job_events_cached_raises_not_ready_on_miss` |
 | AC-003 | `lookback_days` diferente do default do módulo escaneia ao vivo (opt-out) | `test_get_job_events_cached_ignores_cache_for_non_default_lookback`, `test_get_job_events_cached_raises_quota_exceeded_on_custom_lookback` |
-| AC-004 | O job de refresh cobre a união de `hub_projects` e projetos vistos via cache miss | `test_known_projects_unions_hub_projects_and_seen_projects` |
+| AC-004 | O job de refresh cobre exatamente os projetos de `hub_projects` (registro do ADM) — nada mais | `test_known_projects_returns_registered_projects_only` |
 | AC-005 | Falha em um projeto durante o refresh (acesso negado, projeto inexistente, ou qualquer erro inesperado) não interrompe os demais | `test_refresh_project_skips_project_without_logging_access`, `test_refresh_project_skips_project_that_does_not_exist`, `test_refresh_project_skips_project_on_unexpected_error`, `test_main_processes_all_projects_even_when_one_does_not_exist` |
 | AC-006 | Gatilho manual de admin chama a Cloud Run Admin API com o nome de Job do ambiente atual | `test_trigger_event_cache_refresh_calls_run_client_with_environment_job_name` |
 | AC-007 | Falha ao ler o cache (qualquer exceção, não só cache miss) é tratada como cache miss (`EventCacheNotReadyError`), nunca propaga como 500 | `test_get_job_events_cached_treats_cache_read_failure_as_miss` |
@@ -448,9 +449,9 @@ apps/backend/src/observability_hub/
 |---|---|---|
 | ASM-001 | GCS (não Firestore) para o payload de eventos — Firestore tem limite de 1MiB/doc, facilmente ultrapassado por 30 dias de audit log num projeto com uso real de BigQuery numa org inteira | confirmada com o usuário durante a implementação |
 | ASM-002 | Job roda com a mesma SA de runtime do Cloud Run Service (nunca uma SA nova) — evita reabrir o onboarding manual de IAM cross-project (`docs/onboarding-cliente.md`) de todo cliente já liberado | confirmada |
-| ASM-003 | `hub_projects` não é uma lista exaustiva de projetos consultados (acesso via wildcard `"*"` não gera doc lá) — por isso o job também cobre projetos "vistos" via cache miss no request path | confirmada, documentado em `core/event_cache.py::list_seen_projects` |
+| ASM-003 | ~~`hub_projects` não é uma lista exaustiva de projetos consultados (acesso via wildcard `"*"` não gera doc lá) — por isso o job também cobre projetos "vistos" via cache miss no request path~~ | **invalidada** (2026-08-31, decisão de produto confirmada com o usuário): `hub_projects` passou a ser a **única** fonte de projetos operados pelo Hub. O wildcard `"*"` controla só *acesso* — um projeto acessível só por wildcard precisa ser cadastrado em Admin → Projetos pra entrar no ciclo do cache e nos seletores. A coleção `event_cache_seen_projects` e `record_project_seen` foram removidas; resíduos limpos por `scripts/cleanup_unregistered_project_cache.py` |
 | ASM-004 | Gatilho manual de admin não precisa de deduplicação de execuções concorrentes na v1 — o resultado é idempotente (regrava o mesmo cache), então uma segunda execução em paralelo não corrompe nada, só desperdiça uma chamada a mais | confirmada |
-| ASM-005 | Cloud Logging devolve `404 NotFound` (não `403 Forbidden`) quando a SA do Hub não tem **nenhum** binding de IAM no projeto — diferente de "tem acesso mas falta a role certa" (`LoggingAccessDeniedError`). `hub_projects`/"vistos" podem conter entradas obsoletas (projeto descontinuado/renomeado); o job trata os dois casos (e qualquer outro erro de API) como "pula e segue" | confirmada em produção — causou `Container called exit(1)` na primeira execução real do job em dev, ver CHANGELOG |
+| ASM-005 | Cloud Logging devolve `404 NotFound` (não `403 Forbidden`) quando a SA do Hub não tem **nenhum** binding de IAM no projeto — diferente de "tem acesso mas falta a role certa" (`LoggingAccessDeniedError`). `hub_projects` pode conter entradas obsoletas (projeto descontinuado/renomeado); o job trata os dois casos (e qualquer outro erro de API) como "pula e segue" | confirmada em produção — causou `Container called exit(1)` na primeira execução real do job em dev, ver CHANGELOG |
 | ASM-006 | O bucket do cache não concede acesso a nenhuma SA por padrão só por estar no mesmo projeto — a SA de runtime do backend precisa de um `google_storage_bucket_iam_member` explícito (`roles/storage.objectAdmin`); sem ele, `read_cache_bytes`/`write_cache_bytes` levantam `Forbidden`, não capturado pelo `except NotFound` original. `get_job_events_cached`/`get_access_events_cached` passaram a capturar qualquer exceção (não só `NotFound`) ao redor do read/write do cache, caindo pro scan ao vivo | confirmada em produção — causou um "Failed to fetch" novo (mais rápido, HTTP 500 sem CORS) na primeira consulta real pós-deploy, ver CHANGELOG |
 
 ## Perguntas em aberto

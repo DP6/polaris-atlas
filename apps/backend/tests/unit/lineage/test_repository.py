@@ -4,7 +4,6 @@ from unittest.mock import MagicMock
 import pytest
 from google.api_core.exceptions import Forbidden, TooManyRequests
 
-from observability_hub.core import event_cache as event_cache_module
 from observability_hub.core.exceptions import (
     EventCacheNotReadyError,
     LoggingAccessDeniedError,
@@ -545,11 +544,10 @@ def test_get_job_events_cached_returns_cache_hit_without_calling_list_entries(mo
     client.list_entries.assert_not_called()
 
 
-def test_get_job_events_cached_raises_not_ready_and_records_project_on_miss(monkeypatch):
+def test_get_job_events_cached_raises_not_ready_on_miss(monkeypatch):
     """Modelo incremental: no lookback padrão, cache miss não escaneia
-    mais ao vivo — registra o projeto (pro job pegá-lo) e levanta
-    EventCacheNotReadyError, que domains/lineage/service.py degrada pra
-    grafo/lista vazia com warning."""
+    mais ao vivo — levanta EventCacheNotReadyError, que
+    domains/lineage/service.py degrada pra grafo/lista vazia com warning."""
     client = MagicMock()
     storage_client = MagicMock()
     firestore_client = MagicMock()
@@ -558,16 +556,11 @@ def test_get_job_events_cached_raises_not_ready_and_records_project_on_miss(monk
     monkeypatch.setattr(
         repository, "write_job_events_cache", lambda *a, **kw: write_calls.append((a, kw))
     )
-    seen_calls = []
-    monkeypatch.setattr(
-        event_cache_module, "record_project_seen", lambda *a, **kw: seen_calls.append((a, kw))
-    )
 
     with pytest.raises(EventCacheNotReadyError) as exc_info:
         repository.get_job_events_cached(client, storage_client, firestore_client, "proj")
 
     assert exc_info.value.project_id == "proj"
-    assert len(seen_calls) == 1
     assert write_calls == []
     client.list_entries.assert_not_called()
 
@@ -603,7 +596,6 @@ def test_get_job_events_cached_treats_cache_read_failure_as_miss(monkeypatch):
         "read_job_events_cache",
         lambda *a, **kw: (_ for _ in ()).throw(Forbidden("no access to bucket")),
     )
-    monkeypatch.setattr(event_cache_module, "record_project_seen", lambda *a, **kw: None)
 
     with pytest.raises(EventCacheNotReadyError):
         repository.get_job_events_cached(client, storage_client, firestore_client, "proj")

@@ -82,8 +82,9 @@ toggle "forçar completo" do admin.
 
 O endpoint lê `get_scan_events_cached()`. Cache hit → não toca Cloud
 Logging. Cache miss → `list_scan_events` **foi removida**; o request path
-não escaneia mais ao vivo: registra o projeto (`record_project_seen`) e
-levanta `EventCacheNotReadyError`, que `scan_partition_candidates`/
+não escaneia mais ao vivo: levanta `EventCacheNotReadyError` (o cache só é
+populado pelo run do Job, e só pra projetos de `hub_projects`), que
+`scan_partition_candidates`/
 `get_budget` degradam pra resposta com `warning` "cache ainda não gerado"
 (candidatas ainda vêm do BigQuery, sem savings; budget vazio) — mesmo
 bloco `except` de `LoggingQuotaExceededError`.
@@ -239,7 +240,7 @@ Cobre `get_scan_events_cached` (usado por `partition-candidates` **e**
 | ID | Comportamento | Teste |
 |---|---|---|
 | AC-001 | Cache hit não chama `logging_client.list_entries` e devolve `cache_updated_at` do metadado | `test_get_scan_events_cached_returns_cache_hit_without_calling_list_entries` |
-| AC-002 | Cache miss **não** escaneia ao vivo — registra o projeto (`record_project_seen`) e levanta `EventCacheNotReadyError` | `test_get_scan_events_cached_raises_not_ready_and_records_project_on_miss` |
+| AC-002 | Cache miss **não** escaneia ao vivo — levanta `EventCacheNotReadyError` | `test_get_scan_events_cached_raises_not_ready_on_miss` |
 | AC-003 | Falha ao ler o cache (qualquer exceção, não só miss) é tratada como cache miss, nunca propaga como 500 | `test_get_scan_events_cached_treats_cache_read_failure_as_miss` |
 | AC-004 | `scan_partition_candidates`/`get_budget` degradam `EventCacheNotReadyError` pra resposta com `warning` (não 503) | `test_get_budget_degrades_to_warning_when_cache_not_ready` |
 | AC-006 | `ScanEvent` sobrevive a serialize→deserialize (com e sem `timestamp`/`query_text`) | `test_serialize_deserialize_scan_events_round_trips`, `test_deserialize_scan_events_handles_no_timestamp_and_no_query_text` |

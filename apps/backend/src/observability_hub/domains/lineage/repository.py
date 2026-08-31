@@ -330,10 +330,10 @@ def get_job_events_cached(
     (jobs/refresh_event_cache.py) ou no gatilho manual de admin.
 
     - `lookback_days == LOOKBACK_DAYS` (caminho comum): cache hit ->
-      (eventos, cached_at); cache miss -> registra o projeto
-      (`record_project_seen`, pro job pegá-lo) e levanta
-      `EventCacheNotReadyError`, que domains/lineage/service.py degrada
-      pra grafo/lista vazia com warning.
+      (eventos, cached_at); cache miss -> levanta `EventCacheNotReadyError`,
+      que domains/lineage/service.py degrada pra grafo/lista vazia com
+      warning. O job diário só cobre projetos de `hub_projects` — um
+      projeto não cadastrado nunca sai do estado "cache não gerado".
     - `lookback_days != LOOKBACK_DAYS` (só `/orphans` com lookback custom):
       opt-out explícito, escaneia ao vivo — `JobEvent` carrega `timestamp`
       agora, então dá pra recortar o cache, mas manter o scan ao vivo aqui
@@ -348,7 +348,6 @@ def get_job_events_cached(
             cached = None
         if cached is not None:
             return cached
-        event_cache.record_project_seen(firestore_client, project_id)
         raise EventCacheNotReadyError(project_id)
 
     # /orphans com lookback custom: scan ao vivo (list_job_events mapeia

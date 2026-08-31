@@ -5,6 +5,57 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Listas de projeto seguem só o registro do ADM (`hub_projects`)
+
+Bug reportado pelo usuário: `bigquery-public-data` aparecia na tela
+Admin → Caches ("Freshness por projeto") e `dp6-ci-polaris` no seletor de
+projeto, mesmo sem estarem cadastrados em Admin → Projetos.
+
+### Causa
+
+Três listas de projeto ignoravam o registro `hub_projects`:
+
+- **Job diário** e **`/api/v1/admin/event-cache/status`**: varriam
+  `hub_projects` ∪ `event_cache.list_seen_projects()`. A coleção
+  `event_cache_seen_projects` era gravada por `record_project_seen()` em
+  **qualquer cache miss do request path** — inclusive para projetos só
+  *referenciados* na travessia de lineage (`bigquery-public-data.samples…`).
+- **`/api/v1/projects`** (seletor): enumerava **todo projeto que a SA de
+  runtime alcança** via Cloud Resource Manager (`roles/browser`), com um
+  flag `has_access`. O projeto host `dp6-ci-polaris` entrava sempre.
+
+### O que foi feito
+
+- **`hub_projects` é a única fonte.** `_known_projects` (job) e
+  `_known_cache_projects` (admin service) retornam só
+  `admin_repository.list_projects`. `list_accessible_projects` (catalog)
+  passou a listar `hub_projects` ∩ acesso do usuário — sem mais flag
+  `has_access` no schema `AccessibleProject`.
+- **`record_project_seen` / `list_seen_projects` / a coleção
+  `event_cache_seen_projects` removidas** (4 call sites em
+  lineage/access/storage/finops). O fluxo de cache miss
+  (`EventCacheNotReadyError` → degradar pra vazio com `warning`) não muda.
+- **`core/resourcemanager.py` removido** (ficou sem uso);
+  `google-cloud-resource-manager` saiu do `pyproject.toml`. `roles/browser`
+  da SA de runtime deixou de ser necessária (anotado em
+  `docs/onboarding-cliente.md`; revogação IaC fica pra um PR de infra).
+- **`scripts/cleanup_unregistered_project_cache.py`** (dry-run por
+  padrão): esvazia `event_cache_seen_projects` e apaga metadados órfãos
+  de `event_cache_metadata`. Não toca `event_cache_runs` nem os blobs.
+- **Frontend**: `ProjectSelector` perdeu o badge "Sem acesso" (todo item
+  do dropdown agora é acessível); campo de texto livre continua validando
+  qualquer ID.
+
+### Decisão de arquitetura
+
+Wildcard `allowed_projects=["*"]` controla **acesso**, não mais quais
+projetos o Hub opera. Um projeto acessível só por wildcard precisa ser
+cadastrado em Admin → Projetos pra entrar no ciclo do cache e nos
+seletores. Invalida **ASM-003** de `docs/specs/lineage.md` (confirmado
+com o usuário 2026-08-31).
+
+---
+
 ## Cache de audit log incremental (delta diário por `receiveTimestamp`)
 
 Continuação do trabalho de 429/custo do Cloud Logging. Depois de cache +

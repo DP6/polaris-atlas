@@ -96,31 +96,34 @@ BQ_REGIONS = [
 
 ## Endpoints da API
 
-### GET /api/v1/projects (v1.6)
-Lista projetos GCP que a service account de runtime alcança, descobertos
-via Cloud Resource Manager (`core/resourcemanager.py::list_reachable_projects`,
-`search_projects(query="state:ACTIVE")` — requer `roles/browser` da SA
-no projeto alvo, ver `docs/onboarding-cliente.md` seção 2; role
-**opcional**, não bloqueia nenhum outro domínio). Cada item vem com
-`has_access`: se o usuário **atual** (não a SA) já tem acesso liberado
-no Hub pra aquele `project_id`, mesma checagem de
-`admin_service.has_project_access` usada por `require_project_access`.
-Alimenta o seletor de projeto no frontend — antes desta versão o
-usuário só tinha o campo de texto livre pra digitar o `project_id` de
-cabeça; agora vê os projetos que a SA alcança já com a marcação de quais
-ele pode entrar direto. Fail-closed: lista vazia (nunca erro) se a SA
-não tiver `roles/browser` em nenhum projeto ainda, ou se a Resource
-Manager API falhar — o campo de texto livre continua funcionando como
-fallback nesse caso. `Depends(get_current_user)`, não
+### GET /api/v1/projects (v1.6, revisado v1.7)
+Lista os projetos **registrados no ADM** (`hub_projects`, aba Admin →
+Projetos) aos quais o **usuário atual** tem acesso liberado no Hub —
+`admin_service.list_projects` ∩ `admin_service.has_project_access` (mesma
+checagem de `require_project_access`: individual, `hub_projects.is_public`
+ou grupo). Alimenta o seletor de projeto no frontend; como já vem
+filtrada por acesso, todo item é acessível (não há mais flag
+`has_access`). Lista vazia (nunca erro) quando nada está cadastrado ou
+nada está liberado pra este usuário — o campo de texto livre do seletor
+continua permitindo digitar qualquer `project_id` pra validar/onboardar
+um projeto ainda não cadastrado. `Depends(get_current_user)`, não
 `require_project_access` — não recebe `project_id` no path, é
 project-agnostic por natureza.
+
+**v1.7 (2026-08-31):** antes esta rota enumerava **todo** projeto que a
+SA de runtime alcançava via Cloud Resource Manager (`roles/browser`),
+marcando cada um com `has_access`. Isso fazia projetos não cadastrados
+(ex.: o próprio projeto host `dp6-ci-polaris`) aparecerem no seletor.
+Passou a seguir `hub_projects` como única fonte, alinhado com o job de
+cache (ver `docs/specs/lineage.md` ASM-003 invalidada). `core/resourcemanager.py`
+foi removido; `roles/browser` da SA deixou de ser necessária.
 
 **Response 200:**
 ```json
 {
   "projects": [
-    {"project_id": "dp6-ci-polaris", "display_name": "polaris-hub-gcp", "has_access": true},
-    {"project_id": "cliente-a-dw", "display_name": "Cliente A DW", "has_access": false}
+    {"project_id": "dp6-ci-polaris"},
+    {"project_id": "cliente-a-dw"}
   ]
 }
 ```
@@ -469,18 +472,16 @@ apps/backend/src/observability_hub/
 │   └── catalog.py
 ├── core/
 │   ├── config.py            # BQ_REGIONS e demais configs
-│   ├── bigquery.py          # discover_regions(), get_client()
-│   └── resourcemanager.py   # novo (v1.6) — list_reachable_projects()
+│   └── bigquery.py          # discover_regions(), get_client()
 ├── domains/catalog/
 │   ├── __init__.py
-│   ├── service.py        # + list_accessible_projects (v1.6)
+│   ├── service.py        # list_accessible_projects (v1.6; v1.7: fonte = hub_projects)
 │   ├── repository.py
-│   └── schemas.py        # + AccessibleProject, ProjectsListResponse (v1.6)
+│   └── schemas.py        # AccessibleProject, ProjectsListResponse (v1.6)
 └── tests/unit/
-    ├── catalog/
-    │   ├── test_service.py
-    │   └── test_schemas.py
-    └── core/test_resourcemanager.py  # novo (v1.6)
+    └── catalog/
+        ├── test_service.py
+        └── test_schemas.py
 
 apps/frontend/src/
 ├── features/projects/

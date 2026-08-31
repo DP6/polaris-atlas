@@ -140,27 +140,6 @@ def test_merge_dedup_keeps_all_items_with_falsy_key():
     assert len(merged) == 3
 
 
-def test_record_project_seen_writes_project_id():
-    firestore_client = MagicMock()
-
-    event_cache.record_project_seen(firestore_client, "proj")
-
-    firestore_client.collection.return_value.document.assert_called_with("proj")
-    doc_ref = firestore_client.collection.return_value.document.return_value
-    written = doc_ref.set.call_args.args[0]
-    assert written["project_id"] == "proj"
-    assert written["last_seen_at"] is not None
-
-
-def test_list_seen_projects_returns_document_ids():
-    firestore_client = MagicMock()
-    doc_a = MagicMock(id="proj-a")
-    doc_b = MagicMock(id="proj-b")
-    firestore_client.collection.return_value.stream.return_value = [doc_a, doc_b]
-
-    assert event_cache.list_seen_projects(firestore_client) == ["proj-a", "proj-b"]
-
-
 def test_start_cache_run_creates_running_doc_and_returns_id():
     firestore_client = MagicMock()
     # _prune_cache_runs itera o stream — vazio, nada a apagar.

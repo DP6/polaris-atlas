@@ -8,7 +8,6 @@ from datetime import UTC, datetime
 
 from google.cloud import bigquery, firestore
 
-from observability_hub.core import resourcemanager
 from observability_hub.core.bigquery import discover_regions, get_tables_metadata
 from observability_hub.core.exceptions import TableNotFoundError, TableNotPartitionedError
 from observability_hub.domains.admin import service as admin_service
@@ -35,25 +34,19 @@ from observability_hub.domains.catalog.schemas import (
 def list_accessible_projects(
     firestore_client: firestore.Client, user_email: str
 ) -> ProjectsListResponse:
-    """Projetos que a SA de runtime alcança (Resource Manager, ver
-    core/resourcemanager.py), cada um com `has_access` indicando se
-    ESTE usuário já tem acesso liberado no Hub — reaproveita
-    has_project_access, mesma checagem de require_project_access, só
-    pra popular o seletor de projeto em vez do usuário digitar de cabeça
-    e descobrir só depois de validar."""
-    raw_projects = resourcemanager.list_reachable_projects()
-    projects = [
-        AccessibleProject(
-            project_id=p["project_id"],
-            display_name=p["display_name"],
-            has_access=admin_service.has_project_access(
-                firestore_client, user_email, p["project_id"]
-            ),
-        )
-        for p in raw_projects
-    ]
-    projects.sort(key=lambda p: p.project_id)
-    return ProjectsListResponse(projects=projects)
+    """Projetos registrados no ADM (`hub_projects`, aba Admin → Projetos)
+    aos quais ESTE usuário tem acesso liberado no Hub — reaproveita
+    has_project_access (individual, hub_projects.is_public ou grupo),
+    mesma checagem de require_project_access. Popula o seletor de projeto;
+    o campo de texto livre continua permitindo digitar qualquer ID pra
+    validar/onboardar um projeto ainda não cadastrado."""
+    registered = admin_service.list_projects(firestore_client).projects
+    accessible = sorted(
+        p.project_id
+        for p in registered
+        if admin_service.has_project_access(firestore_client, user_email, p.project_id)
+    )
+    return ProjectsListResponse(projects=[AccessibleProject(project_id=pid) for pid in accessible])
 
 
 def validate_project(client: bigquery.Client, project_id: str) -> ProjectValidateResponse:

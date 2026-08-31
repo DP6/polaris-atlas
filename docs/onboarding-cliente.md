@@ -71,7 +71,7 @@ domínio hoje opera com IAM a nível de dataset ou tabela):
 | `roles/logging.privateLogViewer` | Ver especificamente os **Data Access audit logs** — é onde vive o `jobCompletedEvent` que lineage/access/finops leem; sem essa role a chamada não falha, só retorna sempre vazio | idem |
 | `roles/storage.bucketViewer` | Listar/ler metadado de **bucket** (nome, storage class, região, lifecycle rule) — `storage.objectViewer` **não** cobre isso (só objeto), confirmado em dev 2026-08-17, ver `docs/specs/storage.md` seção 8 | storage (catálogo) |
 | `roles/storage.objectViewer` | Ler metadado + conteúdo de **objeto** dentro de um bucket já conhecido — nenhuma role nova pra lineage, o audit log de load/extract já vive dentro do `bigquery_resource`/`data_access` já lido pelas duas roles de logging acima | storage (freshness, waste scanner) |
-| `roles/browser` | **Opcional** (não bloqueia nenhum domínio de observabilidade) — só visibilidade via Cloud Resource Manager (`resourcemanager.projects.get`), pra este projeto aparecer sozinho no seletor de projeto do frontend (`GET /api/v1/projects`, `core/resourcemanager.py::list_reachable_projects`, v1.6 da spec catalog) em vez do usuário precisar digitar o `project_id` de cabeça. Sem ela, o projeto continua 100% funcional via todas as outras roles acima — só não aparece na lista, o usuário digita manualmente como sempre (fallback mantido no frontend) | catalog (seletor de projeto, v1.6) |
+| ~~`roles/browser`~~ | **Não usar** (desde v1.7 da spec catalog, 2026-08-31). O seletor de projeto do frontend passou a listar só os projetos cadastrados em Admin → Projetos (`hub_projects`), não mais os que a SA alcança via Cloud Resource Manager — `core/resourcemanager.py` foi removido. Onde já foi concedida, pode ser revogada; onde ainda não, não conceda | — |
 
 > **Pegadinha confirmada em produção (2026-08-14):** `roles/logging.viewer`
 > sozinha deixa a API responder 200 normalmente, mas Data Access audit logs
@@ -123,14 +123,9 @@ gcloud projects add-iam-policy-binding {PROJECT_ID} \
 
 gcloud projects add-iam-policy-binding {PROJECT_ID} \
   --member="serviceAccount:${SA_EMAIL}" --role="roles/storage.objectViewer" --condition=None
-
-# Opcional — só pro projeto aparecer no seletor de projeto do frontend,
-# ver linha "roles/browser" na tabela acima
-gcloud projects add-iam-policy-binding {PROJECT_ID} \
-  --member="serviceAccount:${SA_EMAIL}" --role="roles/browser" --condition=None
 ```
 
-Todos os oito comandos são idempotentes — seguro rodar de novo mesmo que
+Todos os sete comandos são idempotentes — seguro rodar de novo mesmo que
 algum já tenha sido aplicado. Se faltar qualquer uma das três primeiras, a
 API responde 403 com esses mesmos comandos prontos no corpo do erro
 (`ProjectAccessDeniedError`); se faltar `logging.viewer`, o mesmo acontece
@@ -259,8 +254,6 @@ motivo.
     Atenção: gera um evento de log por leitura de objeto — volume pode
     ser alto em bucket de tráfego intenso. Medir volume esperado antes
     de habilitar em projeto de produção ou projeto-cliente com uso real.
-[ ] roles/browser concedida à SA do Hub — opcional, só pro projeto
-    aparecer no seletor de projeto do frontend (não bloqueia nada)
 [ ] gcloud projects get-iam-policy confirmado (não só "rodei o comando")
 [ ] Testado na UI do Hub com um usuário já autorizado no ACL interno
 [ ] Linha registrada na tabela "Registro de acessos concedidos" abaixo
@@ -329,7 +322,7 @@ integrações do projeto alvo que dependam deles.
 | Tudo liberado mas ainda "sem atividade" | Confirmar se os Data Access audit logs (seção 3) estão realmente habilitados — checar o campo `auditConfigs` via `get-iam-policy`, não só assumir que a config aplicada anteriormente ainda está lá |
 | 403 `StorageAccessDeniedError` no catálogo de buckets (domínio `storage`) | Falta `roles/storage.bucketViewer` e/ou `roles/storage.objectViewer` — a própria resposta traz os dois comandos |
 | Waste scanner nunca mostra `confidence: "usage_confirmed"`, só `config_based`, com um aviso na resposta | Data Access audit log `DATA_READ` de `storage.googleapis.com` não habilitado — opcional, não bloqueia o resto do domínio `storage` |
-| Projeto não aparece no dropdown do seletor, mas digitar manualmente funciona normalmente | Falta `roles/browser` (seção 2, role opcional) — comportamento esperado, não é erro |
+| Projeto não aparece no dropdown do seletor, mas digitar manualmente funciona normalmente | O projeto não está cadastrado em **Admin → Projetos** (`hub_projects`) ou o usuário não tem acesso liberado a ele. Desde v1.7 da spec catalog o dropdown lista só projetos registrados — cadastre o projeto e conceda acesso ao usuário; o campo de texto livre valida qualquer ID enquanto isso |
 
 ---
 
@@ -376,6 +369,7 @@ real de que o processo funciona.
 | 2026-08-21 | `dp6-ci-polaris` | `group:gcp-ci-polaris@dp6.com.br` (self) | `roles/iam.serviceAccountAdmin` — necessária pra gerenciar IAM policy a nível de recurso SA individual (`iam.serviceAccounts.{get,set}IamPolicy`), diferente de `resourcemanager.projectIamAdmin` (que o grupo já tinha, mas não cobre isso). Motivo: preparar o self-binding abaixo pra integração com grupos do Workspace (v1.5 da spec admin) | `gcloud projects get-iam-policy dp6-ci-polaris --flatten='bindings[].members' --filter='bindings.members:gcp-ci-polaris@dp6.com.br AND bindings.role:serviceAccountAdmin'` confirmou a role presente |
 | 2026-08-21 | `dp6-ci-polaris` | `backend-dev-run@...` e `backend-prod-run@...` (self, nível de recurso da própria SA — não nível de projeto) | `roles/iam.serviceAccountTokenCreator` concedida por cada SA a si mesma — permite assinar o JWT de domain-wide delegation (`google.auth.iam.Signer`/`signBlob`) sem precisar de chave baixada. Propagação anormalmente lenta (~21min) e `gcloud ... add-iam-policy-binding` seguiu falhando mesmo depois de `get-iam-policy` já funcionar — contornado com `get-iam-policy` + editar JSON + `set-iam-policy` explícito, que funcionou de primeira. Causa exata do `add-iam-policy-binding` falhar mesmo com a leitura já liberada não totalmente esclarecida | `gcloud iam service-accounts get-iam-policy <SA>` confirmou a role presente nas duas SAs |
 | 2026-08-21 | `dp6-ci-polaris` | `backend-dev-run@...` e `backend-prod-run@...` (self) | `roles/browser` — visibilidade via Cloud Resource Manager pra este projeto aparecer no seletor de projeto do frontend (`GET /api/v1/projects`, v1.6 da spec catalog). Opcional/não-bloqueante, ver linha da tabela de roles na seção 2 | `gcloud projects get-iam-policy dp6-ci-polaris --flatten='bindings[].members' --filter='bindings.role:roles/browser'` confirmou as duas SAs presentes |
+| 2026-08-31 | `dp6-ci-polaris` | `backend-dev-run@...` e `backend-prod-run@...` (self) | **`roles/browser` deixou de ser necessária** — v1.7 da spec catalog: `GET /api/v1/projects` passou a listar só `hub_projects` (não mais via Cloud Resource Manager), `core/resourcemanager.py` foi removido. O binding concedido em 2026-08-21 pode ser revogado (`gcloud projects remove-iam-policy-binding dp6-ci-polaris --member=... --role=roles/browser`); não urgente, não expõe nada. IaC não alterada nesta mudança | Pendente de revogação manual |
 | 2026-08-25 | `dp6-ci-polaris` (dev e prod) | — | Conta impersonada via domain-wide delegation (`OBSERVABILITY_HUB_WORKSPACE_IMPERSONATE_EMAIL`, `core/workspace_directory.py`) trocada de `matheus.fuzati@dp6.com.br` para `admin.victoria@dp6.com.br` — teste com uma conta de admin do Workspace, pra validar leitura real de grupos (`hub_groups`, v1.4/v1.5). Não é uma role/API nova, só troca do sujeito da delegação já autorizada (ver linha 2026-08-21 acima, `roles/iam.serviceAccountTokenCreator`) | Alteração via Terraform (`environments/{dev,prod}/main.tf`) — não reconfirmado via chamada real à Directory API nesta sessão |
 
 **Nota:** os dois itens "antes de 2026-08-14" foram descobertos ao vivo

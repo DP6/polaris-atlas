@@ -59,7 +59,6 @@ de uma vez — assim o processo não precisa ser repetido depois:
 | `roles/logging.privateLogViewer` | Ver especificamente os **Data Access audit logs** — sem essa role a chamada não falha, só retorna sempre vazio |
 | `roles/storage.bucketViewer` | Listar/ler metadado de **bucket** (nome, storage class, região, lifecycle rule) — `storage.objectViewer` **não** cobre isso (só objeto) |
 | `roles/storage.objectViewer` | Ler metadado + conteúdo de **objeto** dentro de um bucket já conhecido |
-| `roles/browser` | **Opcional** (não bloqueia nenhuma funcionalidade) — só visibilidade via Cloud Resource Manager, pra este projeto aparecer sozinho no seletor de projeto do Hub em vez de precisar digitar o `project_id` de cabeça. Sem ela, o projeto continua 100% funcional — só não aparece na lista |
 
 > **Atenção:** `roles/logging.viewer` sozinha deixa a API responder
 > normalmente, mas Data Access audit logs (categoria diferente de Admin
@@ -95,7 +94,6 @@ ROLES=(
   roles/logging.privateLogViewer
   roles/storage.bucketViewer     # só se for usar a funcionalidade de Cloud Storage
   roles/storage.objectViewer     # idem
-  # roles/browser                # opcional — descomente pra o projeto aparecer no seletor do Hub
 )
 
 for SA_EMAIL in "${SA_EMAILS[@]}"; do
@@ -224,8 +222,6 @@ As roles abaixo devem ser concedidas às **duas** service accounts do Hub
 [ ] storage.googleapis.com — Data Access audit log DATA_READ habilitado
     no projeto — opcional, refina a precisão do scanner de desperdício de
     Cloud Storage (ver seção 3)
-[ ] roles/browser concedida às 2 SAs do Hub — opcional, só pro projeto
-    aparecer no seletor de projeto do Hub (não bloqueia nada)
 [ ] gcloud projects get-iam-policy confirmado para as 2 SAs (não só
     "rodei o comando")
 [ ] Testado no Hub com um usuário já autorizado pelo seu contato DP6
@@ -300,7 +296,7 @@ outras integrações do seu projeto que dependam deles.
 | Tudo liberado mas ainda "sem atividade" | Confirme se os Data Access audit logs (seção 3) estão realmente habilitados — o campo `auditConfigs` pode ter sido sobrescrito por outra alteração de política depois |
 | Erro de permissão no catálogo de buckets (Cloud Storage) | Falta `roles/storage.bucketViewer` e/ou `roles/storage.objectViewer` — a própria resposta traz os dois comandos |
 | Scanner de desperdício de Cloud Storage nunca confirma uso real, só estimativa por configuração | Data Access audit log `DATA_READ` de `storage.googleapis.com` não habilitado — opcional, não bloqueia o resto da funcionalidade |
-| Projeto não aparece no seletor, mas digitar manualmente funciona normalmente | Falta `roles/browser` (role opcional) — comportamento esperado, não é erro |
+| Projeto não aparece no seletor, mas digitar manualmente funciona normalmente | O projeto ainda não foi cadastrado no Hub pelo seu contato DP6, ou o seu usuário não tem acesso liberado a ele — o campo de texto livre valida o `project_id` normalmente enquanto isso |
 
 ---
 
