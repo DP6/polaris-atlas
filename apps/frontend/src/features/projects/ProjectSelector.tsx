@@ -17,7 +17,6 @@ import { useAccessibleProjects, useValidateProject } from '@/features/projects/h
 import { useProjectContext } from '@/features/projects/ProjectContext'
 import { clearLastProjectId, getLastProjectId, setLastProjectId } from '@/hooks/useLastProject'
 import { ApiError } from '@/lib/http-client'
-import { cn } from '@/lib/utils'
 
 const CUSTOM_PROJECT_OPTION = '__custom__'
 
@@ -173,16 +172,7 @@ export function ProjectSelector() {
             />
             <Tooltip>
               <TooltipTrigger
-                render={
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      validateQuery.data.is_native
-                        ? 'border-status-ok/30 bg-status-ok/10 text-status-ok-foreground'
-                        : 'border-status-warn/30 bg-status-warn/10 text-status-warn-foreground',
-                    )}
-                  />
-                }
+                render={<Badge variant={validateQuery.data.is_native ? 'success' : 'info'} />}
               >
                 {validateQuery.data.is_native ? 'Projeto nativo' : 'Projeto externo'}
               </TooltipTrigger>

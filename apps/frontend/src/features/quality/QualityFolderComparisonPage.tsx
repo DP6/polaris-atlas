@@ -87,7 +87,7 @@ const DIFF_HIGHLIGHT_THRESHOLD_PP = 10
 // accent tokens de docs/skills/frontend.md, sem limite de entries por
 // pasta (acima de 5 entries repete a cor, aceitável pra esse volume).
 const ENTRY_BAR_COLORS = [
-  'var(--color-primary)',
+  'var(--color-status-info)',
   'var(--color-accent-blue)',
   'var(--color-accent-purple)',
   'var(--color-accent-green)',
