@@ -35,7 +35,7 @@ import {
 } from '@/features/finops/hooks'
 import { useProjectContext } from '@/features/projects/ProjectContext'
 import { useTableFilterSort } from '@/hooks/useTableFilterSort'
-import { formatBytes, formatNumber } from '@/lib/format'
+import { formatBytes, formatNumber, formatUsd } from '@/lib/format'
 import { ApiError } from '@/lib/http-client'
 import { cn } from '@/lib/utils'
 import type { ColumnTypeCandidate, ColumnTypeSuggestion, PartitionCandidate } from '@/types/finops'
@@ -50,10 +50,6 @@ type EstimateFilter =
   | typeof ESTIMATE_FILTER_ALL
   | typeof ESTIMATE_FILTER_WITH
   | typeof ESTIMATE_FILTER_WITHOUT
-
-function formatUsd(value: number): string {
-  return `US$ ${value.toFixed(value < 0.01 ? 6 : 2)}`
-}
 
 function matchesSearch(datasetId: string, tableId: string, term: string): boolean {
   const needle = term.toLowerCase()

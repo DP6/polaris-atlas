@@ -18,7 +18,7 @@ import { WarningCallout } from '@/components/WarningCallout'
 import { useProjectContext } from '@/features/projects/ProjectContext'
 import { useWasteCandidates } from '@/features/storage/hooks'
 import { useTableFilterSort } from '@/hooks/useTableFilterSort'
-import { formatBytes, formatNumber } from '@/lib/format'
+import { formatBytes, formatNumber, formatUsd } from '@/lib/format'
 import type { WasteCandidate } from '@/types/storage'
 
 const MIN_DAYS_OPTIONS = [30, 60, 90] as const
@@ -77,10 +77,6 @@ type SortKey =
   | 'oldest_object_age_days'
   | 'estimated_savings_usd_month_min'
   | 'confidence'
-
-function formatUsd(value: number): string {
-  return `US$ ${value.toFixed(value < 0.01 ? 6 : 2)}`
-}
 
 function compare(a: WasteCandidate, b: WasteCandidate, key: SortKey): number {
   if (key === 'bucket_name') {

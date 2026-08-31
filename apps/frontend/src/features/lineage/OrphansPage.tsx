@@ -21,7 +21,7 @@ import { WarningCallout } from '@/components/WarningCallout'
 import { useOrphans } from '@/features/lineage/hooks'
 import { useProjectContext } from '@/features/projects/ProjectContext'
 import { useTableFilterSort } from '@/hooks/useTableFilterSort'
-import { formatBytes } from '@/lib/format'
+import { formatBytes, formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { OrphanTable } from '@/types/lineage'
 
@@ -29,10 +29,6 @@ const DATASET_FILTER_ALL = 'all'
 const LOOKBACK_OPTIONS = [30, 60, 90, 365] as const
 
 type SortKey = 'dataset_id' | 'table_id' | 'size_bytes' | 'estimated_monthly_storage_cost_usd'
-
-function formatUsd(value: number): string {
-  return `US$ ${value.toFixed(value < 0.01 ? 6 : 2)}`
-}
 
 function compare(a: OrphanTable, b: OrphanTable, key: SortKey): number {
   if (key === 'size_bytes' || key === 'estimated_monthly_storage_cost_usd') {

@@ -13,6 +13,7 @@ import {
   YAxis,
 } from 'recharts'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { MetricGrid, MetricTile } from '@/components/MetricTile'
 import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SortableTableHead } from '@/components/SortableTableHead'
@@ -40,7 +41,7 @@ import { WarningCallout } from '@/components/WarningCallout'
 import { useBudget } from '@/features/finops/hooks'
 import { useProjectContext } from '@/features/projects/ProjectContext'
 import { useTableFilterSort } from '@/hooks/useTableFilterSort'
-import { formatBytes, formatDate, formatNumber } from '@/lib/format'
+import { formatBytes, formatDate, formatNumber, formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { BudgetGroupBy, CostGroup, CostlyQuery, CostProjection } from '@/types/finops'
 
@@ -65,10 +66,6 @@ const GROUP_KEY_COLUMN_LABEL: Record<BudgetGroupBy, string> = {
   day: 'Dia',
   month: 'Mês',
   year: 'Ano',
-}
-
-function formatUsd(value: number): string {
-  return `US$ ${value.toFixed(value < 0.01 ? 6 : 2)}`
 }
 
 type GroupSortKey = 'key' | 'cost_usd' | 'billed_bytes' | 'job_count'
@@ -179,7 +176,7 @@ export function BudgetPage() {
         <>
           {data.warning && <WarningCallout>{data.warning}</WarningCallout>}
 
-          <div className="flex flex-wrap gap-4">
+          <MetricGrid>
             {[
               { label: 'Custo até agora', value: formatUsd(data.projection.cost_so_far_usd) },
               { label: 'Média diária', value: formatUsd(data.projection.daily_average_usd) },
@@ -192,17 +189,9 @@ export function BudgetPage() {
                 value: `${data.projection.days_elapsed} de ${data.projection.days_in_month}`,
               },
             ].map((item) => (
-              <div
-                key={item.label}
-                className="min-w-[160px] flex-1 rounded-lg border border-border bg-card p-4"
-              >
-                <p className="mb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                  {item.label}
-                </p>
-                <p className="text-2xl font-bold">{item.value}</p>
-              </div>
+              <MetricTile key={item.label} label={item.label} value={item.value} />
             ))}
-          </div>
+          </MetricGrid>
 
           <Tabs defaultValue={COST_TAB}>
             <TabsList className="w-fit">
