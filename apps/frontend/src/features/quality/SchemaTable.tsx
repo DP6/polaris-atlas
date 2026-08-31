@@ -145,7 +145,10 @@ export function SchemaTable({ columns, isLoading, partitionColumn }: SchemaTable
                     <Fragment key={column.column_name}>
                       <TableRow>
                         <TableCell
-                          className={cn('text-xs font-medium', dateColumn && 'text-status-info')}
+                          className={cn(
+                            'text-xs font-medium',
+                            dateColumn && 'text-status-info-foreground',
+                          )}
                         >
                           <span className="flex items-center gap-2">
                             {complex && (
@@ -170,7 +173,7 @@ export function SchemaTable({ columns, isLoading, partitionColumn }: SchemaTable
                         <TableCell
                           className={cn(
                             'text-xs',
-                            dateColumn ? 'text-status-info' : 'text-muted-foreground',
+                            dateColumn ? 'text-status-info-foreground' : 'text-muted-foreground',
                           )}
                         >
                           <span className="flex items-center gap-2">

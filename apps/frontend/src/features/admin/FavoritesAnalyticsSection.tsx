@@ -135,7 +135,7 @@ export function FavoritesAnalyticsSection() {
   }
 
   if (favoritesQuery.isError || !favoritesQuery.data) {
-    return <p className="text-sm text-status-error">Erro ao carregar os favoritos.</p>
+    return <p className="text-sm text-status-error-foreground">Erro ao carregar os favoritos.</p>
   }
 
   return (

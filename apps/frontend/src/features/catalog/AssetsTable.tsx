@@ -221,7 +221,7 @@ export function AssetsTable({ projectId, datasetId, tables, highlightTableId }: 
                       })
                     }
                     aria-label={isFavorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
-                    className="text-muted-foreground hover:text-primary"
+                    className="inline-flex size-6 items-center justify-center text-muted-foreground hover:text-primary"
                   >
                     <Star
                       size={16}

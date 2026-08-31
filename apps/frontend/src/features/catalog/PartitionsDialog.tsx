@@ -57,7 +57,7 @@ export function PartitionsDialog({
           <p className="text-sm text-muted-foreground">Carregando partições…</p>
         )}
 
-        {errorMessage && <p className="text-sm text-status-error">{errorMessage}</p>}
+        {errorMessage && <p className="text-sm text-status-error-foreground">{errorMessage}</p>}
 
         {partitionsQuery.data && (
           <Table>

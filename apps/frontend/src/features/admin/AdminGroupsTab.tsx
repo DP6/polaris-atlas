@@ -314,7 +314,7 @@ function CreateGroupDialog({
             />
           </div>
         )}
-        {errorMessage && <p className="text-sm text-status-error">{errorMessage}</p>}
+        {errorMessage && <p className="text-sm text-status-error-foreground">{errorMessage}</p>}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
@@ -436,7 +436,7 @@ function GroupDetail({ group }: { group: HubGroup }) {
         />
       </div>
 
-      {errorMessage && <p className="text-xs text-status-error">{errorMessage}</p>}
+      {errorMessage && <p className="text-xs text-status-error-foreground">{errorMessage}</p>}
     </div>
   )
 }

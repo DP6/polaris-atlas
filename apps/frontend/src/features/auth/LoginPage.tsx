@@ -23,7 +23,7 @@ export function LoginPage() {
           Entrar com Google
         </Button>
 
-        {error && <p className="mt-3 text-sm text-status-error">{error}</p>}
+        {error && <p className="mt-3 text-sm text-status-error-foreground">{error}</p>}
       </div>
     </div>
   )

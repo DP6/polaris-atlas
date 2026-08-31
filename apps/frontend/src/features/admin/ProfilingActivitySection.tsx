@@ -65,7 +65,11 @@ export function ProfilingActivitySection() {
   }
 
   if (activityQuery.isError || !activityQuery.data) {
-    return <p className="text-sm text-status-error">Erro ao carregar a atividade de profiling.</p>
+    return (
+      <p className="text-sm text-status-error-foreground">
+        Erro ao carregar a atividade de profiling.
+      </p>
+    )
   }
 
   return (

@@ -1,17 +1,27 @@
 import { useQueryClient } from '@tanstack/react-query'
+import type { LucideIcon } from 'lucide-react'
 import {
-  AlertTriangle,
   Check,
   ChevronDown,
   ChevronRight,
   ChevronsUpDown,
+  Database,
   RotateCw,
+  Search,
+  SearchX,
+  TriangleAlert,
+  X,
 } from 'lucide-react'
 import { Fragment, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { DateField } from '@/components/DateField'
+import { EmptyState } from '@/components/EmptyState'
+import { LoadingState } from '@/components/LoadingState'
 import { PaginationBar } from '@/components/PaginationBar'
-import { Badge } from '@/components/ui/badge'
+import { SectionHeading } from '@/components/SectionHeading'
+import { SortableTableHead } from '@/components/SortableTableHead'
+import { StatusBadge } from '@/components/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -23,6 +33,7 @@ import {
   CommandList,
 } from '@/components/ui/command'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Select,
@@ -71,6 +82,8 @@ const STATUS_FILTER_OPTIONS = [
   'unexpected_error',
 ] as const
 
+type SortKey = 'when' | 'projects' | 'duration'
+
 function ageHours(iso: string | null): number | null {
   if (!iso) return null
   const d = new Date(iso).getTime()
@@ -79,19 +92,24 @@ function ageHours(iso: string | null): number | null {
 }
 
 // Verde < 26h (ciclo diário + folga), amarelo 26–50h, vermelho > 50h ou
-// nunca gerado.
-function freshnessClass(iso: string | null): string {
+// nunca gerado. Ícone acompanha a cor (WCAG 1.4.1 — não só cor).
+function freshnessMeta(iso: string | null): { cls: string; Icon: LucideIcon } {
   const h = ageHours(iso)
-  if (h === null) return 'text-status-error'
-  if (h <= 26) return 'text-status-ok'
-  if (h <= 50) return 'text-status-warn'
-  return 'text-status-error'
+  if (h === null) return { cls: 'text-status-error-foreground', Icon: TriangleAlert }
+  if (h <= 26) return { cls: 'text-status-ok-foreground', Icon: Check }
+  if (h <= 50) return { cls: 'text-status-warn-foreground', Icon: TriangleAlert }
+  return { cls: 'text-status-error-foreground', Icon: TriangleAlert }
+}
+
+function runDurationMs(run: EventCacheRun): number {
+  if (!run.finished_at) return -1
+  const ms = new Date(run.finished_at).getTime() - new Date(run.started_at).getTime()
+  return Number.isNaN(ms) || ms < 0 ? -1 : ms
 }
 
 function runDuration(run: EventCacheRun): string {
-  if (!run.finished_at) return '—'
-  const ms = new Date(run.finished_at).getTime() - new Date(run.started_at).getTime()
-  if (Number.isNaN(ms) || ms < 0) return '—'
+  const ms = runDurationMs(run)
+  if (ms < 0) return '—'
   const s = Math.round(ms / 1000)
   if (s < 60) return `${s}s`
   return `${Math.floor(s / 60)}min ${s % 60}s`
@@ -119,24 +137,10 @@ function runMode(run: EventCacheRun): string | null {
 }
 
 function RunStatusBadge({ run }: { run: EventCacheRun }) {
-  if (run.status === 'running') {
-    return (
-      <Badge className="gap-1.5 border-status-info/30 bg-status-info/10 text-status-info">
-        <RotateCw size={11} className="animate-spin" />
-        em andamento
-      </Badge>
-    )
-  }
+  if (run.status === 'running') return <StatusBadge status="running">em andamento</StatusBadge>
   const failed = failedProjects(run).length
-  if (failed > 0) {
-    return (
-      <Badge className="gap-1 border-status-warn/30 bg-status-warn/10 text-status-warn">
-        <AlertTriangle size={11} />
-        {failed} com problema
-      </Badge>
-    )
-  }
-  return <Badge className="border-status-ok/30 bg-status-ok/10 text-status-ok">concluída</Badge>
+  if (failed > 0) return <StatusBadge status="warn">{failed} com problema</StatusBadge>
+  return <StatusBadge status="ok">concluída</StatusBadge>
 }
 
 function ProjectScopePicker({
@@ -169,9 +173,11 @@ function ProjectScopePicker({
       <PopoverTrigger
         render={
           <Button
+            id="cache-scope-picker"
             variant="outline"
             size="sm"
             role="combobox"
+            aria-label="Projetos a escanear"
             aria-expanded={open}
             disabled={knownProjects.length === 0}
             className="w-56 justify-between font-normal"
@@ -202,7 +208,7 @@ function ProjectScopePicker({
                       selected.includes(projectId) ? 'opacity-100' : 'opacity-0',
                     )}
                   />
-                  <span className="flex-1 break-all font-mono text-xs">{projectId}</span>
+                  <span className="flex-1 break-words font-mono text-xs">{projectId}</span>
                 </CommandItem>
               ))}
             </CommandGroup>
@@ -237,7 +243,7 @@ function SummaryCard({
   const mode = run ? runMode(run) : null
 
   return (
-    <div className="rounded-md border border-border p-4">
+    <div className="rounded-lg border border-primary/30 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
           {run ? (
@@ -263,16 +269,21 @@ function SummaryCard({
           )}
         </div>
 
-        <div className="flex flex-col items-end gap-2">
-          <div className="flex items-center gap-2">
-            <ProjectScopePicker
-              knownProjects={knownProjects}
-              selected={selectedProjects}
-              onChange={setSelectedProjects}
-            />
+        <div className="flex flex-col items-end gap-3">
+          <div className="flex items-end gap-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="cache-scope-picker" className="text-label text-muted-foreground">
+                Projetos
+              </Label>
+              <ProjectScopePicker
+                knownProjects={knownProjects}
+                selected={selectedProjects}
+                onChange={setSelectedProjects}
+              />
+            </div>
             <Button
               type="button"
-              variant="outline"
+              variant="default"
               size="sm"
               disabled={refreshing}
               onClick={onRefresh}
@@ -290,9 +301,9 @@ function SummaryCard({
               checked={forceFull}
               onCheckedChange={(v) => setForceFull(v === true)}
             />
-            <label htmlFor="cache-force-full" className="cursor-pointer">
+            <Label htmlFor="cache-force-full" className="cursor-pointer font-normal">
               forçar completo (re-escaneia a janela inteira)
-            </label>
+            </Label>
           </div>
         </div>
       </div>
@@ -301,7 +312,14 @@ function SummaryCard({
         <ul className="mt-3 flex flex-col gap-0.5 text-xs">
           {problems.map((p) => (
             <li key={p.project_id} className="flex items-center gap-2">
-              <span className="text-status-warn">{PROJECT_STATUS_LABEL[p.status] ?? p.status}</span>
+              <TriangleAlert
+                size={12}
+                className="shrink-0 text-status-warn-foreground"
+                aria-hidden="true"
+              />
+              <span className="text-status-warn-foreground">
+                {PROJECT_STATUS_LABEL[p.status] ?? p.status}
+              </span>
               <span className="font-mono text-muted-foreground">{p.project_id}</span>
             </li>
           ))}
@@ -321,7 +339,11 @@ function ProjectDetailRow({ project }: { project: EventCacheRunProject }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
       <span className="font-mono">{project.project_id}</span>
-      <span className={project.status === 'ok' ? 'text-status-ok' : 'text-status-warn'}>
+      <span
+        className={
+          project.status === 'ok' ? 'text-status-ok-foreground' : 'text-status-warn-foreground'
+        }
+      >
         {PROJECT_STATUS_LABEL[project.status] ?? project.status}
       </span>
       {project.mode && <span className="text-muted-foreground">{project.mode}</span>}
@@ -340,14 +362,21 @@ function ProjectDetailRow({ project }: { project: EventCacheRunProject }) {
 
 function KindFreshness({ cache }: { cache: EventCacheKindStatus }) {
   if (cache.never_run) {
-    return <span className="text-sm text-status-error">nunca rodou</span>
+    return (
+      <span className="inline-flex items-center gap-1 text-sm text-status-error-foreground">
+        <X size={12} aria-hidden="true" />
+        nunca rodou
+      </span>
+    )
   }
+  const { cls, Icon } = freshnessMeta(cache.cached_at)
   return (
     <div className="flex flex-col leading-tight">
-      <span className={cn('text-sm', freshnessClass(cache.cached_at))}>
+      <span className={cn('inline-flex items-center gap-1 text-sm', cls)}>
+        <Icon size={12} aria-hidden="true" />
         {formatRelativeToNow(cache.cached_at)}
         {cache.event_count !== null && (
-          <span className="ml-1.5 text-xs text-muted-foreground">({cache.event_count})</span>
+          <span className="ml-1 text-xs text-muted-foreground">({cache.event_count})</span>
         )}
       </span>
       <span className="text-[11px] text-muted-foreground">
@@ -373,6 +402,10 @@ export function AdminCachesTab() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [onlyFailures, setOnlyFailures] = useState(false)
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({
+    key: 'when',
+    dir: 'desc',
+  })
 
   const runs = runsQuery.data?.runs ?? []
   const projects = statusQuery.data?.projects ?? []
@@ -395,8 +428,26 @@ export function AdminCachesTab() {
     })
   }, [runs, statusFilter, onlyFailures, projectFilter, dateFrom, dateTo])
 
-  const pagination = usePagination({ rowCount: filteredRuns.length, initialPageSize: 10 })
-  const pageRuns = filteredRuns.slice(pagination.start, pagination.end)
+  const sortedRuns = useMemo(() => {
+    const arr = [...filteredRuns]
+    arr.sort((a, b) => {
+      let cmp: number
+      if (sort.key === 'when') cmp = a.started_at.localeCompare(b.started_at)
+      else if (sort.key === 'projects') cmp = a.projects.length - b.projects.length
+      else cmp = runDurationMs(a) - runDurationMs(b)
+      return sort.dir === 'asc' ? cmp : -cmp
+    })
+    return arr
+  }, [filteredRuns, sort])
+
+  const pagination = usePagination({ rowCount: sortedRuns.length, initialPageSize: 10 })
+  const pageRuns = sortedRuns.slice(pagination.start, pagination.end)
+
+  function toggleSort(key: SortKey) {
+    setSort((s) =>
+      s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'desc' },
+    )
+  }
 
   function refresh() {
     refreshMutation.mutate(
@@ -430,12 +481,12 @@ export function AdminCachesTab() {
   }
 
   return (
-    <div className="mt-4 flex flex-col gap-6">
-      <div>
-        <p className="text-sm font-medium">
+    <div className="mt-4 flex flex-col gap-8">
+      <div className="flex flex-col gap-1">
+        <SectionHeading as="h2">
           Cache de audit log (lineage, acesso, órfãs, FinOps, Storage)
-        </p>
-        <p className="text-xs text-muted-foreground">
+        </SectionHeading>
+        <p className="max-w-[65ch] text-body text-muted-foreground">
           Recomputado 1×/dia (D-1, 03:00 UTC) de forma incremental — cada ciclo lê só o delta e
           desliza a janela. No disparo manual dá pra escolher projetos (padrão: todos) e marcar
           "forçar completo" (re-escaneia a janela inteira). A tela faz polling e mostra cada projeto
@@ -448,11 +499,9 @@ export function AdminCachesTab() {
       )}
 
       <section className="flex flex-col gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Execução atual
-        </h2>
+        <SectionHeading as="h3">Execução atual</SectionHeading>
         {runsQuery.isLoading ? (
-          <p className="text-sm text-muted-foreground">Carregando…</p>
+          <LoadingState />
         ) : (
           <SummaryCard
             run={currentRun}
@@ -467,81 +516,103 @@ export function AdminCachesTab() {
         )}
       </section>
 
-      <section className="flex flex-col gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Histórico de execuções
-        </h2>
+      <section className="flex flex-col gap-3">
+        <SectionHeading as="h3">Histórico de execuções</SectionHeading>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Select
-            value={statusFilter}
-            onValueChange={(v) => setStatusFilter(v ?? STATUS_FILTER_ALL)}
-          >
-            <SelectTrigger className="w-44" size="sm">
-              <SelectValue>
-                {(v: string) =>
-                  v === STATUS_FILTER_ALL
-                    ? 'Qualquer status'
-                    : `Com "${PROJECT_STATUS_LABEL[v] ?? v}"`
-                }
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={STATUS_FILTER_ALL}>Qualquer status</SelectItem>
-              {STATUS_FILTER_OPTIONS.map((s) => (
-                <SelectItem key={s} value={s}>
-                  Com "{PROJECT_STATUS_LABEL[s]}"
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="cache-status-filter" className="text-label text-muted-foreground">
+              Status do projeto
+            </Label>
+            <Select
+              value={statusFilter}
+              onValueChange={(v) => setStatusFilter(v ?? STATUS_FILTER_ALL)}
+            >
+              <SelectTrigger
+                id="cache-status-filter"
+                aria-label="Status do projeto"
+                className="w-44"
+                size="sm"
+              >
+                <SelectValue>
+                  {(v: string) =>
+                    v === STATUS_FILTER_ALL
+                      ? 'Qualquer status'
+                      : `Com "${PROJECT_STATUS_LABEL[v] ?? v}"`
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={STATUS_FILTER_ALL}>Qualquer status</SelectItem>
+                {STATUS_FILTER_OPTIONS.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    Com "{PROJECT_STATUS_LABEL[s]}"
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-          <Input
-            value={projectFilter}
-            onChange={(e) => setProjectFilter(e.target.value)}
-            placeholder="Filtrar por projeto…"
-            className="h-8 w-48"
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="cache-project-filter" className="text-label text-muted-foreground">
+              Projeto
+            </Label>
+            <div className="relative">
+              <Search
+                size={14}
+                className="-translate-y-1/2 absolute top-1/2 left-2.5 text-muted-foreground"
+              />
+              <Input
+                id="cache-project-filter"
+                value={projectFilter}
+                onChange={(e) => setProjectFilter(e.target.value)}
+                placeholder="Filtrar por projeto…"
+                className="h-8 w-52 pl-8"
+              />
+            </div>
+          </div>
+
+          <DateField
+            label="De"
+            id="cache-date-from"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+          />
+          <DateField
+            label="Até"
+            id="cache-date-to"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
           />
 
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <label htmlFor="cache-date-from">de</label>
-            <Input
-              id="cache-date-from"
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              className="h-8 w-36"
-            />
-          </div>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <label htmlFor="cache-date-to">até</label>
-            <Input
-              id="cache-date-to"
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              className="h-8 w-36"
-            />
-          </div>
-
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <div className="flex items-center gap-1.5 pb-1.5 text-sm text-muted-foreground">
             <Checkbox
               id="cache-only-failures"
               checked={onlyFailures}
               onCheckedChange={(v) => setOnlyFailures(v === true)}
             />
-            <label htmlFor="cache-only-failures" className="cursor-pointer">
+            <Label htmlFor="cache-only-failures" className="cursor-pointer font-normal">
               só com falha
-            </label>
+            </Label>
           </div>
         </div>
 
         {runs.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {runsQuery.isLoading ? 'Carregando…' : 'Nenhuma execução registrada ainda.'}
-          </p>
-        ) : filteredRuns.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhuma execução casa com os filtros.</p>
+          runsQuery.isLoading ? (
+            <LoadingState />
+          ) : (
+            <EmptyState
+              icon={Database}
+              title="Nenhuma execução registrada ainda."
+              description="O primeiro ciclo roda automaticamente às 03:00 UTC — ou dispare um agora pelo botão acima."
+            />
+          )
+        ) : sortedRuns.length === 0 ? (
+          <EmptyState
+            icon={SearchX}
+            title="Nenhuma execução casa com os filtros."
+            description="Ajuste o status, o projeto ou o período."
+          />
         ) : (
           <>
             <div className="overflow-x-auto rounded-lg border border-border">
@@ -549,10 +620,25 @@ export function AdminCachesTab() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-8" />
-                    <TableHead>Quando</TableHead>
+                    <SortableTableHead
+                      label="Quando"
+                      active={sort.key === 'when'}
+                      direction={sort.dir}
+                      onClick={() => toggleSort('when')}
+                    />
                     <TableHead>Status</TableHead>
-                    <TableHead>Projetos</TableHead>
-                    <TableHead>Duração</TableHead>
+                    <SortableTableHead
+                      label="Projetos"
+                      active={sort.key === 'projects'}
+                      direction={sort.dir}
+                      onClick={() => toggleSort('projects')}
+                    />
+                    <SortableTableHead
+                      label="Duração"
+                      active={sort.key === 'duration'}
+                      direction={sort.dir}
+                      onClick={() => toggleSort('duration')}
+                    />
                     <TableHead>Modo</TableHead>
                     <TableHead>Detalhe</TableHead>
                   </TableRow>
@@ -619,7 +705,7 @@ export function AdminCachesTab() {
               setPageSize={pagination.setPageSize}
               start={pagination.start}
               end={pagination.end}
-              totalCount={filteredRuns.length}
+              totalCount={sortedRuns.length}
               onPrevious={pagination.goToPreviousPage}
               onNext={pagination.goToNextPage}
             />
@@ -627,16 +713,18 @@ export function AdminCachesTab() {
         )}
       </section>
 
-      <section className="flex flex-col gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <section className="flex flex-col gap-3 rounded-lg border border-border bg-muted/30 p-4">
+        <SectionHeading as="h3" className="text-muted-foreground">
           Freshness por projeto
-        </h2>
+        </SectionHeading>
         {projects.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {statusQuery.isLoading ? 'Carregando…' : 'Nenhum projeto conhecido ainda.'}
-          </p>
+          statusQuery.isLoading ? (
+            <LoadingState />
+          ) : (
+            <EmptyState icon={Database} title="Nenhum projeto conhecido ainda." />
+          )
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-lg border border-border bg-card">
             <Table>
               <TableHeader>
                 <TableRow>

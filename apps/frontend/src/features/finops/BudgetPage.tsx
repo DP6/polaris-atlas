@@ -13,6 +13,10 @@ import {
   YAxis,
 } from 'recharts'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { ChoiceToggle } from '@/components/ChoiceToggle'
+import { LoadingState } from '@/components/LoadingState'
+import { MetricGrid, MetricTile } from '@/components/MetricTile'
+import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { SqlPreview } from '@/components/SqlPreview'
@@ -35,10 +39,11 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { WarningCallout } from '@/components/WarningCallout'
 import { useBudget } from '@/features/finops/hooks'
 import { useProjectContext } from '@/features/projects/ProjectContext'
 import { useTableFilterSort } from '@/hooks/useTableFilterSort'
-import { formatBytes, formatDate, formatNumber } from '@/lib/format'
+import { formatBytes, formatDate, formatNumber, formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { BudgetGroupBy, CostGroup, CostlyQuery, CostProjection } from '@/types/finops'
 
@@ -63,10 +68,6 @@ const GROUP_KEY_COLUMN_LABEL: Record<BudgetGroupBy, string> = {
   day: 'Dia',
   month: 'Mês',
   year: 'Ano',
-}
-
-function formatUsd(value: number): string {
-  return `US$ ${value.toFixed(value < 0.01 ? 6 : 2)}`
 }
 
 type GroupSortKey = 'key' | 'cost_usd' | 'billed_bytes' | 'job_count'
@@ -95,37 +96,22 @@ export function BudgetPage() {
   if (!hasRun) {
     return (
       <div className="flex flex-col gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">FinOps — Budget de custo</h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Estima o custo do mês corrente via audit logs de jobs do BigQuery (bytes cobrados) +
-            preço público on-demand — sem depender do Cloud Billing Export. Escolha o agrupamento e
-            o limite de itens antes de rodar.
-          </p>
-        </div>
+        <PageHeader
+          title="FinOps — Budget de custo"
+          description="Estima o custo do mês corrente via audit logs de jobs do BigQuery (bytes cobrados) + preço público on-demand — sem depender do Cloud Billing Export. Escolha o agrupamento e o limite de itens antes de rodar."
+        />
 
         <div className="flex flex-col gap-4 rounded-lg border border-border p-4">
           <div>
             <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
               Agrupar por
             </span>
-            <div className="flex gap-2">
-              {GROUP_BY_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setGroupBy(option.value)}
-                  className={cn(
-                    'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-                    groupBy === option.value
-                      ? 'border-primary bg-primary/10 text-foreground'
-                      : 'border-border text-muted-foreground hover:bg-muted',
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+            <ChoiceToggle
+              aria-label="Agrupar por"
+              options={GROUP_BY_OPTIONS}
+              value={groupBy}
+              onChange={setGroupBy}
+            />
           </div>
 
           <div>
@@ -161,34 +147,27 @@ export function BudgetPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">FinOps — Budget de custo</h1>
-          <p className="text-sm text-muted-foreground">
-            Custo por agrupamento e queries mais caras do mês corrente — estimativa baseada em bytes
-            escaneados, cobrança on-demand.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setHasRun(false)}>
-            Nova busca
-          </Button>
-          <RefreshButton isRefreshing={query.isFetching} onRefresh={() => query.refetch()} />
-        </div>
-      </div>
+      <PageHeader
+        title="FinOps — Budget de custo"
+        description="Custo por agrupamento e queries mais caras do mês corrente — estimativa baseada em bytes escaneados, cobrança on-demand."
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setHasRun(false)}>
+              Nova busca
+            </Button>
+            <RefreshButton isRefreshing={query.isFetching} onRefresh={() => query.refetch()} />
+          </>
+        }
+      />
 
-      {query.isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}
+      {query.isLoading && <LoadingState />}
       {query.isError && <ApiErrorNotice error={query.error} />}
 
       {data && (
         <>
-          {data.warning && (
-            <div className="rounded-lg border border-status-warn/30 bg-status-warn/10 p-3 text-sm text-status-warn">
-              {data.warning}
-            </div>
-          )}
+          {data.warning && <WarningCallout>{data.warning}</WarningCallout>}
 
-          <div className="flex flex-wrap gap-4">
+          <MetricGrid>
             {[
               { label: 'Custo até agora', value: formatUsd(data.projection.cost_so_far_usd) },
               { label: 'Média diária', value: formatUsd(data.projection.daily_average_usd) },
@@ -201,17 +180,9 @@ export function BudgetPage() {
                 value: `${data.projection.days_elapsed} de ${data.projection.days_in_month}`,
               },
             ].map((item) => (
-              <div
-                key={item.label}
-                className="min-w-[160px] flex-1 rounded-lg border border-border bg-card p-4"
-              >
-                <p className="mb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                  {item.label}
-                </p>
-                <p className="text-2xl font-bold">{item.value}</p>
-              </div>
+              <MetricTile key={item.label} label={item.label} value={item.value} />
             ))}
-          </div>
+          </MetricGrid>
 
           <Tabs defaultValue={COST_TAB}>
             <TabsList className="w-fit">

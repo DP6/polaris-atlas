@@ -18,7 +18,9 @@ export function RetentionFunnelSection() {
   }
 
   if (funnelQuery.isError || !funnelQuery.data) {
-    return <p className="text-sm text-status-error">Erro ao carregar o funil de retenção.</p>
+    return (
+      <p className="text-sm text-status-error-foreground">Erro ao carregar o funil de retenção.</p>
+    )
   }
 
   const {

@@ -33,24 +33,26 @@ export function AppLayout() {
       <div className="flex min-h-0 flex-1">
         {projectId && !sidebarCollapsed && <DatasetSidebar projectId={projectId} />}
         <main className="min-w-0 flex-1 overflow-y-auto p-6">
-          {canRenderOutlet ? (
-            <Outlet />
-          ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-muted-foreground">
-              <Cloud size={32} />
-              <p className="text-lg">Digite um projeto GCP para começar</p>
-              <p className="text-sm">
-                Não tem acesso a nenhum projeto ainda?{' '}
-                <Button
-                  variant="link"
-                  className="h-auto p-0"
-                  onClick={() => setRequestAccessOpen(true)}
-                >
-                  Solicite acesso
-                </Button>
-              </p>
-            </div>
-          )}
+          <div className="mx-auto h-full w-full max-w-[1400px]">
+            {canRenderOutlet ? (
+              <Outlet />
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-muted-foreground">
+                <Cloud size={32} />
+                <p className="text-lg">Digite um projeto GCP para começar</p>
+                <p className="text-sm">
+                  Não tem acesso a nenhum projeto ainda?{' '}
+                  <Button
+                    variant="link"
+                    className="h-auto p-0"
+                    onClick={() => setRequestAccessOpen(true)}
+                  >
+                    Solicite acesso
+                  </Button>
+                </p>
+              </div>
+            )}
+          </div>
         </main>
       </div>
       <RequestAccessDialog open={requestAccessOpen} onOpenChange={setRequestAccessOpen} />

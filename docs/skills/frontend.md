@@ -18,11 +18,16 @@ Filosofia: minimalismo com personalidade. Menos decoração, mais clareza.
 --color-text-muted:    #8F96A1;   /* texto secundário, labels — >=4.5:1 (WCAG AA) contra --color-bg-dark/-surface; #5B626C original tinha ~2.74:1, quase ilegível */
 --color-text-inverse:  #1D1D1B;   /* texto sobre fundo amarelo */
 
-/* Cores de apoio para gráficos e status */
---color-status-ok:      #34D399;  /* verde — dentro do SLA */
---color-status-warn:    #FFB302;  /* amarelo — alerta */
---color-status-error:   #E53E3E;  /* vermelho — fora do SLA / crítico */
---color-status-info:    #63B3ED;  /* azul — informação */
+/* Cores de status — DOIS papéis, não confundir:                       */
+/* 1. preenchimento/gráfico (chip /10-/12, borda /30, barra) — os      */
+/*    valores abaixo bastam (3:1 como fill), idênticos nos 2 temas     */
+--status-ok:    #34D399;   --status-warn:  #FFB302;
+--status-error: #E53E3E;   --status-info:  #63B3ED;
+/* 2. texto/ícone sobre superfície tintada — variante `-foreground`,   */
+/*    definida POR TEMA, contraste >= 4.5:1 nos dois. Classe:          */
+/*    text-status-{ok,warn,error,info}-foreground                      */
+/* :root (claro):  ok #0b7a43 · warn #8a5700 · error #c1291f · info #1a6ba8 */
+/* .dark:          ok #34d399 · warn #ffb302 · error #f87171 · info #63b3ed */
 
 /* Acento secundário */
 --color-accent-blue:    #1A365D;
@@ -30,25 +35,38 @@ Filosofia: minimalismo com personalidade. Menos decoração, mais clareza.
 --color-accent-green:   #059669;
 ```
 
+- **Nunca** usar `text-status-*` (sem `-foreground`) nem `text-primary`
+  como cor de texto sobre `--background`/`--card` — falham AA no tema
+  claro (amarelo dp6 ≈ 1.7:1). O `#FFB302` é para preenchimento (botão
+  primário, barra dp6, indicador ativo), não para texto.
+- Raio: `--radius-control` (botão/input/card/tabela/popover) e
+  `--radius-pill` (badge/toggle). Não re-hardcodar `rounded-[Npx]`.
+
 ---
 
 ## Tipografia
 
+Fonte **Ubuntu**, carregada via `<link>` em `apps/frontend/index.html`
+(`family=Ubuntu:wght@300;400;500;700`) — **não** por `@import` no CSS.
+Pesos disponíveis: 300, 400, **500**, 700. O peso **600
+(`font-semibold`) não existe no Ubuntu** — usar `font-bold` (700) em
+título e `font-medium` (500) onde precisa de peso médio.
+
+Escala tipográfica **semântica** (tokens em `@theme inline` no
+`src/index.css`), cada um com `--text-*--line-height`:
+
 ```css
-/* Fonte principal — Ubuntu (Google Fonts) */
-@import url('https://fonts.googleapis.com/css2?family=Ubuntu:wght@300;400;700&display=swap');
-
---font-sans: 'Ubuntu', 'Verdana', system-ui, sans-serif;
-
-/* Escala tipográfica */
---text-xs:   0.75rem;   /* 12px — labels de tabela, metadados */
---text-sm:   0.875rem;  /* 14px — corpo de tabela, valores */
---text-base: 1rem;      /* 16px — texto corrido */
---text-lg:   1.125rem;  /* 18px — subtítulos de seção */
---text-xl:   1.25rem;   /* 20px — títulos de card */
---text-2xl:  1.5rem;    /* 24px — títulos de página */
---text-3xl:  1.875rem;  /* 30px — KPIs grandes */
+--text-label:    0.75rem;   /* 12px — rótulo de campo, header de tabela, badge, caption */
+--text-body:     0.875rem;  /* 14px — corpo, célula de tabela, descrição (mínimo de leitura) */
+--text-subtitle: 1rem;      /* 16px — <h3> de subseção, valor de KPI */
+--text-title:    1.25rem;   /* 20px — <h2> de seção, valor de MetricTile */
+--text-display:  1.75rem;   /* 28px — <h1> de página (via PageHeader) */
 ```
+
+- Usar as classes `text-label`/`text-body`/`text-subtitle`/`text-title`/`text-display`.
+  Não usar `text-[11px]`/`text-[13px]` ad-hoc nem a escala antiga `text-xs..text-3xl` para hierarquia.
+- Corpo nunca abaixo de 14px (`text-body`). `text-label`/12px só para rótulo/caption/badge.
+- Bloco de texto corrido (descrição, callout) com `max-w-[65ch]`.
 
 ---
 
@@ -72,8 +90,18 @@ O layout é **denso como Metabase** — máximo de informação na viewport sem 
 
 - Sidebar: `240px` fixa, fundo `#2A2A28`, lista de datasets clicáveis
 - Topbar: `56px`, fundo `#1D1D1B`, linha amarela inferior `2px solid #FFB302`
-- Conteúdo: padding `24px`, gap entre cards `16px`
+- Conteúdo: padding `24px`, dentro de um container `max-w-[1400px] mx-auto`
+  (não estica de ponta a ponta em monitor largo)
 - Cards: `border-radius: 8px`, fundo `#2A2A28`, sem sombras pesadas
+
+**Escala de espaçamento** (4/8/12/16/24/32) — convenção de uso:
+
+| Entre o quê | gap |
+|---|---|
+| Seções de página (separação semântica forte) | `gap-8` (32) |
+| Blocos dentro de uma seção | `gap-4` (16) |
+| Elementos relacionados (label+control, ícone+texto) | `gap-2`/`gap-1.5` |
+| Padding interno de card/callout | `p-4`; célula de tabela `p-2` |
 
 ---
 
@@ -129,6 +157,40 @@ Usar como separador entre logo e título, ou como accent lateral em seções.
 
 ---
 
+## Componentes compartilhados
+
+Vieram da auditoria de UI/acessibilidade (branch `fix/ui-a11y-tokens`,
+2026-08). **Usar estes em vez de recriar o padrão à mão** — todos em
+`apps/frontend/src/components/`.
+
+| Componente | Quando usar |
+|---|---|
+| `PageHeader` | Cabeçalho de rota: um `<h1>` (`text-display`) + subtítulo + slot `actions` + link `back` opcional. Um por rota, fora dos ramos de loading/erro. Empilha em `< sm`. |
+| `SectionHeading` | `<h2>`/`<h3>` reais dentro de uma página (`text-title`/`text-subtitle`), com slot `actions`. Nunca `<h2 class="text-xs uppercase muted">`. |
+| `WarningCallout` | Aviso/degradação (`role="status"`, ícone + texto, `variant="warning"|"info"`). Substitui os banners de `warning` copiados à mão. |
+| `ApiErrorNotice` | Erro de query (`role="alert"`, mostra a mensagem real da API + comando `gcloud` de correção quando existe). Não usar `<p class="text-status-error">Erro ao carregar…</p>`. |
+| `LoadingState` | Carregando (spinner + texto). Substitui os `<p>Carregando…</p>` soltos. |
+| `EmptyState` / `EmptyStateRow` | Estado vazio (ícone + título + descrição/ação). `EmptyStateRow` para dentro de `<TableBody>`. |
+| `StatusBadge` | Badge de estado com ícone (`status="ok|warn|error|info|running|neutral"`). Nunca comunicar estado só por cor. |
+| `MetricTile` / `MetricGrid` | Tile de KPI (valor `text-title`, label `text-label uppercase`) em grid auto-fill. Substitui tiles à mão. |
+| `ChoiceToggle` | Grupo "escolher um" em pills (`aria-pressed`, `size="sm|md"`). Substitui pill/Button-group/Select ad-hoc. |
+| `DateField` | `<input type="date">` com `<Label>` associada e altura consistente. |
+| `SortableTableHead` | `<th>` clicável com seta de ordenação. |
+
+---
+
+## Acessibilidade (WCAG 2.1 AA) — obrigatório
+
+- **Contraste**: texto ≥ 4.5:1, ícone/borda/gráfico ≥ 3:1, **nos dois temas**. Usar as variantes `-foreground` das cores de status.
+- **Foco visível**: regra global em `index.css` (`:focus-visible { outline: 2px solid var(--color-ring) }`) — não remover com `outline-none` sem repor.
+- **Nunca só por cor**: todo estado/erro = ícone + texto (`WarningCallout`, `StatusBadge`, input inválido com ícone + `role="alert"`).
+- **Semântica**: um `<h1>` por rota (via `PageHeader`); `<h2>`/`<h3>` reais nas seções; toda `<label>` associada (usar o componente `<Label>`); `aria-label` em filtro/combobox sem rótulo visível.
+- **Alvo de toque ≥ 24×24 px** (2.5.8) — botões pequenos (estrela de favoritar etc.) com `size-6` mínimo.
+- **`prefers-reduced-motion`**: reset global já cobre animação/transição/scroll — não adicionar animação que ignore a preferência.
+- Ícone decorativo com `aria-hidden="true"`; ícone informativo com rótulo (`<span class="sr-only">` ou texto ao lado).
+
+---
+
 ## Componentes principais
 
 ### Topbar — seletor de projeto
@@ -160,9 +222,9 @@ DATASETS DISPONÍVEIS
 │    US    │ │    3     │ │  1.98 MB │ │  30.000  │ │  >1 mês  │
 └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘
 ```
-- 5 cards em row, flex-grow igual
-- KPI numérico em `--text-3xl` bold, label em `--text-xs` muted uppercase
-- Card de alerta (ex: SLA violado): borda `#E53E3E`
+- `MetricGrid` + `MetricTile` (grid auto-fill)
+- Valor em `text-title` bold, label em `text-label` muted uppercase
+- Card de alerta (`alert` prop): borda `--status-error`
 
 ### Tabela de ativos
 - Header: uppercase, `--text-xs`, `--color-text-muted`, border-bottom `#3A3A38`
@@ -214,8 +276,8 @@ Mapeamento de domínios:
 - Não usar sombras pesadas (`box-shadow`) — bordas sutis são suficientes
 - Não usar mais de 2 cores de destaque por tela
 - Não centralizar texto em tabelas — sempre left-align exceto números (right-align)
-- Não usar skeleton loaders elaborados — spinner simples em amarelo
-- Não adicionar animações longas — transitions máximo `200ms`
+- Não usar skeleton loaders elaborados — usar `LoadingState` (spinner + texto, cor muted)
+- Não adicionar animações longas — transitions máximo `200ms`; sempre respeitar `prefers-reduced-motion`
 - Não usar fontes além de Ubuntu/Verdana
 - Não criar páginas separadas por domínio — tudo na mesma SPA com sidebar
 
@@ -225,32 +287,18 @@ Mapeamento de domínios:
 
 Implementado (pedido do usuário, 2026-08-22) — `apps/frontend/src/hooks/useTheme.ts` alterna a classe `.dark` em `<html>`, persistida em `localStorage` (`observability-hub:theme`), com botão de alternância no Topbar (`components/ThemeToggle.tsx`). Dark continua sendo o padrão (ausência de valor salvo = dark); script bloqueante em `index.html` aplica a classe antes do primeiro paint pra evitar flash do tema errado.
 
-Variáveis de cor em `src/index.css`: `--color-bg-*`/`--color-text-*` invertidos entre `:root` (light) e `.dark`, `#FFB302` e as cores de status/accent-* mantidas idênticas nos dois temas, exatamente como esta seção já previa antes de ser implementada.
+Variáveis de cor em `src/index.css`: `--color-bg-*`/`--color-text-*` invertidos entre `:root` (light) e `.dark`. O `#FFB302` e os valores de **preenchimento** `--status-*`/accent-* são idênticos nos dois temas; as variantes de **texto** `--status-*-foreground` (adicionadas na auditoria de 2026-08) **diferem por tema** para passar contraste AA no claro.
 
 ---
 
-## Tailwind config (mapeamento das CSS vars)
+## Tailwind (v4 — sem arquivo de config)
 
-```js
-// tailwind.config.js
-module.exports = {
-  theme: {
-    extend: {
-      colors: {
-        primary:   '#FFB302',
-        'bg-dark':    '#1D1D1B',
-        'bg-surface': '#2A2A28',
-        'bg-muted':   '#3A3A38',
-        'text-muted': '#8F96A1',
-        'status-ok':    '#34D399',
-        'status-warn':  '#FFB302',
-        'status-error': '#E53E3E',
-        'status-info':  '#63B3ED',
-      },
-      fontFamily: {
-        sans: ['Ubuntu', 'Verdana', 'system-ui', 'sans-serif'],
-      },
-    },
-  },
-}
-```
+O projeto usa **Tailwind v4**: os tokens vivem num bloco `@theme inline`
+em `apps/frontend/src/index.css` (pares `--color-*: var(--*)`,
+`--text-*`, `--radius-*`, `--shadow-*`), com `:root` (claro) + `.dark`
+logo abaixo. **Não existe `tailwind.config.js`** — para adicionar/alterar
+um token, editar o `@theme inline` e os blocos `:root`/`.dark`.
+
+Regras plain-CSS relevantes no mesmo arquivo (fora de `@layer`):
+`:focus-visible` global, `@media (prefers-reduced-motion: reduce)` reset,
+`.dp6-divider`, scrollbar fina.

@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { LoadingState } from '@/components/LoadingState'
+import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { Badge } from '@/components/ui/badge'
@@ -13,10 +15,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
+import { WarningCallout } from '@/components/WarningCallout'
 import { useProjectContext } from '@/features/projects/ProjectContext'
 import { useWasteCandidates } from '@/features/storage/hooks'
 import { useTableFilterSort } from '@/hooks/useTableFilterSort'
-import { formatBytes, formatNumber } from '@/lib/format'
+import { formatBytes, formatNumber, formatUsd } from '@/lib/format'
 import type { WasteCandidate } from '@/types/storage'
 
 const MIN_DAYS_OPTIONS = [30, 60, 90] as const
@@ -76,10 +79,6 @@ type SortKey =
   | 'estimated_savings_usd_month_min'
   | 'confidence'
 
-function formatUsd(value: number): string {
-  return `US$ ${value.toFixed(value < 0.01 ? 6 : 2)}`
-}
-
 function compare(a: WasteCandidate, b: WasteCandidate, key: SortKey): number {
   if (key === 'bucket_name') {
     return a.bucket_name.localeCompare(b.bucket_name)
@@ -95,7 +94,7 @@ function ConfidenceBadge({ candidate }: { candidate: WasteCandidate }) {
     return (
       <Badge
         variant="secondary"
-        className="border-status-ok/30 bg-status-ok/10 text-status-ok"
+        className="border-status-ok/30 bg-status-ok/10 text-status-ok-foreground"
         title={`${candidate.usage_confirmed_object_count} de ${candidate.eligible_object_count} objetos sem leitura registrada nos últimos 90 dias`}
       >
         Sem leitura confirmada
@@ -138,17 +137,17 @@ export function WastePage() {
   if (!hasRun) {
     return (
       <div className="flex flex-col gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Scanner de desperdício</h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Sinaliza buckets com objetos em storage class STANDARD parados há muito tempo,
-            candidatos a mudar pra uma classe mais barata (Nearline/Coldline/Archive) — baseado em
-            idade do objeto + ausência de lifecycle rule já configurada. Quando o audit log de
-            leitura de objeto (DATA_READ) está habilitado no projeto, a confiança sobe pra "sem
-            leitura confirmada" em vez de só "configuração"; sem ele, a checagem degrada
-            graciosamente pra só idade + config, sem bloquear o resultado.
-          </p>
-        </div>
+        <PageHeader
+          title="Scanner de desperdício"
+          description={
+            'Sinaliza buckets com objetos em storage class STANDARD parados há muito tempo, ' +
+            'candidatos a mudar pra uma classe mais barata (Nearline/Coldline/Archive) — baseado ' +
+            'em idade do objeto + ausência de lifecycle rule já configurada. Quando o audit log ' +
+            'de leitura de objeto (DATA_READ) está habilitado no projeto, a confiança sobe pra ' +
+            '"sem leitura confirmada" em vez de só "configuração"; sem ele, a checagem degrada ' +
+            'graciosamente pra só idade + config, sem bloquear o resultado.'
+          }
+        />
 
         <div className="flex flex-col gap-4 rounded-lg border border-border p-4">
           <div>
@@ -169,7 +168,7 @@ export function WastePage() {
   }
 
   if (wasteQuery.isLoading) {
-    return <p className="text-muted-foreground">Carregando…</p>
+    return <LoadingState />
   }
 
   if (wasteQuery.isError) {
@@ -180,29 +179,23 @@ export function WastePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Scanner de desperdício</h1>
-          <p className="text-sm text-muted-foreground">
-            {data.candidates.length} buckets candidatos a mudança de storage class
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setHasRun(false)}>
-            Nova busca
-          </Button>
-          <RefreshButton
-            isRefreshing={wasteQuery.isFetching}
-            onRefresh={() => wasteQuery.refetch()}
-          />
-        </div>
-      </div>
+      <PageHeader
+        title="Scanner de desperdício"
+        description={`${data.candidates.length} buckets candidatos a mudança de storage class`}
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setHasRun(false)}>
+              Nova busca
+            </Button>
+            <RefreshButton
+              isRefreshing={wasteQuery.isFetching}
+              onRefresh={() => wasteQuery.refetch()}
+            />
+          </>
+        }
+      />
 
-      {data.usage_check_warning && (
-        <div className="rounded-lg border border-status-warn/30 bg-status-warn/10 p-3 text-sm text-status-warn">
-          {data.usage_check_warning}
-        </div>
-      )}
+      {data.usage_check_warning && <WarningCallout>{data.usage_check_warning}</WarningCallout>}
 
       <div className="flex items-center gap-2">
         <span className="text-sm text-muted-foreground">

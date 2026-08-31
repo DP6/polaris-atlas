@@ -13,6 +13,7 @@ import { FinOpsPage } from '@/features/finops/FinOpsPage'
 import { DatasetFreshnessPage } from '@/features/freshness/DatasetFreshnessPage'
 import { FreshnessPage } from '@/features/freshness/FreshnessPage'
 import { OrphansPage } from '@/features/lineage/OrphansPage'
+import { NotFoundPage } from '@/features/misc/NotFoundPage'
 import { QualityFolderComparisonPage } from '@/features/quality/QualityFolderComparisonPage'
 import { QualityFoldersPage } from '@/features/quality/QualityFoldersPage'
 import { BucketBrowserPage } from '@/features/storage/BucketBrowserPage'
@@ -42,6 +43,7 @@ export function AppRoutes() {
           <Route element={<RequireAdmin />}>
             <Route path="admin" element={<AdminPage />} />
           </Route>
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Route>
     </Routes>

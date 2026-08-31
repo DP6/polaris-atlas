@@ -12,7 +12,10 @@ import {
   YAxis,
 } from 'recharts'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { LoadingState } from '@/components/LoadingState'
+import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
+import { SectionHeading } from '@/components/SectionHeading'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -118,7 +121,7 @@ export function QualityFolderComparisonPage() {
   const deleteEntryMutation = useDeleteFolderEntry()
 
   if (folderQuery.isLoading) {
-    return <p className="text-sm text-muted-foreground">Carregando…</p>
+    return <LoadingState />
   }
 
   if (folderQuery.isError) {
@@ -148,10 +151,10 @@ export function QualityFolderComparisonPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between">
-        <div className="flex flex-col gap-1.5">
-          <h1 className="text-2xl font-bold">{folder.name}</h1>
-          <div className="flex items-center gap-2 text-muted-foreground text-xs">
+      <PageHeader
+        title={folder.name}
+        description={
+          <span className="inline-flex flex-wrap items-center gap-2 text-xs">
             <span>Criada por {folder.created_by}</span>
             <Badge variant={visibility.variant} className="gap-1">
               <VisibilityIcon size={10} />
@@ -160,27 +163,29 @@ export function QualityFolderComparisonPage() {
             <span>
               {entries.length} {entries.length === 1 ? 'entrada' : 'entradas'}
             </span>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <RefreshButton
-            isRefreshing={folderQuery.isFetching}
-            onRefresh={() => folderQuery.refetch()}
-          />
-          {canManage && (
-            <>
-              <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
-                <Pencil size={14} />
-                Editar
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setDeletingFolder(true)}>
-                <Trash2 size={14} />
-                Apagar pasta
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
+          </span>
+        }
+        actions={
+          <>
+            <RefreshButton
+              isRefreshing={folderQuery.isFetching}
+              onRefresh={() => folderQuery.refetch()}
+            />
+            {canManage && (
+              <>
+                <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+                  <Pencil size={14} />
+                  Editar
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setDeletingFolder(true)}>
+                  <Trash2 size={14} />
+                  Apagar pasta
+                </Button>
+              </>
+            )}
+          </>
+        }
+      />
 
       {entries.length === 0 && (
         <p className="text-sm text-muted-foreground">
@@ -191,7 +196,7 @@ export function QualityFolderComparisonPage() {
 
       {entries.length > 0 && (
         <div className="flex flex-col gap-2">
-          <h2 className="font-semibold text-sm">Entradas salvas</h2>
+          <SectionHeading as="h3">Entradas salvas</SectionHeading>
           <div className="flex flex-col gap-2">
             {entries.map((entry) => (
               <div
@@ -234,7 +239,7 @@ export function QualityFolderComparisonPage() {
 
       {comparableGroups.length > 0 && (
         <div className="flex flex-col gap-4">
-          <h2 className="font-semibold text-sm">Comparação coluna a coluna</h2>
+          <SectionHeading as="h3">Comparação coluna a coluna</SectionHeading>
           {comparableGroups.map(([key, group]) => (
             <ColumnDiffTable key={key} tableName={key} entries={group} />
           ))}
@@ -428,7 +433,7 @@ function ColumnDiffTable({
                     key={entries[index].entry_id}
                     className={
                       highlight
-                        ? 'text-right text-xs font-medium text-status-error'
+                        ? 'text-right text-xs font-medium text-status-error-foreground'
                         : 'text-right text-xs'
                     }
                   >
@@ -540,7 +545,7 @@ function EditFolderDialog({
             />
           </div>
         )}
-        {errorMessage && <p className="text-sm text-status-error">{errorMessage}</p>}
+        {errorMessage && <p className="text-sm text-status-error-foreground">{errorMessage}</p>}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar

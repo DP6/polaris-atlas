@@ -38,9 +38,9 @@ const STATUS_LABELS: Record<AccessRequestStatus, string> = {
 }
 
 const STATUS_BADGE_CLASS: Record<AccessRequestStatus, string> = {
-  pending: 'border-status-warn/30 bg-status-warn/10 text-status-warn',
-  approved: 'border-status-ok/30 bg-status-ok/10 text-status-ok',
-  denied: 'border-status-error/30 bg-status-error/10 text-status-error',
+  pending: 'border-status-warn/30 bg-status-warn/10 text-status-warn-foreground',
+  approved: 'border-status-ok/30 bg-status-ok/10 text-status-ok-foreground',
+  denied: 'border-status-error/30 bg-status-error/10 text-status-error-foreground',
 }
 
 const REQUEST_TYPE_LABELS: Record<AccessRequestType, string> = {

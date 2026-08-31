@@ -2,6 +2,8 @@ import { ChevronDown, Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { LoadingState } from '@/components/LoadingState'
+import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { Badge } from '@/components/ui/badge'
@@ -25,6 +27,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { WarningCallout } from '@/components/WarningCallout'
 import { ColumnTypeScopePicker } from '@/features/finops/ColumnTypeScopePicker'
 import {
   useEstimateColumnTypeSuggestions,
@@ -33,7 +36,7 @@ import {
 } from '@/features/finops/hooks'
 import { useProjectContext } from '@/features/projects/ProjectContext'
 import { useTableFilterSort } from '@/hooks/useTableFilterSort'
-import { formatBytes, formatNumber } from '@/lib/format'
+import { formatBytes, formatNumber, formatUsd } from '@/lib/format'
 import { ApiError } from '@/lib/http-client'
 import { cn } from '@/lib/utils'
 import type { ColumnTypeCandidate, ColumnTypeSuggestion, PartitionCandidate } from '@/types/finops'
@@ -49,10 +52,6 @@ type EstimateFilter =
   | typeof ESTIMATE_FILTER_WITH
   | typeof ESTIMATE_FILTER_WITHOUT
 
-function formatUsd(value: number): string {
-  return `US$ ${value.toFixed(value < 0.01 ? 6 : 2)}`
-}
-
 function matchesSearch(datasetId: string, tableId: string, term: string): boolean {
   const needle = term.toLowerCase()
   return tableId.toLowerCase().includes(needle) || datasetId.toLowerCase().includes(needle)
@@ -63,14 +62,14 @@ export function FinOpsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold">FinOps — Scanner de desperdício</h1>
-        <p className="text-sm text-muted-foreground">
-          Candidatas a particionamento e sugestões de tipo de coluna, com estimativa de custo.
-          Tabelas sem uso ficou só em Governança &gt; "Tabelas sem consumidor", pra não duplicar a
-          mesma informação em dois lugares.
-        </p>
-      </div>
+      <PageHeader
+        title="FinOps — Scanner de desperdício"
+        description={
+          'Candidatas a particionamento e sugestões de tipo de coluna, com estimativa de custo. ' +
+          'Tabelas sem uso ficou só em Governança > "Tabelas sem consumidor", pra não duplicar a ' +
+          'mesma informação em dois lugares.'
+        }
+      />
 
       <Tabs defaultValue={PARTITION_TAB}>
         <TabsList className="w-fit">
@@ -199,7 +198,7 @@ function PartitionCandidatesTab({ projectId }: { projectId: string | undefined }
         </p>
       )}
 
-      {hasRun && query.isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}
+      {hasRun && query.isLoading && <LoadingState />}
 
       {hasRun && query.isError && <ApiErrorNotice error={query.error} />}
 
@@ -272,11 +271,7 @@ function PartitionCandidatesTab({ projectId }: { projectId: string | undefined }
             </div>
           </div>
 
-          {data.warning && (
-            <div className="rounded-lg border border-status-warn/30 bg-status-warn/10 p-3 text-sm text-status-warn">
-              {data.warning}
-            </div>
-          )}
+          {data.warning && <WarningCallout>{data.warning}</WarningCallout>}
 
           <Table>
             <TableHeader>
@@ -342,7 +337,7 @@ function PartitionCandidatesTab({ projectId }: { projectId: string | undefined }
                     {candidate.estimated_savings_usd_conservative !== null &&
                     candidate.estimated_savings_usd_optimistic !== null ? (
                       <span
-                        className="font-medium text-status-ok"
+                        className="font-medium text-status-ok-foreground"
                         title={candidate.savings_disclaimer ?? undefined}
                       >
                         {formatUsd(candidate.estimated_savings_usd_conservative)} –{' '}
@@ -499,7 +494,7 @@ function ColumnTypesTab({ projectId }: { projectId: string | undefined }) {
         </div>
       </div>
 
-      {errorMessage && <p className="text-sm text-status-error">{errorMessage}</p>}
+      {errorMessage && <p className="text-sm text-status-error-foreground">{errorMessage}</p>}
 
       {estimateMutation.data && !runMutation.data && (
         <div className="flex flex-wrap gap-6 rounded-lg border border-border bg-card p-4 text-sm">
@@ -526,11 +521,7 @@ function ColumnTypesTab({ projectId }: { projectId: string | undefined }) {
 
       {runMutation.data && (
         <>
-          {runMutation.data.warning && (
-            <div className="rounded-lg border border-status-warn/30 bg-status-warn/10 p-3 text-sm text-status-warn">
-              {runMutation.data.warning}
-            </div>
-          )}
+          {runMutation.data.warning && <WarningCallout>{runMutation.data.warning}</WarningCallout>}
 
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative min-w-[220px] flex-1">
@@ -598,7 +589,7 @@ function ColumnTypesTab({ projectId }: { projectId: string | undefined }) {
                   <TableCell>
                     <ColumnTypeSuggestionsList suggestions={candidate.suggestions} />
                   </TableCell>
-                  <TableCell className="text-right font-medium text-status-ok">
+                  <TableCell className="text-right font-medium text-status-ok-foreground">
                     {formatUsd(totalSavings(candidate))}
                   </TableCell>
                 </TableRow>

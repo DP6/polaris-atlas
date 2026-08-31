@@ -69,7 +69,9 @@ export function LoginAnalyticsSection() {
   }
 
   if (analyticsQuery.isError || !analyticsQuery.data) {
-    return <p className="text-sm text-status-error">Erro ao carregar os acessos ao Hub.</p>
+    return (
+      <p className="text-sm text-status-error-foreground">Erro ao carregar os acessos ao Hub.</p>
+    )
   }
 
   const { daily, weekly, monthly, recent_events } = analyticsQuery.data

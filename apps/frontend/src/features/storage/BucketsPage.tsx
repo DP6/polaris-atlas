@@ -1,6 +1,8 @@
 import { Search } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { LoadingState } from '@/components/LoadingState'
+import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { Badge } from '@/components/ui/badge'
@@ -55,7 +57,7 @@ export function BucketsPage() {
   })
 
   if (bucketsQuery.isLoading) {
-    return <p className="text-muted-foreground">Carregando…</p>
+    return <LoadingState />
   }
 
   if (bucketsQuery.isError) {
@@ -66,16 +68,16 @@ export function BucketsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Buckets</h1>
-          <p className="text-sm text-muted-foreground">{data.buckets.length} buckets</p>
-        </div>
-        <RefreshButton
-          isRefreshing={bucketsQuery.isFetching}
-          onRefresh={() => bucketsQuery.refetch()}
-        />
-      </div>
+      <PageHeader
+        title="Buckets"
+        description={`${data.buckets.length} buckets`}
+        actions={
+          <RefreshButton
+            isRefreshing={bucketsQuery.isFetching}
+            onRefresh={() => bucketsQuery.refetch()}
+          />
+        }
+      />
 
       <div className="relative min-w-[220px] max-w-sm">
         <Search

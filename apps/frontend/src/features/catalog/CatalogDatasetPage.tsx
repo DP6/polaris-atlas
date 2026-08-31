@@ -1,5 +1,8 @@
 import { Star } from 'lucide-react'
 import { useLocation, useParams } from 'react-router-dom'
+import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { LoadingState } from '@/components/LoadingState'
+import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
 import { AssetsTable } from '@/features/catalog/AssetsTable'
 import { useDatasets, useTables } from '@/features/catalog/hooks'
@@ -23,12 +26,14 @@ export function CatalogDatasetPage() {
   const toggleFavorite = useToggleFavorite()
 
   if (tablesQuery.isLoading) {
-    return <p className="text-muted-foreground">Carregando…</p>
+    return <LoadingState />
   }
 
-  if (tablesQuery.isError || !tablesQuery.data) {
-    return <p className="text-status-error">Erro ao carregar as tabelas do dataset.</p>
+  if (tablesQuery.isError) {
+    return <ApiErrorNotice error={tablesQuery.error} />
   }
+
+  if (!tablesQuery.data) return null
 
   const datasetSummary = datasetsQuery.data?.datasets.find((d) => d.dataset_id === datasetId)
   const worstStatus = freshnessQuery.data?.datasets.find(
@@ -44,10 +49,10 @@ export function CatalogDatasetPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold">{tablesQuery.data.dataset_id}</h1>
+      <PageHeader
+        title={
+          <span className="inline-flex items-center gap-2">
+            {tablesQuery.data.dataset_id}
             <button
               type="button"
               onClick={() =>
@@ -59,25 +64,27 @@ export function CatalogDatasetPage() {
                 })
               }
               aria-label={isDatasetFavorite ? 'Remover dataset dos favoritos' : 'Favoritar dataset'}
-              className="text-muted-foreground hover:text-primary"
+              className="inline-flex size-6 items-center justify-center text-muted-foreground hover:text-primary"
             >
               <Star
                 size={18}
                 className={isDatasetFavorite ? 'fill-primary text-primary' : undefined}
               />
             </button>
-          </div>
-          <p className="text-sm text-muted-foreground">{tablesQuery.data.total_tables} ativos</p>
-        </div>
-        <RefreshButton
-          isRefreshing={isRefreshing}
-          onRefresh={() => {
-            tablesQuery.refetch()
-            datasetsQuery.refetch()
-            freshnessQuery.refetch()
-          }}
-        />
-      </div>
+          </span>
+        }
+        description={`${tablesQuery.data.total_tables} ativos`}
+        actions={
+          <RefreshButton
+            isRefreshing={isRefreshing}
+            onRefresh={() => {
+              tablesQuery.refetch()
+              datasetsQuery.refetch()
+              freshnessQuery.refetch()
+            }}
+          />
+        }
+      />
 
       <KpiCards
         items={[

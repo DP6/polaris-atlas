@@ -251,7 +251,7 @@ function UpsertUserDialog({
             />
           </div>
 
-          {errorMessage && <p className="text-sm text-status-error">{errorMessage}</p>}
+          {errorMessage && <p className="text-sm text-status-error-foreground">{errorMessage}</p>}
         </div>
 
         <DialogFooter>
@@ -294,7 +294,7 @@ function DeleteUserDialog({
             admin) é removido.
           </DialogDescription>
         </DialogHeader>
-        {errorMessage && <p className="text-sm text-status-error">{errorMessage}</p>}
+        {errorMessage && <p className="text-sm text-status-error-foreground">{errorMessage}</p>}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar

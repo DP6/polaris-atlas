@@ -34,7 +34,11 @@ export function AccessRequestAnalyticsSection() {
   }
 
   if (analyticsQuery.isError || !analyticsQuery.data) {
-    return <p className="text-sm text-status-error">Erro ao carregar as solicitações de acesso.</p>
+    return (
+      <p className="text-sm text-status-error-foreground">
+        Erro ao carregar as solicitações de acesso.
+      </p>
+    )
   }
 
   const { monthly, top_projects, approval_rate } = analyticsQuery.data

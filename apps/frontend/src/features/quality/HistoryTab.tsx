@@ -10,6 +10,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { LoadingState } from '@/components/LoadingState'
 import {
   Table,
   TableBody,
@@ -51,9 +53,9 @@ function formatRunParameters(parameters: ProfilingHistoryRun['parameters']): str
 }
 
 const QUALITY_FLAG_COLOR: Record<QualityFlag, string> = {
-  ok: 'text-status-ok',
-  warning: 'text-status-warn',
-  critical: 'text-status-error',
+  ok: 'text-status-ok-foreground',
+  warning: 'text-status-warn-foreground',
+  critical: 'text-status-error-foreground',
 }
 
 // "cai mais de 10%" da spec — pontos percentuais de densidade, não queda
@@ -77,11 +79,11 @@ export function HistoryTab({ projectId, datasetId, tableId }: HistoryTabProps) {
   const historyQuery = useQualityHistory(projectId, datasetId, tableId ?? undefined)
 
   if (historyQuery.isLoading) {
-    return <p className="text-sm text-muted-foreground">Carregando histórico…</p>
+    return <LoadingState />
   }
 
   if (historyQuery.isError) {
-    return <p className="text-sm text-status-error">Erro ao carregar o histórico.</p>
+    return <ApiErrorNotice error={historyQuery.error} />
   }
 
   const runs = historyQuery.data?.runs ?? []
@@ -109,7 +111,7 @@ export function HistoryTab({ projectId, datasetId, tableId }: HistoryTabProps) {
   return (
     <div className="flex flex-col gap-4">
       {showDegradationAlert && (
-        <div className="flex items-center gap-2 rounded-lg border border-status-error/30 bg-status-error/10 p-3 text-sm text-status-error">
+        <div className="flex items-center gap-2 rounded-lg border border-status-error/30 bg-status-error/10 p-3 text-sm text-status-error-foreground">
           <TriangleAlert size={16} className="shrink-0" />
           Densidade caiu {densityDrop.toFixed(1)} pontos percentuais desde o run anterior (
           {formatPercent(previous.overall_density)} → {formatPercent(latest.overall_density)}).

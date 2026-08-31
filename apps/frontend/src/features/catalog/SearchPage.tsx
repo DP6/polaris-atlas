@@ -1,5 +1,7 @@
 import { CheckCircle2, Loader2, Search as SearchIcon, XCircle } from 'lucide-react'
 import { useState } from 'react'
+import { PageHeader } from '@/components/PageHeader'
+import { SectionHeading } from '@/components/SectionHeading'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -62,12 +64,10 @@ export function SearchPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold">Buscar tabelas</h1>
-        <p className="text-sm text-muted-foreground">
-          Encontre em quais datasets uma tabela existe (ou não) dentro do projeto selecionado.
-        </p>
-      </div>
+      <PageHeader
+        title="Buscar tabelas"
+        description="Encontre em quais datasets uma tabela existe (ou não) dentro do projeto selecionado."
+      />
 
       <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
         <div className="relative flex min-w-[240px] flex-1 flex-col gap-1.5">
@@ -148,7 +148,7 @@ export function SearchPage() {
         </div>
       )}
 
-      {errorMessage && <p className="text-sm text-status-error">{errorMessage}</p>}
+      {errorMessage && <p className="text-sm text-status-error-foreground">{errorMessage}</p>}
 
       {result && hasNoResults && (
         <p className="text-sm text-muted-foreground">
@@ -159,23 +159,31 @@ export function SearchPage() {
       {result && !hasNoResults && (
         <div className="flex flex-col gap-6">
           {result.datasets_with_match.length > 0 && (
-            <div>
-              <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold">
-                <CheckCircle2 size={16} className="text-status-ok" />
-                Encontrado em {result.datasets_with_match.length}{' '}
-                {result.datasets_with_match.length === 1 ? 'dataset' : 'datasets'}
-              </h2>
+            <div className="flex flex-col gap-2">
+              <SectionHeading as="h3">
+                <span className="inline-flex items-center gap-2">
+                  <CheckCircle2
+                    size={16}
+                    className="text-status-ok-foreground"
+                    aria-hidden="true"
+                  />
+                  Encontrado em {result.datasets_with_match.length}{' '}
+                  {result.datasets_with_match.length === 1 ? 'dataset' : 'datasets'}
+                </span>
+              </SectionHeading>
               <SearchMatchesTable matches={result.datasets_with_match} />
             </div>
           )}
 
           {result.datasets_without_match.length > 0 && (
-            <div>
-              <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold">
-                <XCircle size={16} className="text-status-error" />
-                Ausente em {result.datasets_without_match.length}{' '}
-                {result.datasets_without_match.length === 1 ? 'dataset' : 'datasets'}
-              </h2>
+            <div className="flex flex-col gap-2">
+              <SectionHeading as="h3">
+                <span className="inline-flex items-center gap-2">
+                  <XCircle size={16} className="text-status-error-foreground" aria-hidden="true" />
+                  Ausente em {result.datasets_without_match.length}{' '}
+                  {result.datasets_without_match.length === 1 ? 'dataset' : 'datasets'}
+                </span>
+              </SectionHeading>
               <SearchAbsentTable datasets={result.datasets_without_match} />
             </div>
           )}

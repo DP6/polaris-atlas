@@ -34,6 +34,13 @@ export function formatPercent(value: number | null, digits = 1): string {
   return `${value.toFixed(digits)}%`
 }
 
+// Custo em dólar — 6 casas pra valores subcentavo (storage de tabela órfã
+// costuma ser US$ 0.00xxxx/mês), 2 casas no resto. Usado por FinOps,
+// órfãs e o scanner de desperdício de Storage.
+export function formatUsd(value: number): string {
+  return `US$ ${value.toFixed(value < 0.01 ? 6 : 2)}`
+}
+
 // Usado pelo indicador de staleness do cache de audit log de
 // lineage/acesso/órfãs (cache_updated_at) — o ciclo de refresh é diário
 // (D-1), então o texto normalmente cai em horas/dias, não minutos, mas

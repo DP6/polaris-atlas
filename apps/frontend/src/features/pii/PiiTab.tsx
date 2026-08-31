@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { WarningCallout } from '@/components/WarningCallout'
 import { useEstimatePiiScan, useRunPiiScan } from '@/features/pii/hooks'
 import { PiiResultsTable } from '@/features/pii/PiiResultsTable'
 import { ApiError } from '@/lib/http-client'
@@ -72,7 +73,7 @@ export function PiiTab({ projectId, datasetId, tableId, isView }: PiiTabProps) {
             disabled={isView}
           />
           {isView && (
-            <p className="text-xs text-status-warn">
+            <p className="text-xs text-status-warn-foreground">
               Amostragem não disponível para views — só a heurística de nome roda
             </p>
           )}
@@ -109,7 +110,9 @@ export function PiiTab({ projectId, datasetId, tableId, isView }: PiiTabProps) {
         </div>
       </div>
 
-      {errorMessage && <p className="shrink-0 text-sm text-status-error">{errorMessage}</p>}
+      {errorMessage && (
+        <p className="shrink-0 text-sm text-status-error-foreground">{errorMessage}</p>
+      )}
 
       {estimateMutation.data && !runMutation.data && (
         <div className="flex shrink-0 gap-6 rounded-lg border border-border bg-card p-4 text-sm">
@@ -131,9 +134,7 @@ export function PiiTab({ projectId, datasetId, tableId, isView }: PiiTabProps) {
           {runMutation.data && (
             <>
               {runMutation.data.warning && (
-                <div className="rounded-lg border border-status-warn/30 bg-status-warn/10 p-3 text-sm text-status-warn">
-                  {runMutation.data.warning}
-                </div>
+                <WarningCallout>{runMutation.data.warning}</WarningCallout>
               )}
 
               {runMutation.data.excluded_columns.length > 0 && (
