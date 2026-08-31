@@ -303,7 +303,7 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
                     aria-label={
                       isDatasetFavorite ? 'Remover dataset dos favoritos' : 'Favoritar dataset'
                     }
-                    className="shrink-0 px-1 text-muted-foreground hover:text-primary"
+                    className="inline-flex size-6 shrink-0 items-center justify-center text-muted-foreground hover:text-primary"
                   >
                     <Star
                       size={13}

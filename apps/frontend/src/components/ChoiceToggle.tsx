@@ -44,7 +44,8 @@ export function ChoiceToggle<T extends string | number>({
             aria-pressed={active}
             onClick={() => onChange(opt.value)}
             className={cn(
-              'rounded-pill border font-medium transition-colors',
+              // min-h-6 garante alvo de toque >= 24px (WCAG 2.5.8) mesmo no size sm
+              'inline-flex min-h-6 items-center justify-center rounded-pill border font-medium transition-colors',
               SIZE_CLASS[size],
               active
                 ? 'border-primary bg-primary/10 text-foreground'
