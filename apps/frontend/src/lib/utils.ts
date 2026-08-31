@@ -5,9 +5,9 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-// Estilo de link de navegação (dentro de tabela, breadcrumb, etc.).
-// Cor `info` na variante -foreground: contraste AA nos dois temas (o
-// amarelo --primary como texto falha AA no tema claro — ver
-// docs/frontend/ui-ux-rules.md). Sublinhado no hover como afordância
-// que não depende de cor.
-export const linkClass = 'text-status-info-foreground hover:underline'
+// Estilo de link de navegação (dentro de tabela, breadcrumb, etc.):
+// amarelo dp6 no hover + sublinhado como afordância que não depende só
+// de cor. Nota: --primary como texto tem contraste baixo no tema claro
+// (~1.7:1); o hover é transiente e o sublinhado ajuda, mas não passa
+// WCAG AA 1.4.3.
+export const linkClass = 'hover:text-primary hover:underline'
