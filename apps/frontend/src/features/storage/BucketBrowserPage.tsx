@@ -17,6 +17,7 @@ import {
 import { useProjectContext } from '@/features/projects/ProjectContext'
 import { useBucketObjects } from '@/features/storage/hooks'
 import { formatBytes, formatDate } from '@/lib/format'
+import { linkClass } from '@/lib/utils'
 
 // Nome de exibição de um objeto/prefixo relativo ao prefixo atual — GCS
 // não tem pastas reais, name/prefixes sempre vêm com o caminho completo
@@ -85,11 +86,11 @@ export function BucketBrowserPage() {
         aria-label="Trilha de navegação"
         className="-mt-3 flex flex-wrap items-center gap-1 text-muted-foreground text-sm"
       >
-        <Link to="/storage" className="hover:text-primary">
+        <Link to="/storage" className={linkClass}>
           Buckets
         </Link>
         <ChevronRight size={12} aria-hidden="true" />
-        <button type="button" onClick={() => navigateToPrefix('')} className="hover:text-primary">
+        <button type="button" onClick={() => navigateToPrefix('')} className={linkClass}>
           {bucketName}
         </button>
         {breadcrumbSegments(prefix).map((segment) => (
@@ -98,7 +99,7 @@ export function BucketBrowserPage() {
             <button
               type="button"
               onClick={() => navigateToPrefix(segment.prefix)}
-              className="hover:text-primary"
+              className={linkClass}
             >
               {segment.label}
             </button>

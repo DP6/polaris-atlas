@@ -1,25 +1,22 @@
 import { Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { SortableTableHead } from '@/components/SortableTableHead'
+import { StatusBadge } from '@/components/StatusBadge'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
-import { SLA_LABELS, SLA_ORDER, SLA_SHORT_LABELS, SLA_TEXT_COLOR } from '@/features/freshness/sla'
+import {
+  SLA_FILL_COLOR,
+  SLA_LABELS,
+  SLA_ORDER,
+  SLA_SEVERITY,
+  SLA_SHORT_LABELS,
+} from '@/features/freshness/sla'
 import { formatBytes, formatDate, formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { SLAStatus, TableFreshness } from '@/types/freshness'
 
 const SLA_FILTER_ALL = 'all'
 type SlaFilter = SLAStatus | typeof SLA_FILTER_ALL
-
-// Ponto colorido de cada pill de filtro — mesma cor do texto do status na
-// tabela (SLA_TEXT_COLOR), só trocando text- por bg-.
-const SLA_DOT_COLOR: Record<SLAStatus, string> = SLA_ORDER.reduce(
-  (acc, status) => {
-    acc[status] = SLA_TEXT_COLOR[status].replace('text-', 'bg-')
-    return acc
-  },
-  {} as Record<SLAStatus, string>,
-)
 
 type SortKey =
   | 'table_id'
@@ -100,7 +97,7 @@ export function TableFreshnessTable({ tables }: { tables: TableFreshness[] }) {
               )}
             >
               {filter !== SLA_FILTER_ALL && (
-                <span className={cn('size-2 rounded-full', SLA_DOT_COLOR[filter])} />
+                <span className={cn('size-2 rounded-full', SLA_FILL_COLOR[filter])} />
               )}
               {filter === SLA_FILTER_ALL ? 'Todos' : SLA_SHORT_LABELS[filter]}
             </button>
@@ -162,9 +159,9 @@ export function TableFreshnessTable({ tables }: { tables: TableFreshness[] }) {
               </TableCell>
               <TableCell>
                 {table.sla_status ? (
-                  <span className={cn('font-medium', SLA_TEXT_COLOR[table.sla_status])}>
+                  <StatusBadge status={SLA_SEVERITY[table.sla_status]}>
                     {SLA_LABELS[table.sla_status]}
-                  </span>
+                  </StatusBadge>
                 ) : (
                   <span className="text-muted-foreground">—</span>
                 )}

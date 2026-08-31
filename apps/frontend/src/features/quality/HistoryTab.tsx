@@ -12,6 +12,7 @@ import {
 } from 'recharts'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { LoadingState } from '@/components/LoadingState'
+import { StatusBadge } from '@/components/StatusBadge'
 import {
   Table,
   TableBody,
@@ -22,7 +23,6 @@ import {
 } from '@/components/ui/table'
 import { useQualityHistory } from '@/features/quality/hooks'
 import { formatDate, formatPercent } from '@/lib/format'
-import { cn } from '@/lib/utils'
 import type { QualityFlag, UniquenessMethod } from '@/types/profiling'
 import type { ProfilingHistoryRun } from '@/types/quality'
 
@@ -52,10 +52,12 @@ function formatRunParameters(parameters: ProfilingHistoryRun['parameters']): str
   return parts.join(' · ')
 }
 
-const QUALITY_FLAG_COLOR: Record<QualityFlag, string> = {
-  ok: 'text-status-ok-foreground',
-  warning: 'text-status-warn-foreground',
-  critical: 'text-status-error-foreground',
+// Flag de qualidade como <StatusBadge> (ícone + rótulo) — não só cor
+// (WCAG 1.4.1, ver docs/frontend/accessibility.md).
+const QUALITY_FLAG_STATUS: Record<QualityFlag, 'ok' | 'warn' | 'error'> = {
+  ok: 'ok',
+  warning: 'warn',
+  critical: 'error',
 }
 
 // "cai mais de 10%" da spec — pontos percentuais de densidade, não queda
@@ -211,9 +213,9 @@ function RunRow({
                       {formatPercent(column.completeness_pct)}
                     </TableCell>
                     <TableCell className="text-xs">
-                      <span className={cn('font-medium', QUALITY_FLAG_COLOR[column.quality_flag])}>
+                      <StatusBadge status={QUALITY_FLAG_STATUS[column.quality_flag]}>
                         {QUALITY_FLAG_LABELS[column.quality_flag]}
-                      </span>
+                      </StatusBadge>
                     </TableCell>
                   </TableRow>
                 ))}
