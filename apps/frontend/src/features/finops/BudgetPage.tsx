@@ -323,7 +323,7 @@ function CostByGroupTab({
                 type="monotone"
                 dataKey="acumulado"
                 name="Custo acumulado"
-                stroke="var(--color-status-info)"
+                stroke="var(--color-primary)"
                 strokeWidth={2}
                 dot={{ r: 3 }}
               />

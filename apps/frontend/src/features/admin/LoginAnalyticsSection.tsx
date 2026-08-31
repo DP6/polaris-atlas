@@ -106,7 +106,7 @@ export function LoginAnalyticsSection() {
             <Line
               type="monotone"
               dataKey="logins"
-              stroke="var(--color-status-info)"
+              stroke="var(--color-primary)"
               strokeWidth={2}
               dot={{ r: 3 }}
             />
