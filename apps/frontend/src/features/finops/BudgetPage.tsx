@@ -44,7 +44,7 @@ import { useBudget } from '@/features/finops/hooks'
 import { useProjectContext } from '@/features/projects/ProjectContext'
 import { useTableFilterSort } from '@/hooks/useTableFilterSort'
 import { formatBytes, formatDate, formatNumber, formatUsd } from '@/lib/format'
-import { cn } from '@/lib/utils'
+import { cn, linkClass } from '@/lib/utils'
 import type { BudgetGroupBy, CostGroup, CostlyQuery, CostProjection } from '@/types/finops'
 
 const COST_TAB = 'cost'
@@ -384,7 +384,7 @@ function CostByGroupTab({
               <TableRow key={group.key}>
                 <TableCell className="font-medium">
                   {link ? (
-                    <Link to={`/datasets/${link.datasetId}`} className="hover:text-primary">
+                    <Link to={`/datasets/${link.datasetId}`} className={linkClass}>
                       {link.label}
                     </Link>
                   ) : (
