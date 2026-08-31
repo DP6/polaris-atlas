@@ -12,6 +12,7 @@ import {
   YAxis,
 } from 'recharts'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { LoadingState } from '@/components/LoadingState'
 import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SectionHeading } from '@/components/SectionHeading'
@@ -120,7 +121,7 @@ export function QualityFolderComparisonPage() {
   const deleteEntryMutation = useDeleteFolderEntry()
 
   if (folderQuery.isLoading) {
-    return <p className="text-sm text-muted-foreground">Carregando…</p>
+    return <LoadingState />
   }
 
   if (folderQuery.isError) {

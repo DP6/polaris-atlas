@@ -2,6 +2,7 @@ import { ChevronRight, File, Folder } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { LoadingState } from '@/components/LoadingState'
 import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
 import { Button } from '@/components/ui/button'
@@ -62,7 +63,7 @@ export function BucketBrowserPage() {
   if (!bucketName) return null
 
   if (query.isLoading) {
-    return <p className="text-muted-foreground">Carregando…</p>
+    return <LoadingState />
   }
 
   if (query.isError) {

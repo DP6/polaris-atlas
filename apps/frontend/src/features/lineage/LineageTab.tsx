@@ -1,5 +1,6 @@
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { CacheStalenessBadge } from '@/components/CacheStalenessBadge'
+import { LoadingState } from '@/components/LoadingState'
 import { WarningCallout } from '@/components/WarningCallout'
 import { useTableLineage } from '@/features/lineage/hooks'
 import { LineageGraph } from '@/features/lineage/LineageGraph'
@@ -14,7 +15,7 @@ export function LineageTab({ projectId, datasetId, tableId }: LineageTabProps) {
   const lineageQuery = useTableLineage(projectId, datasetId, tableId ?? undefined)
 
   if (lineageQuery.isLoading) {
-    return <p className="text-sm text-muted-foreground">Carregando lineage…</p>
+    return <LoadingState />
   }
 
   if (lineageQuery.isError) {

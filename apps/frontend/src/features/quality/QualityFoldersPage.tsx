@@ -2,6 +2,7 @@ import { FolderPlus, Globe, Lock, Mail } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { LoadingState } from '@/components/LoadingState'
 import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
 import { Badge } from '@/components/ui/badge'
@@ -60,7 +61,7 @@ export function QualityFoldersPage() {
         }
       />
 
-      {foldersQuery.isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}
+      {foldersQuery.isLoading && <LoadingState />}
       {foldersQuery.isError && <ApiErrorNotice error={foldersQuery.error} />}
 
       {foldersQuery.data && (

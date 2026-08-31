@@ -1,3 +1,5 @@
+import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { LoadingState } from '@/components/LoadingState'
 import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
 import { DatasetFreshnessTable } from '@/features/freshness/DatasetFreshnessTable'
@@ -12,12 +14,14 @@ export function FreshnessPage() {
   const freshnessQuery = useProjectFreshness(projectId)
 
   if (freshnessQuery.isLoading) {
-    return <p className="text-muted-foreground">Carregando…</p>
+    return <LoadingState />
   }
 
-  if (freshnessQuery.isError || !freshnessQuery.data) {
-    return <p className="text-status-error-foreground">Erro ao carregar o freshness do projeto.</p>
+  if (freshnessQuery.isError) {
+    return <ApiErrorNotice error={freshnessQuery.error} />
   }
+
+  if (!freshnessQuery.data) return null
 
   const totals: FreshnessCounts = freshnessQuery.data.datasets.reduce(
     (acc, dataset) => {

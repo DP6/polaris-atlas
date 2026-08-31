@@ -10,6 +10,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { LoadingState } from '@/components/LoadingState'
 import {
   Table,
   TableBody,
@@ -77,11 +79,11 @@ export function HistoryTab({ projectId, datasetId, tableId }: HistoryTabProps) {
   const historyQuery = useQualityHistory(projectId, datasetId, tableId ?? undefined)
 
   if (historyQuery.isLoading) {
-    return <p className="text-sm text-muted-foreground">Carregando histórico…</p>
+    return <LoadingState />
   }
 
   if (historyQuery.isError) {
-    return <p className="text-sm text-status-error-foreground">Erro ao carregar o histórico.</p>
+    return <ApiErrorNotice error={historyQuery.error} />
   }
 
   const runs = historyQuery.data?.runs ?? []

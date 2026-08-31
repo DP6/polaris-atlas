@@ -1,5 +1,6 @@
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { CacheStalenessBadge } from '@/components/CacheStalenessBadge'
+import { LoadingState } from '@/components/LoadingState'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -29,7 +30,7 @@ export function AccessTab({ projectId, datasetId, tableId }: AccessTabProps) {
   const accessQuery = useTableAccess(projectId, datasetId, tableId ?? undefined)
 
   if (accessQuery.isLoading) {
-    return <p className="text-sm text-muted-foreground">Carregando acessos…</p>
+    return <LoadingState />
   }
 
   if (accessQuery.isError) {

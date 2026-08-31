@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { MetricGrid, MetricTile } from '@/components/MetricTile'
 import { SqlPreview } from '@/components/SqlPreview'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -341,7 +342,7 @@ export function ProfilingDialog({
                           Salvar em pasta
                         </Button>
                       </div>
-                      <div className="flex flex-wrap gap-4">
+                      <MetricGrid>
                         {[
                           {
                             label: 'Amostradas',
@@ -362,17 +363,9 @@ export function ProfilingDialog({
                             value: formatPercent(runMutation.data.table_summary.overall_density),
                           },
                         ].map((item) => (
-                          <div
-                            key={item.label}
-                            className="min-w-[160px] flex-1 rounded-lg border border-border bg-card p-4"
-                          >
-                            <p className="mb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                              {item.label}
-                            </p>
-                            <p className="text-2xl font-bold">{item.value}</p>
-                          </div>
+                          <MetricTile key={item.label} label={item.label} value={item.value} />
                         ))}
-                      </div>
+                      </MetricGrid>
 
                       {runMutation.data.excluded_columns.length > 0 && (
                         <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">

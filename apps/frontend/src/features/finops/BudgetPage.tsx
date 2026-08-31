@@ -13,6 +13,8 @@ import {
   YAxis,
 } from 'recharts'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { ChoiceToggle } from '@/components/ChoiceToggle'
+import { LoadingState } from '@/components/LoadingState'
 import { MetricGrid, MetricTile } from '@/components/MetricTile'
 import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
@@ -104,23 +106,12 @@ export function BudgetPage() {
             <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
               Agrupar por
             </span>
-            <div className="flex gap-2">
-              {GROUP_BY_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setGroupBy(option.value)}
-                  className={cn(
-                    'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-                    groupBy === option.value
-                      ? 'border-primary bg-primary/10 text-foreground'
-                      : 'border-border text-muted-foreground hover:bg-muted',
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+            <ChoiceToggle
+              aria-label="Agrupar por"
+              options={GROUP_BY_OPTIONS}
+              value={groupBy}
+              onChange={setGroupBy}
+            />
           </div>
 
           <div>
@@ -169,7 +160,7 @@ export function BudgetPage() {
         }
       />
 
-      {query.isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}
+      {query.isLoading && <LoadingState />}
       {query.isError && <ApiErrorNotice error={query.error} />}
 
       {data && (

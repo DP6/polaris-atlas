@@ -1,4 +1,6 @@
 import { useParams } from 'react-router-dom'
+import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { LoadingState } from '@/components/LoadingState'
 import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
 import { useDatasetFreshness } from '@/features/freshness/hooks'
@@ -12,12 +14,14 @@ export function DatasetFreshnessPage() {
   const freshnessQuery = useDatasetFreshness(projectId, datasetId)
 
   if (freshnessQuery.isLoading) {
-    return <p className="text-muted-foreground">Carregando…</p>
+    return <LoadingState />
   }
 
-  if (freshnessQuery.isError || !freshnessQuery.data) {
-    return <p className="text-status-error-foreground">Erro ao carregar o freshness do dataset.</p>
+  if (freshnessQuery.isError) {
+    return <ApiErrorNotice error={freshnessQuery.error} />
   }
+
+  if (!freshnessQuery.data) return null
 
   return (
     <div className="flex flex-col gap-6">

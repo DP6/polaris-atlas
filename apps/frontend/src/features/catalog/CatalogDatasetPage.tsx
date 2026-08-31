@@ -1,5 +1,7 @@
 import { Star } from 'lucide-react'
 import { useLocation, useParams } from 'react-router-dom'
+import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { LoadingState } from '@/components/LoadingState'
 import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
 import { AssetsTable } from '@/features/catalog/AssetsTable'
@@ -24,12 +26,14 @@ export function CatalogDatasetPage() {
   const toggleFavorite = useToggleFavorite()
 
   if (tablesQuery.isLoading) {
-    return <p className="text-muted-foreground">Carregando…</p>
+    return <LoadingState />
   }
 
-  if (tablesQuery.isError || !tablesQuery.data) {
-    return <p className="text-status-error-foreground">Erro ao carregar as tabelas do dataset.</p>
+  if (tablesQuery.isError) {
+    return <ApiErrorNotice error={tablesQuery.error} />
   }
+
+  if (!tablesQuery.data) return null
 
   const datasetSummary = datasetsQuery.data?.datasets.find((d) => d.dataset_id === datasetId)
   const worstStatus = freshnessQuery.data?.datasets.find(

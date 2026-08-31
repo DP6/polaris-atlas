@@ -1,6 +1,7 @@
 import { Search } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { LoadingState } from '@/components/LoadingState'
 import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SortableTableHead } from '@/components/SortableTableHead'
@@ -56,7 +57,7 @@ export function BucketsPage() {
   })
 
   if (bucketsQuery.isLoading) {
-    return <p className="text-muted-foreground">Carregando…</p>
+    return <LoadingState />
   }
 
   if (bucketsQuery.isError) {

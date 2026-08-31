@@ -2,6 +2,7 @@ import { ChevronDown, Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { LoadingState } from '@/components/LoadingState'
 import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SortableTableHead } from '@/components/SortableTableHead'
@@ -197,7 +198,7 @@ function PartitionCandidatesTab({ projectId }: { projectId: string | undefined }
         </p>
       )}
 
-      {hasRun && query.isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}
+      {hasRun && query.isLoading && <LoadingState />}
 
       {hasRun && query.isError && <ApiErrorNotice error={query.error} />}
 

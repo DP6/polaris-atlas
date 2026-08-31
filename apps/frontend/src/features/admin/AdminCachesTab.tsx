@@ -17,6 +17,7 @@ import { toast } from 'sonner'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { DateField } from '@/components/DateField'
 import { EmptyState } from '@/components/EmptyState'
+import { LoadingState } from '@/components/LoadingState'
 import { PaginationBar } from '@/components/PaginationBar'
 import { SectionHeading } from '@/components/SectionHeading'
 import { SortableTableHead } from '@/components/SortableTableHead'
@@ -500,7 +501,7 @@ export function AdminCachesTab() {
       <section className="flex flex-col gap-2">
         <SectionHeading as="h3">Execução atual</SectionHeading>
         {runsQuery.isLoading ? (
-          <p className="text-sm text-muted-foreground">Carregando…</p>
+          <LoadingState />
         ) : (
           <SummaryCard
             run={currentRun}
@@ -598,7 +599,7 @@ export function AdminCachesTab() {
 
         {runs.length === 0 ? (
           runsQuery.isLoading ? (
-            <p className="text-sm text-muted-foreground">Carregando…</p>
+            <LoadingState />
           ) : (
             <EmptyState
               icon={Database}
@@ -718,7 +719,7 @@ export function AdminCachesTab() {
         </SectionHeading>
         {projects.length === 0 ? (
           statusQuery.isLoading ? (
-            <p className="text-sm text-muted-foreground">Carregando…</p>
+            <LoadingState />
           ) : (
             <EmptyState icon={Database} title="Nenhum projeto conhecido ainda." />
           )

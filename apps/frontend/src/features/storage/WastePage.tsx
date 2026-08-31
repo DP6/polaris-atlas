@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { LoadingState } from '@/components/LoadingState'
 import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SortableTableHead } from '@/components/SortableTableHead'
@@ -167,7 +168,7 @@ export function WastePage() {
   }
 
   if (wasteQuery.isLoading) {
-    return <p className="text-muted-foreground">Carregando…</p>
+    return <LoadingState />
   }
 
   if (wasteQuery.isError) {

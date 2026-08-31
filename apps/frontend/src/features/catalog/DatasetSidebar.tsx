@@ -17,6 +17,7 @@ import {
 import type { ReactNode } from 'react'
 import { useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
+import { ChoiceToggle } from '@/components/ChoiceToggle'
 import { Badge } from '@/components/ui/badge'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
@@ -119,35 +120,20 @@ function QuantityPicker({
   onChange: (next: QuantityLimit) => void
 }) {
   return (
-    <div className="mb-2 flex flex-wrap gap-1 px-3">
-      {QUANTITY_OPTIONS.map((n) => (
-        <button
-          key={n}
-          type="button"
-          onClick={() => onChange(n)}
-          className={cn(
-            'rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors',
-            value === n
-              ? 'border-primary bg-primary/10 text-foreground'
-              : 'border-border text-muted-foreground hover:bg-muted',
-          )}
-        >
-          {n}
-        </button>
-      ))}
-      <button
-        type="button"
-        onClick={() => onChange(QUANTITY_ALL)}
-        className={cn(
-          'rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors',
-          value === QUANTITY_ALL
-            ? 'border-primary bg-primary/10 text-foreground'
-            : 'border-border text-muted-foreground hover:bg-muted',
-        )}
-      >
-        Todos
-      </button>
-    </div>
+    <ChoiceToggle
+      aria-label="Quantos itens mostrar"
+      size="sm"
+      className="mb-2 px-3"
+      options={[
+        ...QUANTITY_OPTIONS.map((n): { value: QuantityLimit; label: string } => ({
+          value: n,
+          label: String(n),
+        })),
+        { value: QUANTITY_ALL, label: 'Todos' },
+      ]}
+      value={value}
+      onChange={onChange}
+    />
   )
 }
 

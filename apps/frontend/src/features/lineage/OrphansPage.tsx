@@ -3,7 +3,9 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { CacheStalenessBadge } from '@/components/CacheStalenessBadge'
+import { ChoiceToggle } from '@/components/ChoiceToggle'
 import { DatasetScopeGate } from '@/components/DatasetScopeGate'
+import { LoadingState } from '@/components/LoadingState'
 import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SortableTableHead } from '@/components/SortableTableHead'
@@ -46,30 +48,25 @@ function LookbackPicker({ value, onChange }: { value: number; onChange: (days: n
       <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
         Período analisado (dias)
       </span>
-      <div className="flex flex-wrap items-center gap-2">
-        {LOOKBACK_OPTIONS.map((days) => (
-          <button
-            key={days}
-            type="button"
-            onClick={() => {
-              onChange(days)
-              setShowCustom(false)
-            }}
-            className={cn(
-              'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-              value === days && !showCustom
-                ? 'border-primary bg-primary/10 text-foreground'
-                : 'border-border text-muted-foreground hover:bg-muted',
-            )}
-          >
-            {days}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center gap-1">
+        <ChoiceToggle
+          aria-label="Período analisado em dias"
+          options={LOOKBACK_OPTIONS.map((d): { value: number; label: string } => ({
+            value: d,
+            label: String(d),
+          }))}
+          value={showCustom ? -1 : value}
+          onChange={(days) => {
+            onChange(days)
+            setShowCustom(false)
+          }}
+        />
         <button
           type="button"
+          aria-pressed={showCustom}
           onClick={() => setShowCustom(true)}
           className={cn(
-            'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+            'rounded-pill border px-3 py-1 text-xs font-medium transition-colors',
             showCustom
               ? 'border-primary bg-primary/10 text-foreground'
               : 'border-border text-muted-foreground hover:bg-muted',
@@ -149,7 +146,7 @@ export function OrphansPage() {
   }
 
   if (orphansQuery.isLoading) {
-    return <p className="text-muted-foreground">Carregando…</p>
+    return <LoadingState />
   }
 
   if (orphansQuery.isError) {
