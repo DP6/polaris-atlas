@@ -138,7 +138,7 @@ function QuantityPicker({
 }
 
 // Subseção dentro de um serviço (Governança, FinOps, Catálogo,
-// Favoritos, Análises de DQ, Recentes) — todas recolhidas por padrão
+// Favoritos, Análises de qualidade, Recentes) — todas recolhidas por padrão
 // (`open` vem de fora, sempre iniciado em `false` no componente pai).
 function SidebarSection({
   label,
@@ -406,7 +406,7 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
         </SidebarSection>
 
         <SidebarSection
-          label="Análises de DQ"
+          label="Análises de qualidade"
           open={dqAnalysesOpen}
           onOpenChange={setDqAnalysesOpen}
         >
