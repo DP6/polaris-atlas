@@ -1,5 +1,8 @@
 # Referências de design (externas)
 
+> Parte do **harness de front-end** — índice em `docs/frontend/README.md`;
+> como usar estas capturas em `docs/frontend/references.md`.
+
 Capturas de tela de sites de terceiros usadas **apenas como referência
 visual interna** — estudo de layout, tipografia, densidade, paleta e
 padrões de UI para o frontend do Hub. Não são material de produto e não

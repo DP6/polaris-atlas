@@ -5,6 +5,68 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Harness de front-end (`docs/skills/frontend.md` → `docs/frontend/`)
+
+Toda a orientação de front-end vivia num arquivo só, `docs/skills/frontend.md`
+(~305 linhas), acumulando quatro responsabilidades: design system,
+catálogo de componentes, regras de UI/UX + acessibilidade, e mockups
+ASCII de tela.
+
+### Problema
+
+- **Desatualização**: os mockups ASCII (Topbar, Sidebar, modal de
+  profiling) e os snippets CSS (`.btn-primary`, `.card`) predatam a
+  implementação shadcn e divergiram; o doc citava a escala tipográfica
+  antiga (`--text-xs`) já substituída pela semântica.
+- **Cobertura incompleta**: 7 componentes compartilhados
+  (`CacheStalenessBadge`, `CollapsibleSection`, `DatasetScopeGate`,
+  `PaginationBar`, `RefreshButton`, `SqlPreview`, `ThemeToggle`) fora do
+  catálogo.
+- **Sem camada de patterns nem de behaviors**: composições recorrentes
+  (tabela filtrável, fluxo de análise, gate de escopo) e padrões de
+  loading/erro/vazio não documentados.
+- **Racional de design difuso**: as decisões da auditoria de
+  acessibilidade viviam só neste CHANGELOG e na memória.
+- **CLAUDE.md**: front-end referenciado em duas seções com sobreposição;
+  árvore de pastas sem listar `docs/skills/`, `docs/specs/`,
+  `docs/design-references/`.
+
+### O que foi feito
+
+- **`docs/frontend/`** — harness com 8 arquivos, um por responsabilidade:
+  `README.md` (índice + roteiro "tarefa → o que ler"), `design-system.md`
+  (espelho de `apps/frontend/src/index.css` + catálogo completo dos ~18
+  componentes de `src/components/` + regra dos primitivos shadcn),
+  `ui-ux-rules.md` (regras normativas + porquê), `accessibility.md`
+  (WCAG 2.1 AA acionável + como verificar), `patterns.md` (8 composições
+  recorrentes com arquivo canônico), `behaviors.md` (data fetching,
+  estados, feedback, formatação, tema, localStorage), `references.md`
+  (telas canônicas internas + `docs/design-references/`), `CHECKLIST.md`
+  (entrega, fonte única).
+- **`docs/skills/frontend.md`** virou tombstone com tabela de "seção →
+  para onde foi". Removido após uma release.
+- **CLAUDE.md**: árvore de pastas atualizada; "Convenções — Frontend"
+  ganhou ponteiro pro harness + ressalva de que Vitest/RTL é planejado
+  (não há setup nem `vitest` no `package.json`); "Contexto: Frontend"
+  troca "ler a skill" por "ler `docs/frontend/README.md`", checklist vira
+  ponteiro pra `docs/frontend/CHECKLIST.md`.
+- Comentários de código com o caminho antigo atualizados
+  (`apps/frontend/src/index.css` ×4, `hooks/useTheme.ts`,
+  `features/quality/QualityFolderComparisonPage.tsx`).
+- `docs/design-references/README.md` ganhou back-link pro harness.
+
+### Decisão de arquitetura
+
+O **código é a fonte de verdade dos valores** (tokens em `index.css`,
+componentes em `src/components/`); o harness é a fonte de verdade das
+**decisões e do porquê**. `design-system.md` e `index.css` mudam **no
+mesmo PR** — a regra de sincronização está no topo do arquivo. Os três
+eixos (design system, regras, referências) ficam em arquivos separados
+porque têm dono e taxa de mudança diferentes. Nada de token/componente
+real foi alterado — o harness documenta o estado atual.
+
+---
+
 ## Listas de projeto seguem só o registro do ADM (`hub_projects`)
 
 Bug reportado pelo usuário: `bigquery-public-data` aparecia na tela

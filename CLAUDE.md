@@ -125,6 +125,16 @@ Nunca remova um sufixo de ambiente de um nome de recurso "pra simplificar" — s
 │                                 # custo depois — ver "Registro de componentes e labels FinOps"
 ├── docs/gcp-components.md        # Registro vivo "recurso GCP → app/projeto" — formato
 │                                 # reaproveitável em futuros projetos do Hub
+├── docs/frontend/               # Harness de front-end: design system (espelho de
+│                                 # index.css), regras de UI/UX, acessibilidade,
+│                                 # patterns, behaviors, referências, checklist.
+│                                 # Índice em docs/frontend/README.md
+├── docs/design-references/      # Capturas de tela de sites externos (referência
+│                                 # visual dp6/brandtech) + script de captura.
+│                                 # Linkado por docs/frontend/references.md
+├── docs/specs/                  # Specs de domínio — uma por funcionalidade (objetivo,
+│                                 # fonte de dados, endpoints, ACs, suposições)
+├── docs/skills/                 # (legado) frontend.md virou tombstone → docs/frontend/
 ├── docs/playbooks/                # Roteiros operacionais de execução rápida — hoje só
 │                                   # hospedar o Hub em projetos novos (clonar, ajustar
 │                                   # variáveis, bootstrap)
@@ -170,7 +180,8 @@ Regra geral: **domains/ (backend) e features/ (frontend) espelham exatamente os 
 - Roteamento: React Router.
 - Estado: preferir estado de servidor via TanStack Query + estado local de componente. Só introduzir uma lib de estado global (ex: Zustand) se houver necessidade concreta — não antecipar.
 - Node 22 LTS, gerenciador de pacotes `pnpm` (lockfile `pnpm-lock.yaml` é commitado).
-- Testes com Vitest + React Testing Library.
+- Testes com Vitest + React Testing Library (planejado — o setup ainda não existe em `apps/frontend/`).
+- Convenções visuais, de UX e de acessibilidade: **harness de front-end em `docs/frontend/`** — comece pelo `README.md`, que dá o roteiro de leitura por tipo de tarefa. O design system (`docs/frontend/design-system.md`) é **espelho de `apps/frontend/src/index.css`**: mudou um, muda o outro no mesmo PR.
 
 ## Convenções — Docker
 
@@ -334,16 +345,14 @@ Checklist de entrega:
 **Foco:** fidelidade à identidade visual dp6, densidade de informação estilo Metabase, UX funcional.
 
 Antes de criar qualquer componente:
-- Ler docs/skills/frontend.md obrigatoriamente
-- Usar apenas as cores, fontes e padrões definidos na skill
+- Ler `docs/frontend/README.md` e seguir o roteiro de leitura por tipo de tarefa
+- Usar só os tokens de `apps/frontend/src/index.css` (documentados em `docs/frontend/design-system.md`) — nenhum hex, px de tipografia ou `rounded-[Npx]` solto
+- Reusar os componentes de `apps/frontend/src/components/` (§Catálogo do design-system) e os padrões de `docs/frontend/patterns.md` em vez de recriar
 - Componentes de UI via shadcn/ui — nunca escrever CSS do zero para primitivas
 - Data fetching exclusivamente via TanStack Query — nunca fetch direto em componentes
 - TypeScript strict — sem any
 
-Checklist de entrega:
-- [ ] Skill de frontend foi lida
-- [ ] Cores e fontes seguem a identidade dp6
-- [ ] pnpm lint (biome) e pnpm build sem erros
+Checklist de entrega: seguir `docs/frontend/CHECKLIST.md`.
 
 ---
 
