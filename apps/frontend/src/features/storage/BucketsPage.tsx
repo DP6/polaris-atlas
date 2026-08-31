@@ -19,6 +19,7 @@ import { useProjectContext } from '@/features/projects/ProjectContext'
 import { useBuckets } from '@/features/storage/hooks'
 import { useTableFilterSort } from '@/hooks/useTableFilterSort'
 import { formatBytes, formatDate, formatNumber } from '@/lib/format'
+import { linkClass } from '@/lib/utils'
 import type { BucketSummary } from '@/types/storage'
 
 type SortKey =
@@ -146,7 +147,7 @@ export function BucketsPage() {
           {visibleBuckets.map((bucket) => (
             <TableRow key={bucket.name}>
               <TableCell className="font-medium">
-                <Link to={`/storage/${bucket.name}`} className="hover:text-primary">
+                <Link to={`/storage/${bucket.name}`} className={linkClass}>
                   {bucket.name}
                 </Link>
               </TableCell>

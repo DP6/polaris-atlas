@@ -64,7 +64,7 @@ export function CatalogDatasetPage() {
                 })
               }
               aria-label={isDatasetFavorite ? 'Remover dataset dos favoritos' : 'Favoritar dataset'}
-              className="inline-flex size-6 items-center justify-center text-muted-foreground hover:text-primary"
+              className="inline-flex size-6 items-center justify-center text-muted-foreground hover:text-foreground"
             >
               <Star
                 size={18}

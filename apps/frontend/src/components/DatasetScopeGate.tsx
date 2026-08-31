@@ -68,7 +68,7 @@ export function DatasetScopeGate({
               type="button"
               onClick={toggleAll}
               disabled={datasets.length === 0}
-              className="text-sm font-medium hover:text-primary"
+              className="text-sm font-medium hover:text-foreground"
             >
               Todos os datasets
             </button>
@@ -90,7 +90,7 @@ export function DatasetScopeGate({
                 <button
                   type="button"
                   onClick={() => toggleDataset(dataset.dataset_id)}
-                  className="truncate text-sm hover:text-primary"
+                  className="truncate text-sm hover:text-foreground"
                 >
                   {dataset.dataset_id}
                 </button>

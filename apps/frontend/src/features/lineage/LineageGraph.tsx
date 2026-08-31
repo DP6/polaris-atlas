@@ -21,9 +21,11 @@ interface LineageGraphProps {
 }
 
 interface TableNodeData extends Record<string, unknown> {
-  projectId: string
-  datasetId: string
-  tableId: string
+  // label = nome curto exibido no nó (sem o prefixo do projeto raiz, que
+  // se repete em todo nó e consome a largura); fullLabel = FQN completo,
+  // mostrado no tooltip.
+  label: string
+  fullLabel: string
   isRoot: boolean
   accessDenied: boolean
 }
@@ -46,11 +48,24 @@ function buildBucketNode(n: LineageNode): Node<BucketNodeData> {
   }
 }
 
+function tableLabels(
+  projectId: string,
+  datasetId: string,
+  tableId: string,
+  rootProjectId: string,
+): { label: string; fullLabel: string } {
+  const fullLabel = `${projectId}.${datasetId}.${tableId}`
+  // Tabela no mesmo projeto da raiz: omite o prefixo do projeto.
+  const label = projectId === rootProjectId ? `${datasetId}.${tableId}` : fullLabel
+  return { label, fullLabel }
+}
+
 function buildElements(data: LineageGraphResponse): {
   nodes: GraphNode[]
   edges: Edge[]
 } {
   const rootId = `${data.root.project_id}:${data.root.dataset_id}:${data.root.table_id}`
+  const rootProjectId = data.root.project_id
 
   const nodes: GraphNode[] = [
     {
@@ -58,9 +73,12 @@ function buildElements(data: LineageGraphResponse): {
       type: 'tableNode',
       position: { x: 0, y: 0 },
       data: {
-        projectId: data.root.project_id,
-        datasetId: data.root.dataset_id,
-        tableId: data.root.table_id,
+        ...tableLabels(
+          data.root.project_id,
+          data.root.dataset_id,
+          data.root.table_id,
+          rootProjectId,
+        ),
         isRoot: true,
         accessDenied: false,
       },
@@ -72,9 +90,7 @@ function buildElements(data: LineageGraphResponse): {
         type: 'tableNode',
         position: { x: 0, y: 0 },
         data: {
-          projectId: n.project_id ?? '',
-          datasetId: n.dataset_id ?? '',
-          tableId: n.table_id ?? '',
+          ...tableLabels(n.project_id ?? '', n.dataset_id ?? '', n.table_id ?? '', rootProjectId),
           isRoot: false,
           accessDenied: n.access_denied,
         },
@@ -115,8 +131,6 @@ function layout(nodes: GraphNode[], edges: Edge[]): GraphNode[] {
 }
 
 function LineageTableNode({ data }: NodeProps<Node<TableNodeData>>) {
-  const label = `${data.projectId}.${data.datasetId}.${data.tableId}`
-
   const node = (
     <div
       style={{ width: NODE_WIDTH }}
@@ -128,17 +142,18 @@ function LineageTableNode({ data }: NodeProps<Node<TableNodeData>>) {
     >
       <Handle type="target" position={Position.Left} className="!bg-muted-foreground" />
       {data.accessDenied && <Lock size={12} className="shrink-0" />}
-      <span className="truncate">{label}</span>
+      <span className="truncate">{data.label}</span>
       <Handle type="source" position={Position.Right} className="!bg-muted-foreground" />
     </div>
   )
 
-  if (!data.accessDenied) return node
-
   return (
     <Tooltip>
       <TooltipTrigger render={node} />
-      <TooltipContent>Acesso não concedido a este projeto</TooltipContent>
+      <TooltipContent>
+        {data.fullLabel}
+        {data.accessDenied && ' · acesso não concedido a este projeto'}
+      </TooltipContent>
     </Tooltip>
   )
 }
@@ -148,15 +163,22 @@ function LineageTableNode({ data }: NodeProps<Node<TableNodeData>>) {
 // cor) reaproveitando a identidade do grupo "Cloud Storage" da sidebar.
 function LineageBucketNode({ data }: NodeProps<Node<BucketNodeData>>) {
   return (
-    <div
-      style={{ width: NODE_WIDTH }}
-      className="flex items-center gap-1.5 rounded-lg border border-status-ok/30 bg-status-ok/10 px-3 py-2 text-xs"
-    >
-      <Handle type="target" position={Position.Left} className="!bg-muted-foreground" />
-      <HardDrive size={12} className="shrink-0" />
-      <span className="truncate">{data.bucketName}</span>
-      <Handle type="source" position={Position.Right} className="!bg-muted-foreground" />
-    </div>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <div
+            style={{ width: NODE_WIDTH }}
+            className="flex items-center gap-1.5 rounded-lg border border-status-ok/30 bg-status-ok/10 px-3 py-2 text-xs"
+          >
+            <Handle type="target" position={Position.Left} className="!bg-muted-foreground" />
+            <HardDrive size={12} className="shrink-0" />
+            <span className="truncate">{data.bucketName}</span>
+            <Handle type="source" position={Position.Right} className="!bg-muted-foreground" />
+          </div>
+        }
+      />
+      <TooltipContent>{data.bucketName}</TooltipContent>
+    </Tooltip>
   )
 }
 

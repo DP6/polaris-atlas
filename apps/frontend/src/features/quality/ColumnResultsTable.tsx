@@ -1,3 +1,4 @@
+import { StatusBadge } from '@/components/StatusBadge'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -8,7 +9,6 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { CompletenessBar } from '@/features/quality/CompletenessBar'
-import { cn } from '@/lib/utils'
 import type { ColumnProfile, QualityFlag, ScalarValue } from '@/types/profiling'
 
 function formatScalar(value: ScalarValue): string {
@@ -26,10 +26,12 @@ const QUALITY_FLAG_LABELS: Record<QualityFlag, string> = {
   critical: 'Crítico',
 }
 
-const QUALITY_FLAG_COLOR: Record<QualityFlag, string> = {
-  ok: 'text-status-ok-foreground',
-  warning: 'text-status-warn-foreground',
-  critical: 'text-status-error-foreground',
+// Flag de qualidade como <StatusBadge> (ícone + rótulo) — não comunicar
+// estado só por cor (WCAG 1.4.1, ver docs/frontend/accessibility.md).
+const QUALITY_FLAG_STATUS: Record<QualityFlag, 'ok' | 'warn' | 'error'> = {
+  ok: 'ok',
+  warning: 'warn',
+  critical: 'error',
 }
 
 export function ColumnResultsTable({ columns }: { columns: ColumnProfile[] }) {
@@ -56,17 +58,11 @@ export function ColumnResultsTable({ columns }: { columns: ColumnProfile[] }) {
               <CompletenessBar value={column.completeness_pct} flag={column.quality_flag} />
             </TableCell>
             <TableCell className="text-xs">
-              <span
-                className={cn(
-                  'font-medium',
-                  column.distinct_pct > HIGH_CARDINALITY_THRESHOLD
-                    ? 'text-accent-purple'
-                    : 'text-accent-orange',
-                )}
-              >
-                {column.distinct_pct.toFixed(2)}%
-              </span>
+              <span className="font-medium">{column.distinct_pct.toFixed(2)}%</span>
               <span className="ml-1 text-xs text-muted-foreground">({column.distinct_count})</span>
+              <Badge variant="outline" className="ml-1.5">
+                {column.distinct_pct > HIGH_CARDINALITY_THRESHOLD ? 'chave' : 'categórica'}
+              </Badge>
             </TableCell>
             <TableCell
               className="max-w-[110px] truncate text-xs text-muted-foreground"
@@ -84,9 +80,9 @@ export function ColumnResultsTable({ columns }: { columns: ColumnProfile[] }) {
               <Badge variant="outline">{column.inferred_logical_type}</Badge>
             </TableCell>
             <TableCell className="text-xs">
-              <span className={cn('font-medium', QUALITY_FLAG_COLOR[column.quality_flag])}>
+              <StatusBadge status={QUALITY_FLAG_STATUS[column.quality_flag]}>
                 {QUALITY_FLAG_LABELS[column.quality_flag]}
-              </span>
+              </StatusBadge>
             </TableCell>
           </TableRow>
         ))}
