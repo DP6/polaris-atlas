@@ -88,7 +88,7 @@ todo o resto.
 
 | Recurso | Tipo | App | Ambiente | Gerenciado por | Observações |
 |---|---|---|---|---|---|
-| `hub-dev` | Firestore named database | observability-hub | dev | terraform (`environments/dev/main.tf`) | `hub_users`, `hub_groups`, `hub_projects`, `access_requests`, `event_cache_metadata`/`event_cache_seen_projects`/`event_cache_runs` (metadado do cache de audit log + registro de execuções do job, lido pela tela Administração → Caches) |
+| `hub-dev` | Firestore named database | observability-hub | dev | terraform (`environments/dev/main.tf`) | `hub_users`, `hub_groups`, `hub_projects`, `access_requests`, `event_cache_metadata`/`event_cache_runs` (metadado do cache de audit log + registro de execuções do job, lido pela tela Administração → Caches) |
 | `hub-prod` | Firestore named database | observability-hub | prod | terraform | |
 
 ### Cloud Storage

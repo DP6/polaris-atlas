@@ -12,9 +12,9 @@ de audit log. Metadado pequeno (quando foi gerado, quantos eventos) vai
 pro Firestore, mesmo padrão de dado derivado já usado por
 domains/quality/history_repository.py etc.
 
-Populado pelo job periódico (jobs/refresh_event_cache.py, 1x/dia) e,
-como fallback write-through, pelo próprio request path em cache miss —
-quem grava não faz diferença pra quem lê.
+Populado só pelo job periódico (jobs/refresh_event_cache.py, 1x/dia) e
+pelo gatilho manual de admin — o request path não escaneia mais ao vivo
+em cache miss (modelo incremental, ver docs/specs/lineage.md).
 """
 
 from collections.abc import Callable
@@ -25,11 +25,6 @@ from google.api_core.exceptions import NotFound
 from google.cloud import firestore, storage
 
 _CACHE_METADATA_COLLECTION = "event_cache_metadata"
-# Projetos que passaram pelo request path via cache miss — inclui os
-# liberados só por wildcard "*" em domains/admin/service.py, que nunca
-# ganham doc em hub_projects. jobs/refresh_event_cache.py varre a união
-# de hub_projects com esta coleção (ver docs/specs/lineage.md, ASM).
-_SEEN_PROJECTS_COLLECTION = "event_cache_seen_projects"
 # Registro de execuções do job de refresh (jobs/refresh_event_cache.py) —
 # lido pela tela de acompanhamento em Administração → Caches. Um doc por
 # execução, `projects` preenchido incrementalmente conforme cada projeto
@@ -135,18 +130,6 @@ def merge_dedup(existing: list, new: list, *, key: Callable[[Any], object]) -> l
         else:
             passthrough.append(item)
     return [*by_key.values(), *passthrough]
-
-
-def record_project_seen(firestore_client: firestore.Client, project_id: str) -> None:
-    """Efeito colateral do fallback síncrono (cache miss) no request path."""
-    firestore_client.collection(_SEEN_PROJECTS_COLLECTION).document(project_id).set(
-        {"project_id": project_id, "last_seen_at": datetime.now(UTC)}
-    )
-
-
-def list_seen_projects(firestore_client: firestore.Client) -> list[str]:
-    docs = firestore_client.collection(_SEEN_PROJECTS_COLLECTION).stream()
-    return [doc.id for doc in docs]
 
 
 # --- Registro de execuções do job de refresh (tela de acompanhamento) --------

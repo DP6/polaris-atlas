@@ -162,21 +162,18 @@ def test_refresh_storage_read_keys_returns_zero_on_api_error(monkeypatch):
 # --- _known_projects -------------------------------------------------------------
 
 
-def test_known_projects_unions_hub_projects_and_seen_projects(monkeypatch):
+def test_known_projects_returns_registered_projects_only(monkeypatch):
+    """Só `hub_projects` (registro do ADM) — projeto acessível só por
+    wildcard "*" não entra no ciclo do cache sem cadastro explícito."""
     monkeypatch.setattr(
         refresh_event_cache.admin_repository,
         "list_projects",
-        lambda client: [{"project_id": "proj-a"}, {"project_id": "proj-b"}],
-    )
-    monkeypatch.setattr(
-        refresh_event_cache.event_cache,
-        "list_seen_projects",
-        lambda client: ["proj-b", "proj-c"],
+        lambda client: [{"project_id": "proj-b"}, {"project_id": "proj-a"}],
     )
 
     result = refresh_event_cache._known_projects(MagicMock())
 
-    assert result == ["proj-a", "proj-b", "proj-c"]
+    assert result == ["proj-a", "proj-b"]
 
 
 # --- _refresh_project -----------------------------------------------------------
@@ -533,8 +530,8 @@ def test_main_propagates_force_full_from_settings(monkeypatch):
 
 
 def test_main_restricts_to_cache_only_projects_from_settings(monkeypatch):
-    """cache_only_projects (seleção do gatilho de admin) SUBSTITUI a união
-    hub_projects ∪ "vistos" — roda exatamente os projetos pedidos."""
+    """cache_only_projects (seleção do gatilho de admin) SUBSTITUI a lista
+    de `hub_projects` — roda exatamente os projetos pedidos."""
     monkeypatch.setattr(refresh_event_cache, "get_logging_client", lambda: MagicMock())
     monkeypatch.setattr(refresh_event_cache, "get_storage_client", lambda: MagicMock())
     monkeypatch.setattr(refresh_event_cache, "get_firestore_client", lambda: MagicMock())

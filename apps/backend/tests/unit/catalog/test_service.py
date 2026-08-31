@@ -22,30 +22,39 @@ def _fake_client(project: str = "observability-hub-dev") -> MagicMock:
 # --- list_accessible_projects -------------------------------------------------------
 
 
-def test_list_accessible_projects_flags_access_per_project(monkeypatch):
+def test_list_accessible_projects_returns_registered_projects_the_user_can_access(monkeypatch):
     monkeypatch.setattr(
-        service.resourcemanager,
-        "list_reachable_projects",
-        lambda: [
-            {"project_id": "project-b", "display_name": "Project B"},
-            {"project_id": "project-a", "display_name": "Project A"},
-        ],
+        service.admin_service,
+        "list_projects",
+        lambda client: SimpleNamespace(
+            projects=[
+                SimpleNamespace(project_id="project-b"),
+                SimpleNamespace(project_id="project-a"),
+                SimpleNamespace(project_id="project-c"),
+            ]
+        ),
     )
     monkeypatch.setattr(
         service.admin_service,
         "has_project_access",
-        lambda client, email, project_id: project_id == "project-a",
+        lambda client, email, project_id: project_id in {"project-a", "project-b"},
     )
 
     result = service.list_accessible_projects(MagicMock(name="firestore.Client"), "a@dp6.com.br")
 
+    # só os registrados que o usuário acessa, ordenados; project-c cai fora
     assert [p.project_id for p in result.projects] == ["project-a", "project-b"]
-    assert result.projects[0].has_access is True
-    assert result.projects[1].has_access is False
 
 
-def test_list_accessible_projects_empty_when_sa_reaches_nothing(monkeypatch):
-    monkeypatch.setattr(service.resourcemanager, "list_reachable_projects", list)
+def test_list_accessible_projects_empty_when_no_registered_project_is_accessible(monkeypatch):
+    monkeypatch.setattr(
+        service.admin_service,
+        "list_projects",
+        lambda client: SimpleNamespace(projects=[SimpleNamespace(project_id="project-a")]),
+    )
+    monkeypatch.setattr(
+        service.admin_service, "has_project_access", lambda client, email, project_id: False
+    )
 
     result = service.list_accessible_projects(MagicMock(name="firestore.Client"), "a@dp6.com.br")
 

@@ -196,9 +196,9 @@ def get_access_events_cached(
 ) -> tuple[list[AccessEvent], datetime | None]:
     """Modelo incremental — o request path NÃO escaneia mais ao vivo em
     cache miss (o scan roda só no job diário ou no gatilho manual de admin).
-    Cache hit -> (eventos, cached_at). Cache miss -> registra o projeto
-    (`record_project_seen`) e levanta `EventCacheNotReadyError`, que
-    domains/access/service.py degrada pra resposta vazia com warning."""
+    Cache hit -> (eventos, cached_at). Cache miss -> levanta
+    `EventCacheNotReadyError`, que domains/access/service.py degrada pra
+    resposta vazia com warning. O job diário só cobre `hub_projects`."""
     try:
         cached = read_access_events_cache(storage_client, firestore_client, project_id)
     except Exception:
@@ -210,5 +210,4 @@ def get_access_events_cached(
     if cached is not None:
         return cached
 
-    event_cache.record_project_seen(firestore_client, project_id)
     raise EventCacheNotReadyError(project_id)

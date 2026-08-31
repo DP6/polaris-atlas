@@ -413,9 +413,10 @@ de Cloud Logging nem Cloud Run Admin API — evita depender de
 - **Cache não gerado no request path**: quando um usuário abre uma tela de
   lineage/access/finops/storage de um projeto ainda sem cache, o serviço
   degrada pra resposta vazia com um `warning` orientando "Administração →
-  Caches" (não 503) e o projeto passa a aparecer na freshness como
-  "nunca rodou" (`record_project_seen`). O modelo incremental **não
-  escaneia mais o Cloud Logging no request path**.
+  Caches" (não 503). O modelo incremental **não escaneia mais o Cloud
+  Logging no request path** — e o cache só é populado pelo run do Job pra
+  projetos de `hub_projects`, então a freshness lista exatamente os
+  projetos registrados no ADM.
 - **Frontend** (`AdminCachesTab.tsx`): **card de resumo** da execução
   atual/última (badge de status, `N/M` projetos, duração, modo, lista dos
   projetos com problema) + botão "Atualizar agora" com **seletor de

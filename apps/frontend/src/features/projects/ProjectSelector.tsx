@@ -31,21 +31,21 @@ export function ProjectSelector() {
   // "inclusion" (projeto sem IAM concedido à SA do Hub, ou nem
   // existente) — mesmo dialog, textos e efeito de aprovação diferentes.
   const [requestType, setRequestType] = useState<'access' | 'inclusion'>('access')
-  // Alterna entre o Select (lista de projetos que a SA alcança) e o campo
-  // de texto livre — só um dos dois fica visível por vez, nunca os dois
-  // juntos (eram redundantes antes desta versão).
+  // Alterna entre o Select (projetos registrados no ADM que o usuário
+  // acessa) e o campo de texto livre — só um dos dois fica visível por
+  // vez, nunca os dois juntos (eram redundantes antes desta versão).
   const [manualEntry, setManualEntry] = useState(false)
 
   const validateQuery = useValidateProject(submittedProjectId)
-  // Projetos que a SA alcança (Resource Manager) — populam o Select, que
-  // vira o controle principal quando não-vazio; lista vazia é normal antes
-  // de qualquer projeto ganhar roles/browser (ver docs/onboarding-cliente.md)
-  // e nesse caso o campo livre é o único controle mostrado.
+  // Projetos registrados em hub_projects (aba Admin → Projetos) aos quais
+  // este usuário tem acesso — populam o Select, que vira o controle
+  // principal quando não-vazio. Lista vazia é normal (nada cadastrado ou
+  // nada liberado pra ele) e nesse caso o campo livre é o único controle.
   const accessibleProjectsQuery = useAccessibleProjects()
   const accessibleProjects = accessibleProjectsQuery.data?.projects ?? []
   // Projeto restaurado do localStorage (ou digitado antes) que não está na
-  // lista da SA — mostra o campo livre com ele preenchido em vez de um
-  // Select "vazio" enquanto na verdade há um project_id em validação.
+  // lista — mostra o campo livre com ele preenchido em vez de um Select
+  // "vazio" enquanto na verdade há um project_id em validação.
   const isRestoredButUnknown = Boolean(
     submittedProjectId &&
       accessibleProjects.length > 0 &&
@@ -157,17 +157,7 @@ export function ProjectSelector() {
             <SelectContent>
               {accessibleProjects.map((p) => (
                 <SelectItem key={p.project_id} value={p.project_id}>
-                  <span className="flex items-center gap-2">
-                    {p.project_id}
-                    {!p.has_access && (
-                      <Badge
-                        variant="outline"
-                        className="border-status-warn/30 bg-status-warn/10 text-[10px] text-status-warn-foreground"
-                      >
-                        Sem acesso
-                      </Badge>
-                    )}
-                  </span>
+                  {p.project_id}
                 </SelectItem>
               ))}
               <SelectItem value={CUSTOM_PROJECT_OPTION}>Outro (digitar manualmente)</SelectItem>

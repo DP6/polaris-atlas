@@ -6,12 +6,11 @@ export interface ProjectValidateResponse {
   is_native: boolean
 }
 
-// Projeto GCP que a service account de runtime alcança (Cloud Resource
-// Manager) — has_access é sobre o usuário ATUAL, não a SA.
+// Projeto registrado em hub_projects (aba Admin → Projetos) ao qual o
+// usuário atual tem acesso liberado no Hub. A lista já vem filtrada por
+// acesso pelo backend — todo item é acessível.
 export interface AccessibleProject {
   project_id: string
-  display_name: string | null
-  has_access: boolean
 }
 
 export interface ProjectsListResponse {

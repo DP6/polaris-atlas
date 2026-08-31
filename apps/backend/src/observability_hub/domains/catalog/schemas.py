@@ -28,14 +28,11 @@ class ProjectValidateResponse(BaseModel):
 
 
 class AccessibleProject(BaseModel):
+    # Projeto registrado em `hub_projects` (aba Admin → Projetos) ao qual o
+    # usuário ATUAL tem acesso liberado no Hub. A lista já vem filtrada por
+    # acesso (domains/catalog/service.py::list_accessible_projects), então
+    # não há mais um flag `has_access` — todo item é acessível.
     project_id: str
-    display_name: str | None = None
-    # Se o usuário ATUAL (não a SA) tem acesso liberado no Hub pra este
-    # projeto — mesma lógica de domains/admin/service.py::has_project_access
-    # (individual, hub_projects.is_public ou grupo). A SA já alcança todo
-    # projeto desta lista (é o que list_reachable_projects garante); este
-    # flag é sobre o usuário, não sobre a SA.
-    has_access: bool
 
 
 class ProjectsListResponse(BaseModel):

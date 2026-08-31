@@ -109,13 +109,11 @@ _JOB_KIND_SPECS: tuple[_JobKindSpec, ...] = (
 
 
 def _known_projects(firestore_client: firestore.Client) -> list[str]:
-    """União de hub_projects (registro administrativo) com os projetos
-    vistos via cache miss no request path (inclui os liberados só por
-    wildcard "*", que nunca ganham doc em hub_projects — ver
-    docs/specs/lineage.md, ASM)."""
-    from_admin = {p["project_id"] for p in admin_repository.list_projects(firestore_client)}
-    from_seen = set(event_cache.list_seen_projects(firestore_client))
-    return sorted(from_admin | from_seen)
+    """Projetos registrados no ADM (`hub_projects`) — a única fonte. Um
+    projeto acessível só por wildcard `allowed_projects=["*"]` precisa ser
+    cadastrado explicitamente pra entrar no ciclo do cache (ver
+    docs/specs/lineage.md, ASM-003 invalidada)."""
+    return sorted(p["project_id"] for p in admin_repository.list_projects(firestore_client))
 
 
 def _job_scan_anchor(firestore_client: firestore.Client, project_id: str) -> datetime | None:

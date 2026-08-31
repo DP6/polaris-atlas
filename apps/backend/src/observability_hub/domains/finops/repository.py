@@ -248,9 +248,9 @@ def get_scan_events_cached(
     cache miss (o scan roda só no job diário ou no gatilho manual de admin).
     Cache hit -> (eventos, cached_at); serve tanto scan_partition_candidates
     quanto get_budget (recorte month-to-date por filtro no service). Cache
-    miss -> registra o projeto (`record_project_seen`) e levanta
-    `EventCacheNotReadyError`, que domains/finops/service.py degrada pra
-    resposta vazia com warning."""
+    miss -> levanta `EventCacheNotReadyError`, que domains/finops/service.py
+    degrada pra resposta vazia com warning. O job diário só cobre
+    `hub_projects`."""
     try:
         cached = read_scan_events_cache(storage_client, firestore_client, project_id)
     except Exception:
@@ -262,7 +262,6 @@ def get_scan_events_cached(
     if cached is not None:
         return cached
 
-    event_cache.record_project_seen(firestore_client, project_id)
     raise EventCacheNotReadyError(project_id)
 
 

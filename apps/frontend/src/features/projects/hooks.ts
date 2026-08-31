@@ -10,11 +10,11 @@ export function useValidateProject(projectId: string | undefined) {
   })
 }
 
-// Projetos que a SA de runtime alcança (Resource Manager), cada um já
-// com has_access do usuário atual — popula o seletor de projeto em vez
-// do usuário digitar o project_id de cabeça. Lista vazia é normal (SA
-// sem roles/browser em nenhum projeto ainda) — o campo de texto livre
-// continua funcionando como fallback nesse caso.
+// Projetos registrados no ADM (hub_projects) aos quais o usuário atual
+// tem acesso — popula o seletor de projeto em vez do usuário digitar o
+// project_id de cabeça. Lista vazia é normal (nenhum projeto cadastrado
+// ou nenhum liberado pra este usuário) — o campo de texto livre continua
+// funcionando como fallback nesse caso.
 export function useAccessibleProjects() {
   return useQuery({
     queryKey: ['accessible-projects'],

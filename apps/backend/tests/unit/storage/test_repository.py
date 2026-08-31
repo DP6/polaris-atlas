@@ -5,7 +5,6 @@ from unittest.mock import MagicMock
 import pytest
 from google.api_core.exceptions import Forbidden
 
-from observability_hub.core import event_cache as event_cache_module
 from observability_hub.core.exceptions import (
     EventCacheNotReadyError,
     LoggingAccessDeniedError,
@@ -339,18 +338,14 @@ def test_get_read_object_keys_cached_returns_cache_hit_keys_without_scanning(mon
     logging_client.list_entries.assert_not_called()
 
 
-def test_get_read_object_keys_cached_raises_not_ready_and_records_project_on_miss(monkeypatch):
-    """Modelo incremental: cache miss não escaneia mais ao vivo — registra
-    o projeto (pro job pegá-lo) e levanta EventCacheNotReadyError, que
-    domains/storage/service.py degrada pra warning best-effort."""
+def test_get_read_object_keys_cached_raises_not_ready_on_miss(monkeypatch):
+    """Modelo incremental: cache miss não escaneia mais ao vivo — levanta
+    EventCacheNotReadyError, que domains/storage/service.py degrada pra
+    warning best-effort."""
     logging_client = MagicMock()
     storage_client = MagicMock()
     firestore_client = MagicMock()
     monkeypatch.setattr(repository, "read_read_object_keys_cache", lambda *a, **kw: None)
-    seen_calls = []
-    monkeypatch.setattr(
-        event_cache_module, "record_project_seen", lambda *a, **kw: seen_calls.append((a, kw))
-    )
 
     with pytest.raises(EventCacheNotReadyError) as exc_info:
         repository.get_read_object_keys_cached(
@@ -358,7 +353,6 @@ def test_get_read_object_keys_cached_raises_not_ready_and_records_project_on_mis
         )
 
     assert exc_info.value.project_id == _PROJECT_ID
-    assert len(seen_calls) == 1
     logging_client.list_entries.assert_not_called()
 
 
@@ -373,7 +367,6 @@ def test_get_read_object_keys_cached_treats_cache_read_failure_as_miss(monkeypat
         "read_read_object_keys_cache",
         lambda *a, **kw: (_ for _ in ()).throw(Forbidden("no access to bucket")),
     )
-    monkeypatch.setattr(event_cache_module, "record_project_seen", lambda *a, **kw: None)
 
     with pytest.raises(EventCacheNotReadyError):
         repository.get_read_object_keys_cached(

@@ -5,7 +5,6 @@ from unittest.mock import MagicMock
 import pytest
 from google.api_core.exceptions import Forbidden
 
-from observability_hub.core import event_cache as event_cache_module
 from observability_hub.core.exceptions import (
     EventCacheNotReadyError,
     ProjectAccessDeniedError,
@@ -283,22 +282,17 @@ def test_get_scan_events_cached_returns_cache_hit_without_calling_list_entries(m
     client.list_entries.assert_not_called()
 
 
-def test_get_scan_events_cached_raises_not_ready_and_records_project_on_miss(monkeypatch):
-    """Modelo incremental: cache miss não escaneia mais ao vivo — registra
-    o projeto (pro job pegá-lo) e levanta EventCacheNotReadyError, que
-    domains/finops/service.py degrada pra resposta vazia com warning."""
+def test_get_scan_events_cached_raises_not_ready_on_miss(monkeypatch):
+    """Modelo incremental: cache miss não escaneia mais ao vivo — levanta
+    EventCacheNotReadyError, que domains/finops/service.py degrada pra
+    resposta vazia com warning."""
     client = MagicMock()
     monkeypatch.setattr(repository, "read_scan_events_cache", lambda *a, **kw: None)
-    seen_calls = []
-    monkeypatch.setattr(
-        event_cache_module, "record_project_seen", lambda *a, **kw: seen_calls.append((a, kw))
-    )
 
     with pytest.raises(EventCacheNotReadyError) as exc_info:
         repository.get_scan_events_cached(client, MagicMock(), MagicMock(), "proj")
 
     assert exc_info.value.project_id == "proj"
-    assert len(seen_calls) == 1
     client.list_entries.assert_not_called()
 
 
@@ -312,7 +306,6 @@ def test_get_scan_events_cached_treats_cache_read_failure_as_miss(monkeypatch):
         "read_scan_events_cache",
         lambda *a, **kw: (_ for _ in ()).throw(Forbidden("no access to bucket")),
     )
-    monkeypatch.setattr(event_cache_module, "record_project_seen", lambda *a, **kw: None)
 
     with pytest.raises(EventCacheNotReadyError):
         repository.get_scan_events_cached(client, MagicMock(), MagicMock(), "proj")
