@@ -132,7 +132,7 @@ export function HistoryTab({ projectId, datasetId, tableId }: HistoryTabProps) {
               type="monotone"
               dataKey="density"
               name="Densidade"
-              stroke="var(--color-status-info)"
+              stroke="var(--color-primary)"
               strokeWidth={2}
               dot={{ r: 3 }}
             />

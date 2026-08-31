@@ -52,7 +52,7 @@ export function RetentionFunnelSection() {
             <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
             <YAxis type="category" dataKey="label" tick={{ fontSize: 11 }} width={100} />
             <RechartsTooltip formatter={(value) => [String(value), 'Usuários']} />
-            <Bar dataKey="count" fill="var(--color-status-info)" />
+            <Bar dataKey="count" fill="var(--color-primary)" />
           </BarChart>
         </ResponsiveContainer>
       </div>

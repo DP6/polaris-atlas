@@ -249,7 +249,7 @@ export function NavigationAnalyticsSection() {
                   interval={0}
                 />
                 <RechartsTooltip formatter={(value) => [String(value), 'Visualizações']} />
-                <Bar dataKey="count" fill="var(--color-status-info)" />
+                <Bar dataKey="count" fill="var(--color-primary)" />
               </BarChart>
             </ResponsiveContainer>
           </div>
