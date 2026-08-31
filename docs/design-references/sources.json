@@ -1,0 +1,47 @@
+{
+  "$comment": "Fontes externas de referência visual. Cada página vira captures/<site>/<slug>--desktop.png (viewport) e, salvo viewportOnly, <slug>--desktop.fullpage.jpg (página inteira). Adicionar uma tela = acrescentar um objeto em pages. Regerar: ver README.md. Escopo: brandtech é single-page (páginas reais + âncoras de seção); jellyfish limitado a 15 páginas estruturais (só en-us). DP6 foi deixado de fora a pedido.",
+  "viewport": { "width": 1440, "height": 900 },
+  "sites": [
+    {
+      "site": "thebrandtechgroup",
+      "label": "The Brandtech Group",
+      "baseUrl": "https://thebrandtechgroup.com",
+      "pages": [
+        { "slug": "home", "url": "https://thebrandtechgroup.com/" },
+        { "slug": "section-our-group", "url": "https://thebrandtechgroup.com/#group", "viewportOnly": true },
+        { "slug": "section-leadership", "url": "https://thebrandtechgroup.com/#leadership", "viewportOnly": true },
+        { "slug": "section-news", "url": "https://thebrandtechgroup.com/#news", "viewportOnly": true },
+        { "slug": "section-one-young-world", "url": "https://thebrandtechgroup.com/#oneyoungworld", "viewportOnly": true },
+        { "slug": "section-contact", "url": "https://thebrandtechgroup.com/#contact", "viewportOnly": true },
+        { "slug": "letter", "url": "https://thebrandtechgroup.com/letter/" },
+        { "slug": "join-us", "url": "https://thebrandtechgroup.com/join-us/" },
+        { "slug": "pencil-demo", "url": "https://thebrandtechgroup.com/pencil-demo/" },
+        { "slug": "pledge-parental-leave", "url": "https://thebrandtechgroup.com/pledge-parental-leave/" },
+        { "slug": "anti-slavery", "url": "https://thebrandtechgroup.com/anti-slavery/" },
+        { "slug": "privacy-policy", "url": "https://thebrandtechgroup.com/privacy-policy/" }
+      ]
+    },
+    {
+      "site": "jellyfish",
+      "label": "Jellyfish",
+      "baseUrl": "https://www.jellyfish.com",
+      "pages": [
+        { "slug": "home", "url": "https://www.jellyfish.com/en-us/" },
+        { "slug": "about-us", "url": "https://www.jellyfish.com/en-us/about-us/" },
+        { "slug": "expertise", "url": "https://www.jellyfish.com/en-us/expertise/" },
+        { "slug": "expertise-ai", "url": "https://www.jellyfish.com/en-us/expertise/ai/" },
+        { "slug": "expertise-creative", "url": "https://www.jellyfish.com/en-us/expertise/creative/" },
+        { "slug": "expertise-data", "url": "https://www.jellyfish.com/en-us/expertise/data/" },
+        { "slug": "expertise-media", "url": "https://www.jellyfish.com/en-us/expertise/media/" },
+        { "slug": "expertise-media-paid-search", "url": "https://www.jellyfish.com/en-us/expertise/media/paid-search/" },
+        { "slug": "expertise-technology", "url": "https://www.jellyfish.com/en-us/expertise/technology/" },
+        { "slug": "genai", "url": "https://www.jellyfish.com/en-us/genai/" },
+        { "slug": "success", "url": "https://www.jellyfish.com/en-us/success/" },
+        { "slug": "blog", "url": "https://www.jellyfish.com/en-us/blog/" },
+        { "slug": "blog-post-martech-stack", "url": "https://www.jellyfish.com/en-us/blog/your-martech-stack-is-already-broken.-genai-is-about-to-prove-it/" },
+        { "slug": "careers", "url": "https://www.jellyfish.com/en-us/careers/" },
+        { "slug": "contact", "url": "https://www.jellyfish.com/en-us/contact/" }
+      ]
+    }
+  ]
+}
