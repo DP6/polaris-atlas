@@ -106,6 +106,15 @@ barras verticais sempre visíveis.
   deletado. `/quality/tables` segue alcançável pelo botão "Analisar" do `AssetsTable`.
 - Doc-sync: `design-system.md`, `nav-overview-screens.md`. `pnpm lint` + `pnpm build` verdes.
 
+### R3-storage — `feat/r3-storage` (só front-end)
+
+- Novo `StorageOverviewPage` na rota `/storage` (padrão Governança) — 2 `OptionCard`:
+  "Buckets" (`/storage/buckets`) e "Scanner de desperdício" (`/storage/waste`). A lista de
+  buckets moveu de `/storage` → `/storage/buckets`.
+- `DatasetSidebar`: NavLink "Buckets" agora `to="/storage/buckets"` (o label do grupo cai
+  na overview). `BucketBrowserPage` breadcrumb → `/storage/buckets`.
+- Doc-sync: `nav-overview-screens.md`. `pnpm lint` + `pnpm build` verdes.
+
 ## Refresh visual do Hub — rodada 2 (2026-09)
 
 Segunda rodada, sobre as lacunas que a rodada 1 marcou como "especificado,

@@ -25,7 +25,7 @@ Decisão do usuário (rodada 2): "chevron abre a lista, label abre a tela".
 | `/governanca` | `GovernanceOverviewPage` | Freshness & SLA (`/freshness`), Tabelas sem consumidor (`/orphans`) |
 | `/quality` | **redirect → `/quality/folders`** (rodada 3 — o overview mostrava um card "Analisar uma tabela" que o usuário pediu pra tirar; sobrou só pastas). `/quality/tables` continua alcançável pelo botão "Analisar" do `AssetsTable`. |
 | `/quality/tables` | `QualityTablesPage` | — (select de dataset → tabela → `/analyze/:d/:t`) |
-| `/storage` | `BucketsPage` (a lista de buckets **é** a overview — sem página nova) | — |
+| `/storage` | `StorageOverviewPage` (rodada 3 — antes a lista de buckets fazia esse papel) | Buckets (`/storage/buckets`), Scanner de desperdício (`/storage/waste`) |
 | `/finops` | `FinOpsOverviewPage` (R2-12) — o scanner de 2 abas moveu pra `/finops/scanner` | big numbers + `ComboChart` de custo + anel de eficiência + Top ofensores + `OptionCardGrid` (Scanner de desperdício, Budget de custo, Configurar budget) |
 
 `SidebarSection` / `SidebarServiceGroup` ganharam prop opcional `to` — quando
@@ -44,6 +44,7 @@ presente, o nome vira `NavLink`; o chevron isola o disclosure.
 - Trocar a lista de datasets da sidebar por uma grade de cards (a lista
   inline com favoritos/filtro/histórico continua). Só o **cabeçalho** de
   grupo ganhou o `NavLink`.
-- Overview de Storage (a lista de buckets já serve). A overview de FinOps
-  saiu de escopo desta spec e virou parte da R2-12 (ver
-  `finops-budget.md` AC-FIN-RV-*).
+- A overview de FinOps saiu de escopo desta spec e virou parte da R2-12
+  (ver `finops-budget.md` AC-FIN-RV-*). A overview de Storage
+  (`StorageOverviewPage`) e a de FinOps ganharam telas próprias na rodada
+  3 (padrão Governança).

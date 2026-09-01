@@ -87,7 +87,7 @@ export function BucketBrowserPage() {
         aria-label="Trilha de navegação"
         className="-mt-3 flex flex-wrap items-center gap-1 text-muted-foreground text-sm"
       >
-        <Link to="/storage" className={linkClass}>
+        <Link to="/storage/buckets" className={linkClass}>
           Buckets
         </Link>
         <ChevronRight size={12} aria-hidden="true" />

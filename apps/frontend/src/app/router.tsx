@@ -34,6 +34,7 @@ import { QualityTablesPage } from '@/features/quality/QualityTablesPage'
 import { SchemaAnalysisPage } from '@/features/quality/SchemaAnalysisPage'
 import { BucketBrowserPage } from '@/features/storage/BucketBrowserPage'
 import { BucketsPage } from '@/features/storage/BucketsPage'
+import { StorageOverviewPage } from '@/features/storage/StorageOverviewPage'
 import { WastePage } from '@/features/storage/WastePage'
 
 export function AppRoutes() {
@@ -73,7 +74,8 @@ export function AppRoutes() {
           <Route path="finops/scanner/tipos-coluna" element={<ColumnTypesPage />} />
           <Route path="finops/budget" element={<BudgetPage />} />
           <Route path="search" element={<SearchPage />} />
-          <Route path="storage" element={<BucketsPage />} />
+          <Route path="storage" element={<StorageOverviewPage />} />
+          <Route path="storage/buckets" element={<BucketsPage />} />
           <Route path="storage/waste" element={<WastePage />} />
           <Route path="storage/:bucketName" element={<BucketBrowserPage />} />
           <Route element={<RequireAdmin />}>

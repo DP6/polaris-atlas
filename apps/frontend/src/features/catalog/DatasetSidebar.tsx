@@ -555,7 +555,7 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
         onOpenChange={setCloudStorageOpen}
       >
         <nav className="flex flex-col gap-0.5">
-          <NavLink to="/storage" end className={NAV_LINK_CLASS}>
+          <NavLink to="/storage/buckets" className={NAV_LINK_CLASS}>
             <HardDrive size={16} />
             Buckets
           </NavLink>
