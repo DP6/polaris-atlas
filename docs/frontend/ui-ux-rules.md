@@ -44,6 +44,7 @@ protótipo** — não ilimitado.
 | Regra | Por quê |
 |---|---|
 | **Um `<h1>` por rota, via `PageHeader`** (`text-display`), renderizado fora dos ramos de loading/erro. | Antes cada rota copiava o bloco à mão — algumas com `<h1>` duplicado entre estados, a rota índice sem `<h1>` nenhum. |
+| **Todo `PageHeader` tem "Voltar" no topo-esquerdo** (rodada 3) — `back={{to,label}}` quando há pai semântico, senão um "Voltar" genérico por histórico (`navigate(-1)`, fallback `/`). Só a home `/` fica sem. Nunca montar o botão de voltar à mão na página. | Padrão único de navegação de retorno; o usuário sempre sabe onde clicar. |
 | **Seções são `<h2>`/`<h3>` reais** (`SectionHeading` ou `CollapsibleSection`), com tamanho/peso visível. **Nunca** `<h2 class="text-xs uppercase text-muted-foreground">` nem `<div>`/`<p>` fazendo as vezes de título. | Navegação por cabeçalho no leitor de tela; hierarquia real, não só aparência. |
 | **Hierarquia pela escala semântica** `text-label/body/subtitle/title/display`. Nada de `text-[13px]` ad-hoc nem `text-xs…text-3xl` para hierarquia. | A escala tem propósito fixo por nível; ad-hoc diverge entre telas. |
 | **Peso 700 (`font-bold`) ou 500 (`font-medium`) — nunca 600.** | O Ubuntu não tem peso 600; `font-semibold` renderiza como 400 ou 700 dependendo do fallback. |

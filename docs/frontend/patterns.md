@@ -13,6 +13,12 @@ pegadinhas**.
 
 - **Para que serve:** título + subtítulo + ações de uma página inteira.
 - **Peças:** `PageHeader` (título/descrição/`actions`/`back`).
+- **Voltar (rodada 3):** **todo** `PageHeader` mostra um controle "Voltar"
+  no canto superior esquerdo — só a home `/` fica sem. Passe
+  `back={{to,label}}` quando a página tem um pai semântico claro (ex:
+  sub-página de módulo → chooser); sem o prop, o `PageHeader` renderiza um
+  "Voltar" genérico que usa o histórico do browser (`navigate(-1)`,
+  fallback `/`). Não montar botão de voltar à mão na página.
 - **Canônico:** `features/catalog/CatalogOverviewPage.tsx`,
   `features/freshness/FreshnessPage.tsx`.
 - **Pegadinhas:** renderizar o `PageHeader` **fora** dos ramos de

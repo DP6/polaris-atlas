@@ -31,6 +31,15 @@ barras verticais sempre visíveis.
 - Doc-sync: `docs/frontend/design-system.md` (§Raio, §Vida, tabela de componentes),
   `docs/frontend/ui-ux-rules.md` (§Identidade). `pnpm lint` + `pnpm build` verdes.
 
+### R3-back — `feat/r3-back` (só front-end)
+
+- **Voltar padronizado:** `PageHeader` sempre renderiza um controle "Voltar" no
+  topo-esquerdo (exceto na home `/`). Com `back={{to,label}}` → `<Link>` semântico
+  (comportamento das 11 telas que já tinham); sem o prop → `<button>` genérico que faz
+  `navigate(-1)` (fallback `navigate('/')` quando não há histórico). As ~16 telas com
+  `PageHeader` sem `back` ganham o voltar automaticamente.
+- Doc-sync: `docs/frontend/patterns.md` §Cabeçalho de rota, `ui-ux-rules.md`.
+
 ## Refresh visual do Hub — rodada 2 (2026-09)
 
 Segunda rodada, sobre as lacunas que a rodada 1 marcou como "especificado,
