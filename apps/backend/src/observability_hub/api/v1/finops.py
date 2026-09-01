@@ -26,6 +26,7 @@ from observability_hub.domains.finops.schemas import (
     CostSeriesResponse,
     CostType,
     PartitionCandidatesResponse,
+    TableScoresResponse,
 )
 
 router = APIRouter(
@@ -99,6 +100,27 @@ def get_cost_series(
         lookback_days=lookback_days,
         datasets=datasets,
         tables=tables,
+    )
+
+
+@router.get("/{project_id}/table-scores", response_model=TableScoresResponse)
+def get_table_scores(
+    project_id: str,
+    datasets: list[str] | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    client: bigquery.Client = Depends(get_client),
+    logging_client: cloud_logging.Client = Depends(get_logging_client),
+    storage_client: storage.Client = Depends(get_storage_client),
+    firestore_client: firestore.Client = Depends(get_firestore_client),
+) -> TableScoresResponse:
+    return service.compute_table_scores(
+        client,
+        logging_client,
+        storage_client,
+        firestore_client,
+        project_id,
+        datasets=datasets,
+        limit=limit,
     )
 
 

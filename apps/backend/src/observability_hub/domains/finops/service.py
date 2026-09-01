@@ -47,6 +47,9 @@ from observability_hub.domains.finops.schemas import (
     PartitionCandidate,
     PartitionCandidatesResponse,
     SuggestedColumnType,
+    TableScore,
+    TableScoreFactor,
+    TableScoresResponse,
 )
 
 _PARTITION_CANDIDATE_LOOKBACK_DAYS = repository.LOOKBACK_DAYS
@@ -539,6 +542,185 @@ def get_cost_series(
         storage_available=storage_available,
         cache_updated_at=cache_updated_at,
         warning=warning,
+    )
+
+
+# --- Score de eficiência de custo por tabela (AC-FIN-RV-03 / AC-WASTE-RV-01)
+#
+# Fórmula PROVISÓRIA — os pesos e os fatores são um ponto de partida a
+# calibrar no review (ver docs/specs/finops-budget.md Q-002). Só usa
+# sinais que o próprio domínio finops já tem: nada de "drift de schema"
+# (domains/quality) nem "é órfã" (domains/lineage) — domínios são
+# isolados (CLAUDE.md). Quando esses sinais forem desejados, entram por
+# um campo novo alimentado por um job que cruza os domínios, não por
+# import cross-domain aqui.
+_SCORE_WEIGHT_PARTITION = 0.45
+_SCORE_WEIGHT_UTILIZATION = 0.30
+_SCORE_WEIGHT_SCAN_EFFICIENCY = 0.25
+# Tabela nunca escaneada em 30d perde utilização proporcionalmente ao
+# tamanho: zera em >= este limite (paga storage sem retorno nenhum).
+_SCORE_UNUSED_ZERO_AT_GB = 100.0
+# scan_efficiency: escanear a tabela N vezes o próprio tamanho em 30d.
+# Meia nota quando N == este valor.
+_SCORE_SCAN_RATIO_HALF_LIFE = 10.0
+
+
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, value))
+
+
+def _table_efficiency_score(
+    size_bytes: int,
+    is_partitioned: bool,
+    billed_bytes_30d: int,
+    partition_savings_usd: float,
+    observed_cost_usd_30d: float,
+) -> tuple[int, list[TableScoreFactor]]:
+    """Score 0..100 (maior = mais eficiente) + a decomposição em fatores
+    pro drill-down. Função pura — testada direto, sem I/O."""
+    size_gb = size_bytes / (1024**3)
+
+    # 1. Particionamento: quanto do custo observado dá pra economizar
+    #    particionando (só faz sentido se há economia estimada > 0).
+    if is_partitioned or partition_savings_usd <= 0 or observed_cost_usd_30d <= 0:
+        partition_value = 1.0
+        partition_detail = (
+            "Particionada" if is_partitioned else "Sem oportunidade de particionamento detectada"
+        )
+    else:
+        partition_value = _clamp01(1 - partition_savings_usd / observed_cost_usd_30d)
+        partition_detail = (
+            f"Economia estimada de US$ {partition_savings_usd:.2f} sobre US$ "
+            f"{observed_cost_usd_30d:.2f} de scan observado em 30d se particionada"
+        )
+
+    # 2. Utilização: escaneada ao menos uma vez em 30d? Se não, penaliza
+    #    proporcional ao tamanho (storage pago sem uso).
+    if billed_bytes_30d > 0:
+        utilization_value = 1.0
+        utilization_detail = "Consultada nos últimos 30 dias"
+    else:
+        utilization_value = _clamp01(1 - size_gb / _SCORE_UNUSED_ZERO_AT_GB)
+        utilization_detail = f"Sem nenhuma consulta em 30d; {size_gb:.1f} GB de storage sem retorno"
+
+    # 3. Eficiência de scan: quantas vezes o próprio tamanho foi escaneado
+    #    em 30d — re-scan repetido de tabela inteira (sem pruning/cache).
+    if size_bytes <= 0 or billed_bytes_30d <= 0:
+        scan_value = 1.0
+        scan_detail = "Sem scans onerosos em 30d"
+    else:
+        ratio = billed_bytes_30d / size_bytes
+        scan_value = _clamp01(1 / (1 + ratio / _SCORE_SCAN_RATIO_HALF_LIFE))
+        scan_detail = f"Bytes escaneados em 30d = {ratio:.1f}× o tamanho da tabela"
+
+    factors = [
+        TableScoreFactor(
+            name="partitioning",
+            value=round(partition_value, 4),
+            weight=_SCORE_WEIGHT_PARTITION,
+            detail=partition_detail,
+        ),
+        TableScoreFactor(
+            name="utilization",
+            value=round(utilization_value, 4),
+            weight=_SCORE_WEIGHT_UTILIZATION,
+            detail=utilization_detail,
+        ),
+        TableScoreFactor(
+            name="scan_efficiency",
+            value=round(scan_value, 4),
+            weight=_SCORE_WEIGHT_SCAN_EFFICIENCY,
+            detail=scan_detail,
+        ),
+    ]
+    score = round(100 * sum(f.value * f.weight for f in factors))
+    return score, factors
+
+
+def compute_table_scores(
+    client: bigquery.Client,
+    logging_client: cloud_logging.Client,
+    storage_client: storage.Client,
+    firestore_client: firestore.Client,
+    project_id: str,
+    datasets: list[str] | None = None,
+    limit: int = 100,
+) -> TableScoresResponse:
+    """Score de eficiência de custo por tabela + agregado do projeto
+    (AC-FIN-RV-03). Reaproveita scan_partition_candidates pro sinal de
+    particionamento; todo o resto vem de metadado ($0) e do cache de
+    audit log — nenhuma query BQ nova."""
+    regions = discover_regions(project_id, client=client)
+    all_tables = repository.list_all_table_refs(client, project_id, regions, datasets=datasets)
+    table_refs = [f"{project_id}.{d}.{t}" for d, t in all_tables]
+    metadata = get_tables_metadata(client, table_refs)
+
+    events, cache_updated_at, warning = _scan_events_or_quota_warning(
+        logging_client, storage_client, firestore_client, project_id
+    )
+    billed_bytes_by_table: dict[tuple[str, str], int] = {}
+    for event in events:
+        if event.timestamp is None:
+            continue
+        for ref in event.referenced_tables:
+            if ref[0] != project_id:
+                continue
+            key = ref[1:]
+            billed_bytes_by_table[key] = (
+                billed_bytes_by_table.get(key, 0) + event.total_billed_bytes
+            )
+
+    pc_response = scan_partition_candidates(
+        client, logging_client, storage_client, firestore_client, project_id, datasets=datasets
+    )
+    candidate_by_key = {(c.dataset_id, c.table_id): c for c in pc_response.candidates}
+
+    scored: list[TableScore] = []
+    for dataset_id, table_id in all_tables:
+        bq_table = metadata.get(f"{project_id}.{dataset_id}.{table_id}")
+        if bq_table is None:
+            continue
+        size_bytes = bq_table.num_bytes or 0
+        is_partitioned = (
+            bq_table.time_partitioning is not None or bq_table.range_partitioning is not None
+        )
+        billed_30d = billed_bytes_by_table.get((dataset_id, table_id), 0)
+        cand = candidate_by_key.get((dataset_id, table_id))
+        savings = (cand.estimated_savings_usd_optimistic or 0.0) if cand else 0.0
+        observed_cost = cand.observed_cost_usd_30d if cand else _estimate_query_cost_usd(billed_30d)
+
+        score, factors = _table_efficiency_score(
+            size_bytes, is_partitioned, billed_30d, savings, observed_cost
+        )
+        scored.append(
+            TableScore(
+                dataset_id=dataset_id,
+                table_id=table_id,
+                score=score,
+                size_bytes=size_bytes,
+                observed_cost_usd_30d=round(observed_cost, 6),
+                is_partitioned=is_partitioned,
+                factors=factors,
+            )
+        )
+
+    total_size = sum(t.size_bytes for t in scored)
+    if scored and total_size > 0:
+        project_score = round(sum(t.score * t.size_bytes for t in scored) / total_size)
+    elif scored:
+        project_score = round(sum(t.score for t in scored) / len(scored))
+    else:
+        project_score = 100
+
+    scored.sort(key=lambda t: (t.score, -t.size_bytes))
+
+    return TableScoresResponse(
+        project_id=project_id,
+        lookback_days=_PARTITION_CANDIDATE_LOOKBACK_DAYS,
+        project_efficiency_score=project_score,
+        tables=scored[:limit],
+        cache_updated_at=cache_updated_at or pc_response.cache_updated_at,
+        warning=warning or pc_response.warning,
     )
 
 

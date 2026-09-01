@@ -762,6 +762,121 @@ def test_get_cost_series_dataset_filter_excludes_nonmatching_query_events(monkey
     assert all(p.query_cost_usd == 0 for p in result.points)
 
 
+# --- _table_efficiency_score / compute_table_scores --------------------------
+
+
+def test_table_efficiency_score_perfect_for_partitioned_used_lightly_scanned():
+    score, factors = service._table_efficiency_score(
+        size_bytes=10 * 1024**3,
+        is_partitioned=True,
+        billed_bytes_30d=1024,  # escaneada, mas quase nada
+        partition_savings_usd=0.0,
+        observed_cost_usd_30d=0.0,
+    )
+
+    assert score == 100
+    assert {f.name for f in factors} == {"partitioning", "utilization", "scan_efficiency"}
+    assert abs(sum(f.weight for f in factors) - 1.0) < 1e-9
+
+
+def test_table_efficiency_score_penalizes_large_never_scanned_table():
+    score, factors = service._table_efficiency_score(
+        size_bytes=200 * 1024**3,  # 200 GB, > _SCORE_UNUSED_ZERO_AT_GB
+        is_partitioned=True,
+        billed_bytes_30d=0,
+        partition_savings_usd=0.0,
+        observed_cost_usd_30d=0.0,
+    )
+
+    utilization = next(f for f in factors if f.name == "utilization")
+    assert utilization.value == 0.0
+    # só perde o peso de utilização (0.30) -> 70
+    assert score == 70
+
+
+def test_table_efficiency_score_penalizes_unpartitioned_with_big_savings():
+    score, _ = service._table_efficiency_score(
+        size_bytes=5 * 1024**3,
+        is_partitioned=False,
+        billed_bytes_30d=5 * 1024**3,
+        partition_savings_usd=9.0,
+        observed_cost_usd_30d=10.0,  # economia = 90% do custo observado
+    )
+
+    # partitioning value ~ 0.1 -> perde ~0.9*0.45 do total
+    assert score < 70
+
+
+def _stub_table_scores(monkeypatch, all_tables, metadata, events, candidates):
+    _stub_partition_common(
+        monkeypatch,
+        all_tables=all_tables,
+        metadata=metadata,
+        date_columns_by_table={k: ["event_date"] for k in all_tables},
+    )
+    monkeypatch.setattr(
+        service.repository, "get_scan_events_cached", lambda *a, **kw: (events, None)
+    )
+    monkeypatch.setattr(
+        service,
+        "scan_partition_candidates",
+        lambda *a, **kw: SimpleNamespace(
+            candidates=candidates, cache_updated_at=None, warning=None
+        ),
+    )
+
+
+def test_compute_table_scores_sorts_worst_first_and_aggregates_project(monkeypatch):
+    all_tables = [("RAW", "good"), ("RAW", "bad")]
+    metadata = {
+        "proj.RAW.good": _bq_table(
+            num_bytes=1024, time_partitioning=SimpleNamespace(field="event_date")
+        ),
+        "proj.RAW.bad": _bq_table(num_bytes=500 * 1024**3, time_partitioning=None),
+    }
+    _stub_table_scores(monkeypatch, all_tables, metadata, events=[], candidates=[])
+
+    result = service.compute_table_scores(
+        _fake_client(), MagicMock(), MagicMock(), MagicMock(), "proj"
+    )
+
+    assert [t.table_id for t in result.tables] == ["bad", "good"]
+    assert result.tables[0].score < result.tables[1].score
+    # média ponderada por tamanho -> a tabela gigante "bad" domina
+    assert result.project_efficiency_score <= result.tables[1].score
+
+
+def test_compute_table_scores_uses_partition_candidate_savings(monkeypatch):
+    all_tables = [("RAW", "t")]
+    metadata = {"proj.RAW.t": _bq_table(num_bytes=5 * 1024**3, time_partitioning=None)}
+    candidate = SimpleNamespace(
+        dataset_id="RAW",
+        table_id="t",
+        observed_cost_usd_30d=10.0,
+        estimated_savings_usd_optimistic=9.0,
+    )
+    _stub_table_scores(monkeypatch, all_tables, metadata, events=[], candidates=[candidate])
+
+    result = service.compute_table_scores(
+        _fake_client(), MagicMock(), MagicMock(), MagicMock(), "proj"
+    )
+
+    partitioning = next(f for f in result.tables[0].factors if f.name == "partitioning")
+    assert partitioning.value < 0.2
+    assert result.tables[0].observed_cost_usd_30d == 10.0
+
+
+def test_compute_table_scores_empty_project_scores_100(monkeypatch):
+    _stub_table_scores(monkeypatch, [], {}, events=[], candidates=[])
+
+    result = service.compute_table_scores(
+        _fake_client(), MagicMock(), MagicMock(), MagicMock(), "proj"
+    )
+
+    assert result.tables == []
+    assert result.project_efficiency_score == 100
+
+
 # --- _pick_suggestion ----------------------------------------------------------
 
 

@@ -29,6 +29,39 @@ class PartitionCandidatesResponse(BaseModel):
     warning: str | None = None
 
 
+class TableScoreFactor(BaseModel):
+    # name é uma chave estável (o frontend rotula/traduz); detail é texto
+    # pronto pra exibir no drill-down.
+    name: str
+    value: float  # 0..1 — contribuição normalizada deste fator
+    weight: float  # peso na média ponderada (soma dos pesos = 1.0)
+    detail: str
+
+
+class TableScore(BaseModel):
+    dataset_id: str
+    table_id: str
+    # 0..100, maior = mais eficiente em custo (menos desperdício). Mesma
+    # escala do anel "Eficiência de custo" do projeto.
+    score: int
+    size_bytes: int
+    observed_cost_usd_30d: float
+    is_partitioned: bool
+    factors: list[TableScoreFactor]
+
+
+class TableScoresResponse(BaseModel):
+    project_id: str
+    lookback_days: int
+    # Média dos scores por tabela ponderada por size_bytes (tabelas
+    # grandes dominam o custo). Fallback pra média simples se todas as
+    # tabelas tiverem tamanho 0/desconhecido.
+    project_efficiency_score: int
+    tables: list[TableScore]
+    cache_updated_at: datetime | None = None
+    warning: str | None = None
+
+
 class BudgetGroupBy(str, Enum):
     TABLE = "table"
     DATASET = "dataset"

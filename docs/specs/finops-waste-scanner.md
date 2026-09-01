@@ -286,5 +286,5 @@ Ver brief `frontend-visual-refresh.md` (sec. FinOps) e
 
 | ID | Comportamento | Teste |
 |---|---|---|
-| AC-WASTE-RV-01 | Coluna "Score" (score geral **por tabela**) ordenavel na tabela do scanner - anel compacto + numero, cor por faixa. Mesmo score do drill-down (ver `finops-budget.md` AC-FIN-RV-03 / Q-002). | `test_waste_scanner_score_column` |
+| AC-WASTE-RV-01 | Coluna "Score" (score geral **por tabela**) ordenavel na tabela do scanner - anel compacto + numero, cor por faixa. Mesmo score do drill-down (ver `finops-budget.md` AC-FIN-RV-03 / Q-002). **Backend (R2-11):** `GET /finops/{p}/table-scores` serve `tables[].score` + `factors[]`; fórmula provisória em `finops-budget.md` §"Score de eficiência de custo por tabela". Só UI pendente (R2-12). | `test_compute_table_scores_sorts_worst_first_and_aggregates_project` |
 | AC-WASTE-RV-02 | Tabela do scanner **agrupada por recomendacao**, com mini-grafico por linha. | `test_waste_scanner_grouped_by_recommendation` |

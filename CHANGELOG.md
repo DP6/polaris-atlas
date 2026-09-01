@@ -3119,3 +3119,34 @@ implementação**
   `test_repository.py` (+5, `get_storage_cost_timeline`). `uv run pytest
   tests/unit` = 815 ok, `ruff check`/`format` limpos.
 - `docs/specs/finops-budget.md` → v1.6.
+- **Deploy:** mesma flakiness de startup probe do R2-9 — 4 falhas de
+  `Creating Revision...failed` antes de passar no 5º rerun (mesmo digest).
+  Código verificado local: `uvicorn observability_hub.main:app` sobe e
+  `GET /health` responde **200 em 0.33s**, `/openapi.json` 200. Não é o
+  código — é cold-start do Cloud Run perdendo a janela de 40s do probe
+  (`failure_threshold=8×5s`, já aumentado uma vez no módulo). Fix de
+  verdade = subir o threshold no Terraform (branch de infra à parte).
+
+### R2-11 — `feat/r2-finops-table-score` (backend)
+
+- **`GET /finops/{project_id}/table-scores`** (`domains/finops`,
+  AC-FIN-RV-03 / AC-WASTE-RV-01): score de eficiência de custo 0–100 por
+  tabela (maior = melhor) + `project_efficiency_score` (média dos scores
+  ponderada por `size_bytes`). Params `datasets`, `limit` (1–500).
+- **Fórmula PROVISÓRIA** (`_table_efficiency_score`, pura, testada
+  direto) — 3 fatores, pesos somando 1.0, expostos em `factors[]` pro
+  drill-down recalibrar sem quebrar contrato:
+  `partitioning` 0.45 (`1 − economia_particionamento / custo_scan_30d`,
+  reaproveita `scan_partition_candidates`), `utilization` 0.30 (`0` se
+  ≥100 GB nunca consultada em 30d), `scan_efficiency` 0.25
+  (`1/(1+(bytes_30d/size)/10)`). **Sem sinais cross-domain** (drift de
+  schema / órfã ficam de fora — domínios isolados, CLAUDE.md). Fórmula
+  vai pro review (Q-002 na spec).
+- **Nenhuma query BQ nova** — `list_all_table_refs` + `get_tables_metadata`
+  (REST cacheado) + cache de audit log + `scan_partition_candidates`. Sem
+  `dry_run` a reportar.
+- Testes: `tests/unit/finops/test_service.py` (+6: 3
+  `_table_efficiency_score`, 3 `compute_table_scores`). `uv run pytest
+  tests/unit` = 821 ok, `ruff check`/`format` limpos.
+- `docs/specs/finops-budget.md` → v1.7 (fórmula + Q-002 aberta),
+  `finops-waste-scanner.md` AC-WASTE-RV-01.

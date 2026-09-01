@@ -1,13 +1,12 @@
 # Spec — Domínio: FinOps — Budget de custo
 
-**Versão:** 1.6 (refresh visual R2-10 — `GET /finops/{p}/cost-series`:
-série temporal de custo query+storage pro gráfico combo da visão geral,
-com filtros de dataset/tabela/granularidade/tipo. Storage vem de
-`INFORMATION_SCHEMA.TABLE_STORAGE_USAGE_TIMELINE_BY_PROJECT`, degrada pra
-`storage_available=false` sem 500. v1.5: CRUD de meta de custo por usuário
-(`domains/budget`, GET/PUT/DELETE `/finops/{p}/budgets`, `budget_target_usd`
-no `GET /finops/{p}/budget`). v1.4: cache de audit log **incremental**,
-janela 30 → **31 dias** — ver ASM-001)
+**Versão:** 1.7 (refresh visual R2-11 — `GET /finops/{p}/table-scores`:
+score de eficiência de custo por tabela [3 fatores: particionamento,
+utilização, eficiência de scan] + agregado do projeto ponderado por
+tamanho. Fórmula **provisória**, ver Q-002. Nenhuma query BQ nova. v1.6:
+`GET /finops/{p}/cost-series` (série query+storage pro gráfico combo).
+v1.5: CRUD de meta de custo por usuário (`domains/budget`). v1.4: cache de
+audit log **incremental**, janela 30 → **31 dias** — ver ASM-001)
 **Status:** Aprovada
 **Fase:** 4 — FinOps (segunda frente: budget por dataset/projeto)
 **Última atualização:** 2026-09-01
@@ -309,6 +308,69 @@ ainda protege o endpoint; ajustar aqui se o dry-run em dev mostrar bytes.
 
 ---
 
+## Score de eficiência de custo por tabela (v1.7, refresh visual R2-11)
+
+Dois números pra AC-FIN-RV-03: um **por tabela** (coluna ordenável +
+anel compacto no scanner de desperdício / Top ofensores; anel grande +
+decomposição no drill-down) e um **do projeto** (anel "Eficiência de
+custo" — já prototipado). Mesma escala 0–100, maior = mais eficiente.
+
+### GET /api/v1/finops/{project_id}/table-scores
+
+**Params opcionais:** `datasets` (repetível), `limit` (1–500, default 100).
+
+**Response (`TableScoresResponse`):**
+```json
+{
+  "project_id": "observability-hub-dev",
+  "lookback_days": 30,
+  "project_efficiency_score": 78,
+  "tables": [
+    { "dataset_id": "RAW", "table_id": "ga4_events_raw",
+      "score": 34, "size_bytes": 812000000000,
+      "observed_cost_usd_30d": 12.40, "is_partitioned": false,
+      "factors": [
+        { "name": "partitioning", "value": 0.12, "weight": 0.45,
+          "detail": "Economia estimada de US$ 10.90 sobre US$ 12.40 ..." },
+        { "name": "utilization", "value": 1.0, "weight": 0.30,
+          "detail": "Consultada nos últimos 30 dias" },
+        { "name": "scan_efficiency", "value": 0.4, "weight": 0.25,
+          "detail": "Bytes escaneados em 30d = 15.0× o tamanho da tabela" }
+      ] }
+  ],
+  "cache_updated_at": null,
+  "warning": null
+}
+```
+`tables` vem ordenado **pior score primeiro** (empate → maior primeiro).
+
+### Fórmula (PROVISÓRIA — Q-002)
+
+`score = round(100 · Σ fator.value · fator.weight)`, três fatores, pesos
+somando 1.0. **Só sinais que o domínio `finops` já tem** — nada de drift
+de schema (`domains/quality`) nem "é órfã" (`domains/lineage`): domínios
+são isolados (CLAUDE.md). Esses sinais, se quisermos, entram depois por um
+campo alimentado por um job que cruza domínios, não por import.
+
+| Fator | Peso | `value` (0–1) |
+|---|---|---|
+| `partitioning` | 0.45 | `1.0` se particionada, ou sem candidata a partição, ou sem custo de scan observado. Senão `clamp(1 − economia_otimista_particionamento / custo_scan_30d, 0, 1)` — `0` = quase todo o custo dá pra economizar particionando. Reaproveita `scan_partition_candidates`. |
+| `utilization` | 0.30 | `1.0` se escaneada ≥ 1× em 30d. Senão `clamp(1 − size_gb / 100, 0, 1)` — tabela ≥ 100 GB nunca consultada em 30d → `0` (storage pago sem retorno). |
+| `scan_efficiency` | 0.25 | `1 / (1 + (bytes_escaneados_30d / size_bytes) / 10)` — escanear a tabela inteira 10× em 30d → `0.5`; premia pruning / cache / filtros. `1.0` se sem scan oneroso. |
+
+**Score do projeto** = média dos scores por tabela **ponderada por
+`size_bytes`** (as grandes dominam o custo); fallback pra média simples se
+todos os tamanhos forem 0; `100` se não há tabela.
+
+### Custo BQ
+
+**Nenhuma query nova.** Usa `list_all_table_refs` +
+`get_tables_metadata` (REST `get_table`, cacheado) + o cache de audit log
++ `scan_partition_candidates` (que já roda `get_date_like_columns` só nas
+tabelas > 1 GB não particionadas). Sem `dry_run` a reportar.
+
+---
+
 ## Agrupamento configurável (`group_by`)
 
 Uma ou mais chaves por evento, calculadas em `service._group_keys()`:
@@ -385,17 +447,18 @@ apps/backend/src/observability_hub/
 │   └── finops.py          # + GET /finops/{project_id}/budget?group_by=...
 │                          # + GET/PUT/DELETE /finops/{project_id}/budgets (CRUD, v1.5)
 │                          # + GET /finops/{project_id}/cost-series (v1.6)
+│                          # + GET /finops/{project_id}/table-scores (v1.7)
 ├── domains/finops/
-│   ├── service.py          # + get_budget(), _group_keys(); get_budget aceita user_email → budget_target_usd; + get_cost_series() (v1.6)
-│   ├── repository.py       # ScanEvent + job_id/principal_email/query_text; get_scan_events_cached() (cache, ver finops-waste-scanner.md v1.4); _parse_table_ref filtra INFORMATION_SCHEMA; + StorageTimelineDay + get_storage_cost_timeline() (v1.6)
-│   └── schemas.py          # + BudgetGroupBy, CostGroup, CostlyQuery, CostProjection, BudgetResponse (+ cache_updated_at, + budget_target_usd); + CostSeriesGranularity, CostType, CostSeriesPoint, CostSeriesResponse (v1.6)
+│   ├── service.py          # + get_budget() (user_email → budget_target_usd); + get_cost_series() (v1.6); + _table_efficiency_score() + compute_table_scores() (v1.7)
+│   ├── repository.py       # ScanEvent + get_scan_events_cached() (cache, ver finops-waste-scanner.md v1.4); _parse_table_ref filtra INFORMATION_SCHEMA; + StorageTimelineDay + get_storage_cost_timeline() (v1.6)
+│   └── schemas.py          # + BudgetResponse (+ budget_target_usd); + CostSeries* (v1.6); + TableScoreFactor, TableScore, TableScoresResponse (v1.7)
 ├── domains/budget/          # v1.5 — CRUD de meta de custo por usuário (Firestore, espelha domains/favorites)
 │   ├── schemas.py           # BudgetScope, BudgetEntry, BudgetUpsertRequest, BudgetListResponse
 │   ├── repository.py        # _budget_doc_id, list/upsert/remove_budget, get_project_budget_amount
 │   └── service.py           # wrappers finos sobre repository
 └── tests/unit/
-    ├── finops/test_service.py      # + testes de get_budget por dimensão de group_by + budget_target_usd + get_cost_series (v1.6)
-    ├── finops/test_repository.py   # + testes de extração de job_id/principal_email/query_text + filtro INFORMATION_SCHEMA + get_storage_cost_timeline (v1.6)
+    ├── finops/test_service.py      # + get_budget/budget_target_usd + get_cost_series (v1.6) + _table_efficiency_score / compute_table_scores (v1.7)
+    ├── finops/test_repository.py   # + INFORMATION_SCHEMA filter + get_storage_cost_timeline (v1.6)
     └── budget/{test_repository,test_service}.py  # v1.5 — doc_id por escopo, preservação de created_at, get_project_budget_amount
 ```
 
@@ -481,22 +544,30 @@ usuarios (ASM-005 do brief).
 |---|---|---|
 | AC-FIN-RV-01 | Grafico de custo = combo **coluna (diario) + linha (acumulado)**, com projecao tracejada e linha de budget. | `test_finops_cost_combo_chart` |
 | AC-FIN-RV-02 | Filtros do grafico: dataset, tabela, granularidade (mes/dia), tipo de custo (query / storage / ambos). **Backend (R2-10):** `GET /finops/{p}/cost-series?granularity=&cost_type=&lookback_days=&datasets=&tables=` → série contígua de `query_cost_usd`/`storage_cost_usd`/`total_cost_usd` por período. | `test_get_cost_series_month_granularity_uses_year_month_keys`, `test_get_cost_series_dataset_filter_excludes_nonmatching_query_events`, `test_get_cost_series_cost_type_query_skips_storage`, `test_get_cost_series_adds_storage_cost_when_timeline_present` |
-| AC-FIN-RV-03 | **Dois scores distintos**: (a) "Eficiencia de custo" geral do projeto (anel composto - ja prototipado); (b) "Score por tabela" individual - coluna "Score" ordenavel (anel compacto + numero) no scanner de desperdicio / Top ofensores **e** anel grande + decomposicao no drill-down da linha (Q-002). | `test_finops_two_distinct_scores` |
+| AC-FIN-RV-03 | **Dois scores distintos**: (a) "Eficiencia de custo" geral do projeto (anel composto - ja prototipado); (b) "Score por tabela" individual - coluna "Score" ordenavel (anel compacto + numero) no scanner de desperdicio / Top ofensores **e** anel grande + decomposicao no drill-down da linha (Q-002). **Backend (R2-11):** `GET /finops/{p}/table-scores` → `project_efficiency_score` + `tables[].score` + `tables[].factors[]` (decomposicao). Formula provisoria (Q-002). | `test_table_efficiency_score_penalizes_large_never_scanned_table`, `test_table_efficiency_score_penalizes_unpartitioned_with_big_savings`, `test_compute_table_scores_sorts_worst_first_and_aggregates_project`, `test_compute_table_scores_uses_partition_candidate_savings` |
 | AC-FIN-RV-04 | Cadastro de budget com granularidade por **dataset e por tabela** (`scope=project\|dataset\|table` no CRUD). So cadastro simples - sem convite/aceite/compartilhamento. GET/PUT/DELETE `/finops/{p}/budgets`, por usuario (Firestore). O valor de `scope=project` volta como `budget_target_usd` no `GET /finops/{p}/budget`. | `test_upsert_budget_dataset_scope_uses_two_segment_doc_id`, `test_upsert_request_rejects_dataset_scope_without_dataset_id`, `test_get_budget_injects_user_budget_target_from_firestore` |
 | AC-FIN-RV-05 | "Top ofensores" com mini-grafico de tendencia de 7 dias por linha. | `test_finops_top_offenders_trend` |
 
-Status (2026-09): **AC-FIN-RV-04 implementado** (R2-9 — backend CRUD +
-`budget_target_usd`). **AC-FIN-RV-02: backend implementado** (R2-10 —
-`GET /finops/{p}/cost-series`); a parte de UI (montar os filtros no
-gráfico) fica na R2-12. AC-FIN-RV-01/03/05 seguem pendentes (R2-11 =
-score por tabela pro AC-03; R2-12 = a tela `FinOpsOverviewPage`
-consumindo tudo, pros AC-01/05).
+Status (2026-09): **backend de AC-FIN-RV-02/03/04 implementado** —
+R2-9 (`budgets` CRUD + `budget_target_usd`), R2-10
+(`cost-series`), R2-11 (`table-scores`). Falta a UI: R2-12 monta
+`FinOpsOverviewPage` consumindo os três endpoints (big numbers +
+`ComboChart` com filtros + anel de eficiência + coluna "Score" +
+drill-down + Top ofensores) — fecha AC-FIN-RV-01/02/03/05 no front. A
+fórmula do score (Q-002) e os filtros do gráfico entram no review
+do PR final.
 
-Suposicao **ASM-FIN-RV-01** (aberta): AC-FIN-RV-02/03 podem exigir
-agregacao nova no backend (custo por dataset x dia x tipo; insumos do score
-por tabela). Confirmar na implementacao o que e derivavel do que ja existe
-vs. endpoint/campo novo - com estimativa de custo (dry run) de qualquer
-query BQ nova, regra do CLAUDE.md.
+Suposicao **ASM-FIN-RV-01** (respondida, R2-10/R2-11): AC-FIN-RV-02 exigiu
+endpoint novo (`cost-series`) com query nova de storage (só
+`INFORMATION_SCHEMA`, $0 — ASM-002); AC-FIN-RV-03 **não** exigiu query
+nova (`table-scores` reaproveita `scan_partition_candidates` + metadado +
+cache). Nenhum `dry_run` com bytes a reportar.
+
+### Perguntas em aberto
+
+| ID | Pergunta | Status |
+|---|---|---|
+| Q-002 | A fórmula do score por tabela (3 fatores — particionamento 0.45 / utilização 0.30 / eficiência de scan 0.25 — e o agregado do projeto ponderado por tamanho) é a certa? Pesos, limiares (`100 GB` pra zerar utilização, `10×` pra meia-nota de scan) e a ausência de "drift de schema" / "é órfã" (sinais cross-domain, deixados de fora de propósito) precisam de validação de produto. | aberta — revisar no PR final; a decomposição em `factors[]` na resposta existe justamente pra recalibrar sem quebrar contrato |
 
 Suposicao **ASM-FIN-RV-02** (confirmada, R2-9): o budget mora em
 `users/{email}/budgets` (por usuario), nao em `projects/{projectId}/budgets`
