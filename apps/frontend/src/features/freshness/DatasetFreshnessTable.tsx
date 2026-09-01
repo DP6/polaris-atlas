@@ -1,11 +1,19 @@
 import { Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { SlaDistributionBar } from '@/components/SlaDistributionBar'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import {
   SLA_FILL_COLOR,
   SLA_LABELS,
@@ -151,6 +159,7 @@ export function DatasetFreshnessTable({ datasets }: { datasets: DatasetFreshness
               onClick={() => toggleSort('total_tables')}
               align="right"
             />
+            <TableHead>Distribuição</TableHead>
             {SLA_ORDER.map((status) => (
               <SortableTableHead
                 key={status}
@@ -179,6 +188,9 @@ export function DatasetFreshnessTable({ datasets }: { datasets: DatasetFreshness
               </TableCell>
               <TableCell>{dataset.location}</TableCell>
               <TableCell className="text-right">{dataset.total_tables}</TableCell>
+              <TableCell className="min-w-[120px]">
+                <SlaDistributionBar counts={dataset} />
+              </TableCell>
               {SLA_ORDER.map((status) => {
                 const value = dataset[status]
                 return (
@@ -205,7 +217,7 @@ export function DatasetFreshnessTable({ datasets }: { datasets: DatasetFreshness
           {visibleDatasets.length === 0 && (
             <TableRow>
               <TableCell
-                colSpan={4 + SLA_ORDER.length}
+                colSpan={5 + SLA_ORDER.length}
                 className="text-center text-muted-foreground"
               >
                 Nenhum dataset encontrado com esse filtro.

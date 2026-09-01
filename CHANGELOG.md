@@ -87,6 +87,12 @@ Checagem de backend: `description` de dataset **é** mudança de backend
   a descrição real (`line-clamp-2`), fallback pro texto fixo. Sem role
   IAM nova (mesma permissão de metadado já usada pra SCHEMATA/TABLES).
   ACs AC-CAT-DESC-01/02 em `catalog.md`. `pytest tests/unit` 783 ok.
+- **`feat/fe-refresh-freshness`** (PR 8): `SlaRow` (totais de projeto e
+  de dataset) ganhou a `SlaDistributionBar` agregada abaixo dos números;
+  `DatasetFreshnessTable` ganhou coluna "Distribuição" por linha. As
+  colunas de contagem por faixa (ordenáveis) continuam — a barra é
+  adicional. Fecha a história de "mesmo componente nos dois lados" com
+  o Catálogo de Dados. Cosmético (sem AC novo).
 
 ---
 

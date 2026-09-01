@@ -185,9 +185,12 @@ query nova**. `role="img"` + `aria-label`/`title` com a decomposição
 completa.
 
 Reaproveitada por: cards do Catálogo de Dados (`DatasetOverviewCard`, PR 6)
-e — quando o Freshness for repaginado (PR 8) — a visão de projeto do
-próprio Freshness (hoje `DatasetFreshnessTable`, uma tabela de contagens
-por faixa). É o "mesmo componente visual" que o brief pede nos dois lados.
+e o próprio Freshness (PR 8 — feito): `SlaRow` (faixa de totais do projeto
+e do dataset) ganhou a barra agregada abaixo dos 6 números, e
+`DatasetFreshnessTable` ganhou uma coluna "Distribuição" por linha. As
+contagens por faixa (colunas ordenáveis) continuam — a barra é adicional,
+não substitui. É o "mesmo componente visual" que o brief pede nos dois
+lados.
 
 ---
 
