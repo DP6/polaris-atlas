@@ -57,6 +57,10 @@ _MIN_TABLE_SIZE_BYTES_FOR_PARTITION_CANDIDATE = 1_073_741_824  # 1 GB
 _CONSERVATIVE_REDUCTION = 0.30
 _OPTIMISTIC_REDUCTION = 0.70
 _BUDGET_TOP_N_DEFAULT = 10
+# Janela do budget: "últimos N dias". Default = 30 (comportamento próximo
+# do mês corrente); teto = 31 (o cache de audit log não guarda mais).
+_BUDGET_DEFAULT_LOOKBACK_DAYS = 30
+_BUDGET_MAX_LOOKBACK_DAYS = 31
 _COLUMN_TYPE_SCAN_TIMEOUT_SECONDS = 120.0
 _COLUMN_TYPE_SCAN_MAX_WORKERS = 4
 _STORAGE_BYTES_OVERHEAD = (
@@ -142,10 +146,6 @@ def _human_bytes(num_bytes: int) -> str:
 def _estimate_query_cost_usd(num_bytes: int) -> float:
     tib = num_bytes / (1024**4)
     return round(tib * settings.bigquery_price_usd_per_tib, 6)
-
-
-def _month_start(now: datetime) -> datetime:
-    return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
 
 def scan_partition_candidates(
@@ -274,17 +274,18 @@ def get_budget(
     project_id: str,
     group_by: BudgetGroupBy = BudgetGroupBy.TABLE,
     limit: int = _BUDGET_TOP_N_DEFAULT,
+    lookback_days: int = _BUDGET_DEFAULT_LOOKBACK_DAYS,
     user_email: str | None = None,
 ) -> BudgetResponse:
+    # Janela escolhível (rodada 3) — "últimos N dias", N em 1..31 (teto do
+    # cache de audit log). Antes era fixo no mês corrente.
+    lookback_days = max(1, min(lookback_days, _BUDGET_MAX_LOOKBACK_DAYS))
     now = datetime.now(UTC)
-    month_start = _month_start(now)
-    lookback_days = (now - month_start).days + 1
+    period_start = now - timedelta(days=lookback_days)
 
-    # Fonte é o mesmo cache de 30 dias de scan_partition_candidates; o
-    # recorte pro mês corrente sai do filtro `event.timestamp < month_start`
-    # abaixo. Nos ~1 dia/ano em que lookback_days passa de 30 (fim de mês
-    # de 31 dias), o começo do mês pode faltar — já coberto pelo
-    # _BUDGET_RETENTION_CAVEAT, comportamento pré-existente.
+    # Fonte é o mesmo cache de ~30 dias de scan_partition_candidates; o
+    # recorte pra janela sai do filtro `event.timestamp < period_start`
+    # abaixo.
     events, cache_updated_at, quota_warning = _scan_events_or_quota_warning(
         logging_client, storage_client, firestore_client, project_id
     )
@@ -295,7 +296,7 @@ def get_budget(
     total_billed_bytes = 0
 
     for event in events:
-        if event.timestamp is None or event.timestamp < month_start:
+        if event.timestamp is None or event.timestamp < period_start:
             continue
         if event.total_billed_bytes <= 0:
             continue
@@ -345,6 +346,8 @@ def get_budget(
 
     total_cost_usd = _estimate_query_cost_usd(total_billed_bytes)
     daily_average = total_cost_usd / lookback_days if lookback_days else 0.0
+    # Projeção mensal a partir da média diária da janela escolhida (não é
+    # mais "resto do mês corrente" — a janela pode nem ser o mês).
     days_in_month = calendar.monthrange(now.year, now.month)[1]
     projection = CostProjection(
         days_elapsed=lookback_days,
@@ -371,7 +374,7 @@ def get_budget(
 
     return BudgetResponse(
         project_id=project_id,
-        period_start=month_start,
+        period_start=period_start,
         lookback_days=lookback_days,
         group_by=group_by,
         groups=groups,

@@ -376,8 +376,8 @@ def test_get_budget_degrades_to_warning_when_cache_not_ready(monkeypatch):
     assert "ainda não foi gerado" in result.warning
 
 
-def _last_day_of_previous_month():
-    return _now().replace(day=1) - timedelta(days=1)
+def _days_ago(n: int):
+    return _now() - timedelta(days=n)
 
 
 def test_get_budget_groups_by_table(monkeypatch):
@@ -554,15 +554,36 @@ def test_get_budget_ignores_zero_cost_events(monkeypatch):
     assert result.top_queries == []
 
 
-def test_get_budget_ignores_events_before_month_start(monkeypatch):
-    events = [
-        _event([("proj", "RAW", "a")], _last_day_of_previous_month(), total_billed_bytes=10**12)
-    ]
+def test_get_budget_ignores_events_before_the_window(monkeypatch):
+    # 40 dias atrás está fora da janela default de 30.
+    events = [_event([("proj", "RAW", "a")], _days_ago(40), total_billed_bytes=10**12)]
     _stub_budget_events(monkeypatch, events)
 
     result = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj")
 
     assert result.groups == []
+
+
+def test_get_budget_lookback_days_narrows_the_window(monkeypatch):
+    # Evento de 10 dias atrás entra na janela de 30 mas não na de 7.
+    events = [_event([("proj", "RAW", "a")], _days_ago(10), total_billed_bytes=10**12)]
+    _stub_budget_events(monkeypatch, events)
+
+    wide = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj", lookback_days=30)
+    narrow = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj", lookback_days=7)
+
+    assert wide.groups != []
+    assert wide.lookback_days == 30
+    assert narrow.groups == []
+    assert narrow.lookback_days == 7
+
+
+def test_get_budget_clamps_lookback_days_to_31(monkeypatch):
+    _stub_budget_events(monkeypatch, [])
+
+    result = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj", lookback_days=999)
+
+    assert result.lookback_days == 31
 
 
 def test_get_budget_ignores_events_from_other_projects(monkeypatch):

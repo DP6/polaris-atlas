@@ -73,6 +73,19 @@ barras verticais sempre visíveis.
   `ColumnTypesTab`) agora são `export`, o wrapper `FinOpsPage` + `<Tabs>` foram removidos.
 - `router.tsx`: 3 rotas no lugar de 1. Doc-sync: `finops-column-types.md`.
 
+### R3-finops-budget-period — `feat/r3-finops-budget-period` (backend + front-end)
+
+- **Backend:** `GET /finops/{p}/budget` ganhou `lookback_days` (`1`–`31`, default `30`,
+  clampado no service). A janela deixou de ser fixa no mês corrente
+  (`period_start = now - lookback_days`); `_month_start` removido. A projeção virou
+  **run-rate mensal** (`média_da_janela × dias_do_mês`) e `projection.days_elapsed` = a
+  janela. `finops-budget.md` → v1.8. `uv run pytest tests/unit` = 825 ok.
+- **Frontend:** novo `components/LookbackPicker.tsx` (extraído de `OrphansPage`, agora com
+  props `options`/`label`/`max`) — `OrphansPage` refatorado pra usá-lo. `BudgetPage`: gate
+  com `LookbackPicker` (presets 7/15/30, teto 31); `useBudget`/`finopsApi.getBudget`
+  passam `lookback_days`; copies "mês corrente" → "período" / "Janela analisada".
+- `pnpm lint` + `pnpm build` verdes.
+
 ## Refresh visual do Hub — rodada 2 (2026-09)
 
 Segunda rodada, sobre as lacunas que a rodada 1 marcou como "especificado,

@@ -1,6 +1,10 @@
 # Spec — Domínio: FinOps — Budget de custo
 
-**Versão:** 1.7 (refresh visual R2-11 — `GET /finops/{p}/table-scores`:
+**Versão:** 1.8 (rodada 3 — `GET /finops/{p}/budget` ganhou `lookback_days`
+(1–31, default 30); a janela deixou de ser fixa no mês corrente e a
+projeção virou run-rate `média_da_janela × dias_do_mês`. FE: `LookbackPicker`
+compartilhado, seletor 7/15/30 no gate do `BudgetPage`.)
+v1.7 (refresh visual R2-11 — `GET /finops/{p}/table-scores`:
 score de eficiência de custo por tabela [3 fatores: particionamento,
 utilização, eficiência de scan] + agregado do projeto ponderado por
 tamanho. Fórmula **provisória**, ver Q-002. Nenhuma query BQ nova. v1.6:
@@ -15,7 +19,7 @@ audit log **incremental**, janela 30 → **31 dias** — ver ASM-001)
 
 ## Objetivo
 
-Três visões de custo do mês corrente, todas derivadas da mesma fonte já
+Três visões de custo da janela escolhida (default 30 dias), todas derivadas da mesma fonte já
 usada pelo scanner de desperdício — nenhuma integração nova:
 
 1. **Custo agrupado, agrupamento configurável** — Tabela | Dataset |
@@ -124,14 +128,19 @@ sintoma reportado ($0.07 fantasma) era real.
 ## Endpoint da API
 
 ### GET /api/v1/finops/{project_id}/budget
-Sempre relativo ao **mês corrente** (dia 1 até agora, UTC) — não é uma
-janela fixa como o scanner de desperdício.
+Janela **"últimos N dias"** (rodada 3; antes era fixo no mês corrente).
 
 **Parâmetros opcionais:**
 - `group_by` (query, default `table`) — um de `table`, `dataset`,
   `user`, `day`, `month`, `year`. Ver "Agrupamento configurável".
 - `limit` (query, default `10`, mínimo `1`, máximo `50`) — tamanho de
   `top_queries`.
+- `lookback_days` (query, default `30`, `1`–`31`) — janela analisada.
+  `period_start = now - lookback_days`. Teto de 31 = retenção do cache de
+  audit log (fora dele o `_BUDGET_RETENTION_CAVEAT` avisa). O service
+  clampa (não é 422). A **projeção mensal** (`projected_month_total_usd`)
+  passou a ser `média_diária_da_janela × dias_do_mês` — não é mais
+  "resto do mês corrente".
 
 **Response 200:**
 ```json
@@ -410,41 +419,32 @@ pra cortar.
 ```python
 # domains/finops/service.py
 def get_budget(
-    logging_client: cloud_logging.Client,
-    storage_client: storage.Client,
-    firestore_client: firestore.Client,
-    project_id: str,
+    logging_client, storage_client, firestore_client, project_id,
     group_by: BudgetGroupBy = BudgetGroupBy.TABLE,
     limit: int = 10,
+    lookback_days: int = 30,   # rodada 3 — clampado a 1..31
+    user_email: str | None = None,
 ) -> BudgetResponse:
     """
-    1. month_start = dia 1 do mês corrente, 00:00 UTC. lookback_days =
-       dias desde month_start + 1 — usado só pra projeção/caveat; NÃO é
-       mais passado pro scan (ver passo 2).
+    1. period_start = now - lookback_days (clamp 1..31). Não há mais
+       `month_start`.
     2. Busca eventos com repository.get_scan_events_cached() — lê o cache
        incremental de 31 dias (mesmo blob que partition-candidates usa,
-       ver finops-waste-scanner.md v1.4, "Fonte de dados"). Cache miss
-       levanta EventCacheNotReadyError → BudgetResponse vazio com warning
-       (não escaneia mais ao vivo). O recorte pro mês corrente sai do
-       filtro do passo 3, não de uma janela de scan menor.
+       ver finops-waste-scanner.md v1.4). Cache miss levanta
+       EventCacheNotReadyError → BudgetResponse vazio com warning.
        referenced_tables já vem sem entradas INFORMATION_SCHEMA (filtro
-       na origem, repository._parse_table_ref). Retorna também
-       cache_updated_at, propagado pra BudgetResponse.
-    3. Descarta evento sem timestamp, anterior a month_start (a folga do
-       passo 1 pode trazer eventos do fim do mês anterior),
-       com total_billed_bytes <= 0, ou cujo real_tables (tabelas
-       referenciadas que pertencem a este project_id) fique vazio depois
-       do filtro — ver "Bug real corrigido: regiões fantasma".
+       na origem, repository._parse_table_ref).
+    3. Descarta evento sem timestamp, anterior a `period_start`, com
+       total_billed_bytes <= 0, ou cujo real_tables fique vazio (ver
+       "Bug real corrigido: regiões fantasma").
     4. Por evento: soma total_billed_bytes/job_count em uma ou mais
        chaves via _group_keys(group_by, event, real_tables); guarda a
        linha bruta de CostlyQuery.
-    5. groups ordenado por custo desc; top_queries ordenado por custo
-       desc, cortado em `limit`.
-    6. Projeção: daily_average = custo_total_do_mês_até_agora /
-       lookback_days (dias corridos do mês, não só dias com atividade —
-       um mês com poucos dias ativos não deve inflar a média).
-       days_in_month via calendar.monthrange(). projected_total =
-       daily_average × days_in_month.
+    5. groups ordenado por custo desc; top_queries desc, cortado em `limit`.
+    6. Projeção (run-rate mensal): daily_average = custo_da_janela /
+       lookback_days; days_in_month via calendar.monthrange();
+       projected_month_total = daily_average × days_in_month. `days_elapsed`
+       da resposta = lookback_days (a "janela analisada").
     """
 ```
 
@@ -473,8 +473,11 @@ apps/backend/src/observability_hub/
     └── budget/{test_repository,test_service}.py  # v1.5 — doc_id por escopo, preservação de created_at, get_project_budget_amount
 ```
 
-Frontend (`apps/frontend/src/features/finops/BudgetPage.tsx`): duas
-abas via `Tabs` do shadcn/ui — "Custo por agrupamento" (seletor de
+Frontend (`apps/frontend/src/features/finops/BudgetPage.tsx`): o gate
+pré-run tem `LookbackPicker` compartilhado (presets 7/15/30 + "Outro",
+`components/LookbackPicker.tsx`, também usado por Tabelas órfãs) + seletor
+de `group_by` + limite. Depois de "Executar", duas abas via `Tabs` do
+shadcn/ui — "Custo por agrupamento" (seletor de
 `group_by` em pill buttons, tabela ordenável, total no rodapé via
 `TableFooter`) e "Queries mais caras" (tabela ordenável por custo/bytes/
 data; coluna "Tabelas" como badges; texto da query oculto por padrão,
@@ -492,7 +495,8 @@ tinha com o texto da query inline na célula).
 | Referência a `INFORMATION_SCHEMA.*` (probes de região do próprio Hub) | Filtrada na origem (`repository._parse_table_ref`) — nunca vira dataset/tabela fantasma em nenhum `group_by` |
 | Evento cujas `referenced_tables`, após o filtro acima, não sobra nenhuma do `project_id` (só probe ou só tabela de outro projeto) | Evento inteiro pulado — não entra em `groups` nem em `top_queries` |
 | Evento com `total_billed_bytes <= 0` | Ignorado em toda agregação — não soma custo nem `job_count` |
-| Evento anterior a `month_start` | Ignorado (a folga de `lookback_days = dias + 1` pode trazer alguns) |
+| Evento anterior a `period_start` (`now - lookback_days`) | Ignorado |
+| `lookback_days` fora de 1–31 (budget) | Clampado no service (não é 422) — 31 é o limite do cache |
 | Query com `JOIN` entre tabelas (`group_by=table`) | Custo somado em **cada** tabela tocada, não dividido — mesma aproximação do scanner de desperdício |
 | Query com `JOIN` entre tabelas do mesmo dataset (`group_by=dataset`) | Custo somado **uma vez** pro dataset (dedup via `set`), diferente de `group_by=table` — evita inflar artificialmente o custo de um dataset só porque a query tocou duas tabelas dele |
 | Mesmo usuário com múltiplos jobs no mês (`group_by=user`) | Um único `CostGroup`, `job_count` e `billed_bytes` somados |

@@ -30,9 +30,9 @@ export const finopsApi = {
     )
   },
 
-  getBudget: (projectId: string, groupBy: BudgetGroupBy = 'table', limit = 10) =>
+  getBudget: (projectId: string, groupBy: BudgetGroupBy = 'table', limit = 10, lookbackDays = 30) =>
     httpClient.get<BudgetResponse>(
-      `/api/v1/finops/${projectId}/budget?group_by=${groupBy}&limit=${limit}`,
+      `/api/v1/finops/${projectId}/budget?group_by=${groupBy}&limit=${limit}&lookback_days=${lookbackDays}`,
     ),
 
   getCostSeries: (

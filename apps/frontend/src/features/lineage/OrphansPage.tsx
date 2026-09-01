@@ -3,9 +3,9 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { CacheStalenessBadge } from '@/components/CacheStalenessBadge'
-import { ChoiceToggle } from '@/components/ChoiceToggle'
 import { DatasetScopeGate } from '@/components/DatasetScopeGate'
 import { LoadingState } from '@/components/LoadingState'
+import { LookbackPicker } from '@/components/LookbackPicker'
 import { PageHeader } from '@/components/PageHeader'
 import { Panel } from '@/components/Panel'
 import { RefreshButton } from '@/components/RefreshButton'
@@ -25,11 +25,10 @@ import { useOrphans } from '@/features/lineage/hooks'
 import { useProjectContext } from '@/features/projects/ProjectContext'
 import { useTableFilterSort } from '@/hooks/useTableFilterSort'
 import { formatBytes, formatUsd } from '@/lib/format'
-import { cn, linkClass } from '@/lib/utils'
+import { linkClass } from '@/lib/utils'
 import type { OrphanTable } from '@/types/lineage'
 
 const DATASET_FILTER_ALL = 'all'
-const LOOKBACK_OPTIONS = [30, 60, 90, 365] as const
 
 type SortKey = 'dataset_id' | 'table_id' | 'size_bytes' | 'estimated_monthly_storage_cost_usd'
 
@@ -38,55 +37,6 @@ function compare(a: OrphanTable, b: OrphanTable, key: SortKey): number {
     return a[key] - b[key]
   }
   return a[key].localeCompare(b[key])
-}
-
-function LookbackPicker({ value, onChange }: { value: number; onChange: (days: number) => void }) {
-  const isPreset = (LOOKBACK_OPTIONS as readonly number[]).includes(value)
-  const [showCustom, setShowCustom] = useState(!isPreset)
-
-  return (
-    <div>
-      <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
-        Período analisado (dias)
-      </span>
-      <div className="flex flex-wrap items-center gap-1">
-        <ChoiceToggle
-          aria-label="Período analisado em dias"
-          options={LOOKBACK_OPTIONS.map((d): { value: number; label: string } => ({
-            value: d,
-            label: String(d),
-          }))}
-          value={showCustom ? -1 : value}
-          onChange={(days) => {
-            onChange(days)
-            setShowCustom(false)
-          }}
-        />
-        <button
-          type="button"
-          aria-pressed={showCustom}
-          onClick={() => setShowCustom(true)}
-          className={cn(
-            'rounded-pill border px-3 py-1 text-xs font-medium transition-colors',
-            showCustom
-              ? 'border-primary bg-primary/10 text-foreground'
-              : 'border-border text-muted-foreground hover:bg-muted',
-          )}
-        >
-          Outro
-        </button>
-        {showCustom && (
-          <Input
-            type="number"
-            min={1}
-            className="h-7 w-20 text-xs"
-            value={value}
-            onChange={(e) => onChange(Number(e.target.value))}
-          />
-        )}
-      </div>
-    </div>
-  )
 }
 
 export function OrphansPage() {
