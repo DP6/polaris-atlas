@@ -55,6 +55,17 @@ em `frontend-visual-refresh-plan.md` §1, usuário ausente até o review.
 Checagem de backend: `description` de dataset **é** mudança de backend
 (`DatasetSummary` não tem o campo) — sliced como PR 7.
 
+### Fatias seguintes (uma branch por PR, empilhadas — plano §4/§5)
+
+- **`feat/fe-refresh-rename-catalogo`** (PR 3): "Catálogo" → "Catálogo de
+  Dados" na UI + `docs/site`. Sem mudança de comportamento.
+- **`feat/fe-refresh-sidebar`** (PR 4): item ativo da sidebar no novo
+  tratamento (Q-001 — `.dp6-nav-active`: barra de acento + gradiente, não
+  mais bloco amarelo); hover com dica de glow (`.dp6-nav-item`); ícone
+  `Boxes` nos datasets; ícone do serviço em `--primary`; mais respiro
+  entre grupos (`space-y-4`, `gap-4`). `index.css` +2 utilitárias →
+  `design-system.md` §Vida atualizado no mesmo PR.
+
 ---
 
 ## Harness de front-end (`docs/skills/frontend.md` → `docs/frontend/`)

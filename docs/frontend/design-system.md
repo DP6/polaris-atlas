@@ -176,6 +176,8 @@ grain, scanlines, "sweep", parallax de cursor). Ver
 | `.dp6-glass` | Superfície semitransparente + `backdrop-filter: blur`. **Opt-in**, raro (o app é denso e quase não tem o que desfocar atrás); na dúvida `bg-card` sólido. |
 | `.dp6-headline-glow` | Glow radial amarelo **contido no próprio box** (sem `::before` vazando) — usado pelo `PageHeader` atrás do `<h1>`. |
 | `.dp6-gradient-primary` | Gradiente + inset ring + glow do botão "herói". **Opt-in via `className`** num `<Button variant="default">` específico (a primitiva `ui/button` é read-only, não dá pra override global). |
+| `.dp6-nav-active` | Item de nav **ativo** da sidebar: barra de acento `3px` à esquerda com glow (`::before`) + fundo em gradiente `--primary/14 → transparent`. Substitui o bloco amarelo chapado. Par com `rounded-lg` + `text-foreground` + ícone `text-primary` no `NavLink`. Ver `frontend-visual-refresh-plan.md` §1 (Q-001). |
+| `.dp6-nav-item` | Item de nav em **hover**: dica de glow (anel `inset` fino em `--primary`) — mais contido que `.dp6-hoverable` (numa lista vertical densa o glow cheio vira ruído). |
 
 **Movimento:** teto de transição sobe pra **≤300ms** (era ≤200ms) pros
 hovers/entradas. O reset de `prefers-reduced-motion` no fim do `index.css`

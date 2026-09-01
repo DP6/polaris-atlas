@@ -1,4 +1,5 @@
 import {
+  Boxes,
   ChevronDown,
   Clock,
   Container,
@@ -41,10 +42,15 @@ interface DatasetSidebarProps {
   projectId: string
 }
 
+// Item de nav: ativo = barra de acento à esquerda + fundo em gradiente +
+// ícone em primary (Q-001 do refresh visual, utilitárias `.dp6-nav-*` em
+// index.css). Não mais o bloco amarelo chapado.
 const NAV_LINK_CLASS = ({ isActive }: { isActive: boolean }) =>
   cn(
-    'flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors',
-    isActive ? 'bg-primary font-bold text-primary-foreground' : 'text-foreground hover:bg-muted',
+    'dp6-nav-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm',
+    isActive
+      ? 'dp6-nav-active font-medium text-foreground [&_svg]:text-primary'
+      : 'text-foreground hover:bg-muted',
   )
 
 const SECTION_LABEL_CLASS =
@@ -81,12 +87,12 @@ function SidebarServiceGroup({
 }) {
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
-      <CollapsibleTrigger className="mb-2 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-bold text-foreground transition-colors hover:bg-muted">
-        {icon}
+      <CollapsibleTrigger className="dp6-nav-item mb-2 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-bold text-foreground hover:bg-muted">
+        <span className="text-primary">{icon}</span>
         <span className="flex-1 text-left">{label}</span>
         <ChevronDown size={14} className={cn('transition-transform', !open && '-rotate-90')} />
       </CollapsibleTrigger>
-      <CollapsibleContent className="flex flex-col gap-3 border-border border-l pl-2">
+      <CollapsibleContent className="flex flex-col gap-4 border-border border-l pl-2">
         {children}
       </CollapsibleContent>
     </Collapsible>
@@ -99,7 +105,7 @@ function SidebarServiceGroup({
 // usado em AssetsTable.tsx/LineageGraph.tsx pra linha/nó desabilitado.
 function SidebarServiceGroupPlaceholder({ icon, label }: { icon: ReactNode; label: string }) {
   return (
-    <div className="mb-2 flex cursor-not-allowed items-center gap-2 rounded-md px-2 py-1.5 text-muted-foreground text-sm opacity-50">
+    <div className="mb-2 flex cursor-not-allowed items-center gap-2 rounded-lg px-2 py-1.5 text-muted-foreground text-sm opacity-50">
       {icon}
       <span className="flex-1 text-left font-bold">{label}</span>
       <Badge variant="outline" className="text-[10px]">
@@ -203,7 +209,7 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
   )
 
   return (
-    <aside className="w-60 shrink-0 overflow-y-auto border-r border-border bg-card p-4">
+    <aside className="w-60 shrink-0 space-y-4 overflow-y-auto border-r border-border bg-card p-4">
       <SidebarServiceGroup
         icon={<Database size={16} />}
         label="BigQuery"
@@ -278,15 +284,18 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
                     to={`/datasets/${dataset.dataset_id}`}
                     className={({ isActive }) =>
                       cn(
-                        'flex min-w-0 flex-1 items-center justify-between rounded-md px-3 py-2 text-sm transition-colors',
+                        'dp6-nav-item flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm',
                         isActive
-                          ? 'bg-primary font-bold text-primary-foreground'
+                          ? 'dp6-nav-active font-medium text-foreground'
                           : 'text-foreground hover:bg-muted',
                       )
                     }
                   >
-                    <span className="truncate" title={dataset.dataset_id}>
-                      {dataset.dataset_id}
+                    <span className="flex min-w-0 items-center gap-2">
+                      <Boxes size={14} className="shrink-0 opacity-70" aria-hidden="true" />
+                      <span className="truncate" title={dataset.dataset_id}>
+                        {dataset.dataset_id}
+                      </span>
                     </span>
                     <span className="shrink-0 text-xs opacity-70">
                       [{formatAssetCounts(dataset.total_tables, dataset.total_views)}]
@@ -341,7 +350,7 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
                   {visibleTableFavorites.map((favorite) => (
                     <div
                       key={`${favorite.dataset_id}.${favorite.table_id}`}
-                      className="group flex flex-col gap-0.5 rounded-md px-3 py-2 transition-colors hover:bg-muted"
+                      className="dp6-nav-item group flex flex-col gap-0.5 rounded-lg px-3 py-2 hover:bg-muted"
                     >
                       <Link
                         to={`/datasets/${favorite.dataset_id}`}
@@ -382,7 +391,7 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
                   {visibleDatasetFavorites.map((favorite) => (
                     <div
                       key={favorite.dataset_id}
-                      className="group flex flex-col gap-0.5 rounded-md px-3 py-2 transition-colors hover:bg-muted"
+                      className="dp6-nav-item group flex flex-col gap-0.5 rounded-lg px-3 py-2 hover:bg-muted"
                     >
                       <Link
                         to={`/datasets/${favorite.dataset_id}`}
@@ -434,7 +443,7 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
                   key={`${view.dataset_id}.${view.table_id}.${view.viewed_at}`}
                   to={`/datasets/${view.dataset_id}`}
                   state={{ highlightTable: view.table_id }}
-                  className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
+                  className="dp6-nav-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-foreground hover:bg-muted"
                 >
                   <History size={12} className="shrink-0 text-muted-foreground" />
                   <span className="truncate" title={`${view.dataset_id}.${view.table_id}`}>
