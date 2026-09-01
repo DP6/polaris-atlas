@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { LoadingState } from '@/components/LoadingState'
 import { PageHeader } from '@/components/PageHeader'
+import { Panel } from '@/components/Panel'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { Badge } from '@/components/ui/badge'
@@ -80,105 +81,109 @@ export function BucketsPage() {
         }
       />
 
-      <div className="relative min-w-[220px] max-w-sm">
-        <Search
-          size={14}
-          className="-translate-y-1/2 absolute top-1/2 left-2.5 text-muted-foreground"
-        />
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Filtrar por nome do bucket…"
-          className="pl-8"
-        />
-      </div>
-
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <SortableTableHead
-              label="Nome"
-              active={sortKey === 'name'}
-              direction={sortDir}
-              onClick={() => toggleSort('name')}
+      <Panel
+        filterRow={
+          <div className="relative min-w-[220px] max-w-sm">
+            <Search
+              size={14}
+              className="-translate-y-1/2 absolute top-1/2 left-2.5 text-muted-foreground"
             />
-            <SortableTableHead
-              label="Localização"
-              active={sortKey === 'location'}
-              direction={sortDir}
-              onClick={() => toggleSort('location')}
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Filtrar por nome do bucket…"
+              className="pl-8"
             />
-            <SortableTableHead
-              label="Storage class"
-              active={sortKey === 'storage_class'}
-              direction={sortDir}
-              onClick={() => toggleSort('storage_class')}
-            />
-            <SortableTableHead
-              label="Tamanho"
-              active={sortKey === 'total_size_bytes'}
-              direction={sortDir}
-              onClick={() => toggleSort('total_size_bytes')}
-              align="right"
-            />
-            <SortableTableHead
-              label="Objetos"
-              active={sortKey === 'object_count'}
-              direction={sortDir}
-              onClick={() => toggleSort('object_count')}
-              align="right"
-            />
-            <TableHead>Lifecycle rule</TableHead>
-            <SortableTableHead
-              label="Criado em"
-              active={sortKey === 'time_created'}
-              direction={sortDir}
-              onClick={() => toggleSort('time_created')}
-            />
-            <SortableTableHead
-              label="Atualizado em"
-              active={sortKey === 'updated'}
-              direction={sortDir}
-              onClick={() => toggleSort('updated')}
-            />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {visibleBuckets.map((bucket) => (
-            <TableRow key={bucket.name}>
-              <TableCell className="font-medium">
-                <Link to={`/storage/${bucket.name}`} className={linkClass}>
-                  {bucket.name}
-                </Link>
-              </TableCell>
-              <TableCell>{bucket.location}</TableCell>
-              <TableCell>
-                <Badge variant="secondary">{bucket.storage_class}</Badge>
-              </TableCell>
-              <TableCell className="text-right">{formatBytes(bucket.total_size_bytes)}</TableCell>
-              <TableCell className="text-right">{formatNumber(bucket.object_count)}</TableCell>
-              <TableCell>
-                {bucket.has_lifecycle_rule ? (
-                  <Badge variant="secondary">Configurada</Badge>
-                ) : (
-                  <span className="text-muted-foreground">—</span>
-                )}
-              </TableCell>
-              <TableCell>{formatDate(bucket.time_created)}</TableCell>
-              <TableCell>{formatDate(bucket.updated)}</TableCell>
-            </TableRow>
-          ))}
-          {visibleBuckets.length === 0 && (
+          </div>
+        }
+      >
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={8} className="text-center text-muted-foreground">
-                {data.buckets.length === 0
-                  ? 'Nenhum bucket encontrado neste projeto.'
-                  : 'Nenhum bucket encontrado com esse filtro.'}
-              </TableCell>
+              <SortableTableHead
+                label="Nome"
+                active={sortKey === 'name'}
+                direction={sortDir}
+                onClick={() => toggleSort('name')}
+              />
+              <SortableTableHead
+                label="Localização"
+                active={sortKey === 'location'}
+                direction={sortDir}
+                onClick={() => toggleSort('location')}
+              />
+              <SortableTableHead
+                label="Storage class"
+                active={sortKey === 'storage_class'}
+                direction={sortDir}
+                onClick={() => toggleSort('storage_class')}
+              />
+              <SortableTableHead
+                label="Tamanho"
+                active={sortKey === 'total_size_bytes'}
+                direction={sortDir}
+                onClick={() => toggleSort('total_size_bytes')}
+                align="right"
+              />
+              <SortableTableHead
+                label="Objetos"
+                active={sortKey === 'object_count'}
+                direction={sortDir}
+                onClick={() => toggleSort('object_count')}
+                align="right"
+              />
+              <TableHead>Lifecycle rule</TableHead>
+              <SortableTableHead
+                label="Criado em"
+                active={sortKey === 'time_created'}
+                direction={sortDir}
+                onClick={() => toggleSort('time_created')}
+              />
+              <SortableTableHead
+                label="Atualizado em"
+                active={sortKey === 'updated'}
+                direction={sortDir}
+                onClick={() => toggleSort('updated')}
+              />
             </TableRow>
-          )}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {visibleBuckets.map((bucket) => (
+              <TableRow key={bucket.name}>
+                <TableCell className="font-medium">
+                  <Link to={`/storage/${bucket.name}`} className={linkClass}>
+                    {bucket.name}
+                  </Link>
+                </TableCell>
+                <TableCell>{bucket.location}</TableCell>
+                <TableCell>
+                  <Badge variant="secondary">{bucket.storage_class}</Badge>
+                </TableCell>
+                <TableCell className="text-right">{formatBytes(bucket.total_size_bytes)}</TableCell>
+                <TableCell className="text-right">{formatNumber(bucket.object_count)}</TableCell>
+                <TableCell>
+                  {bucket.has_lifecycle_rule ? (
+                    <Badge variant="secondary">Configurada</Badge>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </TableCell>
+                <TableCell>{formatDate(bucket.time_created)}</TableCell>
+                <TableCell>{formatDate(bucket.updated)}</TableCell>
+              </TableRow>
+            ))}
+            {visibleBuckets.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={8} className="text-center text-muted-foreground">
+                  {data.buckets.length === 0
+                    ? 'Nenhum bucket encontrado neste projeto.'
+                    : 'Nenhum bucket encontrado com esse filtro.'}
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </Panel>
     </div>
   )
 }

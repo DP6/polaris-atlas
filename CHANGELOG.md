@@ -41,6 +41,17 @@ de retenção em trapézios com rótulo por fora.
   filterRow=…>`. Roll pras outras ~20 tabelas soltas na R2-3.
 - `design-system.md` (linha do componente + `.dp6-panel` implícito em §Vida).
 
+### R2-3 — `feat/r2-panel-rollout` (só front-end)
+
+- `<Panel>` nas tabelas soltas de Storage (`BucketsPage`, `WastePage`,
+  `BucketBrowserPage`), Freshness (`DatasetFreshnessTable`,
+  `TableFreshnessTable`) e Governança (`OrphansPage`). Filtro vai pro
+  slot `filterRow` (dentro do painel). Sem `index.css`.
+- Admin (`AdminUsageTab`/seções) fica pra R2-5 e FinOps
+  (`FinOpsPage`/`BudgetPage`) pra R2-12 — essas telas são reescritas lá e
+  já nascem em `Panel`. `QualityFolderComparisonPage` não entrou: já é
+  bloco estruturado (chart em box + tabela sob um `<h3>` real).
+
 ## Refresh visual do Hub — fundação de tokens (2026-09)
 
 Primeira fatia do refresh visual (brief:

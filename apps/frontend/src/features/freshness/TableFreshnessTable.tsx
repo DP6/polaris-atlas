@@ -1,5 +1,6 @@
 import { Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { Panel } from '@/components/Panel'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Input } from '@/components/ui/input'
@@ -69,42 +70,44 @@ export function TableFreshnessTable({ tables }: { tables: TableFreshness[] }) {
   }, [tables, nameFilter, slaFilter, sortKey, sortDir])
 
   return (
-    <>
-      <div className="mb-3 flex flex-wrap items-center gap-3">
-        <div className="relative min-w-[220px] flex-1">
-          <Search
-            size={14}
-            className="-translate-y-1/2 absolute top-1/2 left-2.5 text-muted-foreground"
-          />
-          <Input
-            value={nameFilter}
-            onChange={(e) => setNameFilter(e.target.value)}
-            placeholder="Filtrar por nome…"
-            className="pl-8"
-          />
+    <Panel
+      filterRow={
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative min-w-[220px] flex-1">
+            <Search
+              size={14}
+              className="-translate-y-1/2 absolute top-1/2 left-2.5 text-muted-foreground"
+            />
+            <Input
+              value={nameFilter}
+              onChange={(e) => setNameFilter(e.target.value)}
+              placeholder="Filtrar por nome…"
+              className="pl-8"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {([SLA_FILTER_ALL, ...SLA_ORDER] as const).map((filter) => (
+              <button
+                key={filter}
+                type="button"
+                onClick={() => setSlaFilter(filter)}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                  slaFilter === filter
+                    ? 'border-primary bg-primary/10 text-foreground'
+                    : 'border-border text-muted-foreground hover:bg-muted',
+                )}
+              >
+                {filter !== SLA_FILTER_ALL && (
+                  <span className={cn('size-2 rounded-full', SLA_FILL_COLOR[filter])} />
+                )}
+                {filter === SLA_FILTER_ALL ? 'Todos' : SLA_SHORT_LABELS[filter]}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {([SLA_FILTER_ALL, ...SLA_ORDER] as const).map((filter) => (
-            <button
-              key={filter}
-              type="button"
-              onClick={() => setSlaFilter(filter)}
-              className={cn(
-                'flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-                slaFilter === filter
-                  ? 'border-primary bg-primary/10 text-foreground'
-                  : 'border-border text-muted-foreground hover:bg-muted',
-              )}
-            >
-              {filter !== SLA_FILTER_ALL && (
-                <span className={cn('size-2 rounded-full', SLA_FILL_COLOR[filter])} />
-              )}
-              {filter === SLA_FILTER_ALL ? 'Todos' : SLA_SHORT_LABELS[filter]}
-            </button>
-          ))}
-        </div>
-      </div>
-
+      }
+    >
       <Table>
         <TableHeader>
           <TableRow>
@@ -179,6 +182,6 @@ export function TableFreshnessTable({ tables }: { tables: TableFreshness[] }) {
           )}
         </TableBody>
       </Table>
-    </>
+    </Panel>
   )
 }

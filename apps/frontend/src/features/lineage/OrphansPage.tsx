@@ -7,6 +7,7 @@ import { ChoiceToggle } from '@/components/ChoiceToggle'
 import { DatasetScopeGate } from '@/components/DatasetScopeGate'
 import { LoadingState } from '@/components/LoadingState'
 import { PageHeader } from '@/components/PageHeader'
+import { Panel } from '@/components/Panel'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { Button } from '@/components/ui/button'
@@ -181,98 +182,102 @@ export function OrphansPage() {
 
       {data.warning && <WarningCallout>{data.warning}</WarningCallout>}
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative min-w-[220px] flex-1">
-          <Search
-            size={14}
-            className="-translate-y-1/2 absolute top-1/2 left-2.5 text-muted-foreground"
-          />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Filtrar por nome da tabela…"
-            className="pl-8"
-          />
-        </div>
-        <Select
-          value={datasetFilter}
-          onValueChange={(value) => setDatasetFilter(value ?? DATASET_FILTER_ALL)}
-        >
-          <SelectTrigger className="w-52">
-            <SelectValue>
-              {(value: string) => (value === DATASET_FILTER_ALL ? 'Todos os datasets' : value)}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={DATASET_FILTER_ALL}>Todos os datasets</SelectItem>
-            {datasets.map((dataset) => (
-              <SelectItem key={dataset} value={dataset}>
-                {dataset}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <SortableTableHead
-              label="Dataset"
-              active={sortKey === 'dataset_id'}
-              direction={sortDir}
-              onClick={() => toggleSort('dataset_id')}
-            />
-            <SortableTableHead
-              label="Tabela"
-              active={sortKey === 'table_id'}
-              direction={sortDir}
-              onClick={() => toggleSort('table_id')}
-            />
-            <SortableTableHead
-              label="Tamanho"
-              active={sortKey === 'size_bytes'}
-              direction={sortDir}
-              onClick={() => toggleSort('size_bytes')}
-              align="right"
-            />
-            <SortableTableHead
-              label="Custo de storage estimado/mês"
-              active={sortKey === 'estimated_monthly_storage_cost_usd'}
-              direction={sortDir}
-              onClick={() => toggleSort('estimated_monthly_storage_cost_usd')}
-              align="right"
-            />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {visibleOrphans.map((orphan) => (
-            <TableRow key={`${data.project_id}.${orphan.dataset_id}.${orphan.table_id}`}>
-              <TableCell>
-                <Link to={`/datasets/${orphan.dataset_id}`} className={linkClass}>
-                  {data.project_id}.{orphan.dataset_id}
-                </Link>
-              </TableCell>
-              <TableCell className="font-medium">{orphan.table_id}</TableCell>
-              <TableCell className="text-right text-muted-foreground">
-                {formatBytes(orphan.size_bytes)}
-              </TableCell>
-              <TableCell className="text-right font-medium">
-                {formatUsd(orphan.estimated_monthly_storage_cost_usd)}
-              </TableCell>
-            </TableRow>
-          ))}
-          {visibleOrphans.length === 0 && (
+      <Panel
+        filterRow={
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative min-w-[220px] flex-1">
+              <Search
+                size={14}
+                className="-translate-y-1/2 absolute top-1/2 left-2.5 text-muted-foreground"
+              />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Filtrar por nome da tabela…"
+                className="pl-8"
+              />
+            </div>
+            <Select
+              value={datasetFilter}
+              onValueChange={(value) => setDatasetFilter(value ?? DATASET_FILTER_ALL)}
+            >
+              <SelectTrigger className="w-52">
+                <SelectValue>
+                  {(value: string) => (value === DATASET_FILTER_ALL ? 'Todos os datasets' : value)}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={DATASET_FILTER_ALL}>Todos os datasets</SelectItem>
+                {datasets.map((dataset) => (
+                  <SelectItem key={dataset} value={dataset}>
+                    {dataset}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        }
+      >
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={4} className="text-center text-muted-foreground">
-                {data.orphans.length === 0
-                  ? 'Nenhuma tabela sem consumidor encontrada.'
-                  : 'Nenhuma tabela encontrada com esse filtro.'}
-              </TableCell>
+              <SortableTableHead
+                label="Dataset"
+                active={sortKey === 'dataset_id'}
+                direction={sortDir}
+                onClick={() => toggleSort('dataset_id')}
+              />
+              <SortableTableHead
+                label="Tabela"
+                active={sortKey === 'table_id'}
+                direction={sortDir}
+                onClick={() => toggleSort('table_id')}
+              />
+              <SortableTableHead
+                label="Tamanho"
+                active={sortKey === 'size_bytes'}
+                direction={sortDir}
+                onClick={() => toggleSort('size_bytes')}
+                align="right"
+              />
+              <SortableTableHead
+                label="Custo de storage estimado/mês"
+                active={sortKey === 'estimated_monthly_storage_cost_usd'}
+                direction={sortDir}
+                onClick={() => toggleSort('estimated_monthly_storage_cost_usd')}
+                align="right"
+              />
             </TableRow>
-          )}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {visibleOrphans.map((orphan) => (
+              <TableRow key={`${data.project_id}.${orphan.dataset_id}.${orphan.table_id}`}>
+                <TableCell>
+                  <Link to={`/datasets/${orphan.dataset_id}`} className={linkClass}>
+                    {data.project_id}.{orphan.dataset_id}
+                  </Link>
+                </TableCell>
+                <TableCell className="font-medium">{orphan.table_id}</TableCell>
+                <TableCell className="text-right text-muted-foreground">
+                  {formatBytes(orphan.size_bytes)}
+                </TableCell>
+                <TableCell className="text-right font-medium">
+                  {formatUsd(orphan.estimated_monthly_storage_cost_usd)}
+                </TableCell>
+              </TableRow>
+            ))}
+            {visibleOrphans.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center text-muted-foreground">
+                  {data.orphans.length === 0
+                    ? 'Nenhuma tabela sem consumidor encontrada.'
+                    : 'Nenhuma tabela encontrada com esse filtro.'}
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </Panel>
     </div>
   )
 }
