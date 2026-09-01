@@ -102,7 +102,11 @@ export function DatasetScopeGate({
         {extraControls}
 
         <div>
-          <Button onClick={() => onRun([...selected])} disabled={selected.size === 0 || isRunning}>
+          <Button
+            className="dp6-gradient-primary"
+            onClick={() => onRun([...selected])}
+            disabled={selected.size === 0 || isRunning}
+          >
             {isRunning ? 'Executando…' : runLabel}
           </Button>
           {selected.size === 0 && (

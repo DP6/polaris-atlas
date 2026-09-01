@@ -99,6 +99,12 @@ Checagem de backend: `description` de dataset **é** mudança de backend
   `ProfilingDialog`, `LoginAnalyticsSection`, `AccessRequestAnalyticsSection`.
   As mini-stat rows à mão de `PiiTab`/`FinOpsPage` (readout de dry-run,
   não usam `MetricTile`) ficaram fora — converter é refactor à parte.
+- **`feat/fe-refresh-primary-cta`** (PR 10): `.dp6-gradient-primary`
+  (gradiente + inset ring + glow) nos CTAs herói dos fluxos
+  config→executar→resultado: `DatasetScopeGate` (cobre OrphansPage etc.),
+  `ProfilingDialog` "Executar profile", `ColumnTypeSuggestionsTab`
+  "Escanear", `FinOpsPage` "Executar". Opt-in via `className` — a
+  primitiva `ui/button` continua intocada.
 
 ---
 

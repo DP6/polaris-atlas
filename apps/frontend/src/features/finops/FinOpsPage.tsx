@@ -180,6 +180,7 @@ function PartitionCandidatesTab({ projectId }: { projectId: string | undefined }
           />
           <div>
             <Button
+              className="dp6-gradient-primary"
               onClick={() => {
                 setHasRun(true)
                 setScopeOpen(false)

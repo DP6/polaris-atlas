@@ -300,6 +300,7 @@ export function ProfilingDialog({
                     {estimateMutation.isPending ? 'Estimando…' : 'Estimar custo'}
                   </Button>
                   <Button
+                    className="dp6-gradient-primary"
                     disabled={runMutation.isPending}
                     onClick={() => runMutation.mutate(buildRequest())}
                   >
