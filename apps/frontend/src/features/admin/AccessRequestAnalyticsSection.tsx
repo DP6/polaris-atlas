@@ -1,3 +1,4 @@
+import { CheckCircle2, MessageSquare } from 'lucide-react'
 import {
   Bar,
   BarChart,
@@ -48,10 +49,15 @@ export function AccessRequestAnalyticsSection() {
     <CollapsibleSection title="Solicitações de acesso">
       <KpiCards
         items={[
-          { label: 'Total de pedidos', value: String(totalRequests) },
+          {
+            label: 'Total de pedidos',
+            value: String(totalRequests),
+            icon: <MessageSquare size={14} />,
+          },
           {
             label: 'Taxa de aprovação',
             value: approval_rate === null ? '—' : `${approval_rate.toFixed(1)}%`,
+            icon: <CheckCircle2 size={14} />,
           },
         ]}
       />

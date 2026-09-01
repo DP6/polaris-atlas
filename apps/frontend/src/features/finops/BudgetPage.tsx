@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { Calendar, ChevronDown, ChevronUp, DollarSign, Target, TrendingUp } from 'lucide-react'
 import { Fragment, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -169,18 +169,28 @@ export function BudgetPage() {
 
           <MetricGrid>
             {[
-              { label: 'Custo até agora', value: formatUsd(data.projection.cost_so_far_usd) },
-              { label: 'Média diária', value: formatUsd(data.projection.daily_average_usd) },
+              {
+                label: 'Custo até agora',
+                value: formatUsd(data.projection.cost_so_far_usd),
+                icon: <DollarSign size={14} />,
+              },
+              {
+                label: 'Média diária',
+                value: formatUsd(data.projection.daily_average_usd),
+                icon: <TrendingUp size={14} />,
+              },
               {
                 label: 'Projeção do mês',
                 value: formatUsd(data.projection.projected_month_total_usd),
+                icon: <Target size={14} />,
               },
               {
                 label: 'Dias decorridos',
                 value: `${data.projection.days_elapsed} de ${data.projection.days_in_month}`,
+                icon: <Calendar size={14} />,
               },
             ].map((item) => (
-              <MetricTile key={item.label} label={item.label} value={item.value} />
+              <MetricTile key={item.label} label={item.label} value={item.value} icon={item.icon} />
             ))}
           </MetricGrid>
 

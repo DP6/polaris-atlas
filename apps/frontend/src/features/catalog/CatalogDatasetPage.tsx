@@ -1,4 +1,4 @@
-import { Star } from 'lucide-react'
+import { AlignJustify, Clock, Eye, HardDrive, MapPin, Star, Table2 } from 'lucide-react'
 import { useLocation, useParams } from 'react-router-dom'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { LoadingState } from '@/components/LoadingState'
@@ -88,14 +88,31 @@ export function CatalogDatasetPage() {
 
       <KpiCards
         items={[
-          { label: 'Região', value: tablesQuery.data.location },
-          { label: 'Tabelas', value: String(datasetSummary?.total_tables ?? 0) },
-          { label: 'Views', value: String(datasetSummary?.total_views ?? 0) },
-          { label: 'Tamanho', value: `${(datasetSummary?.total_size_gb ?? 0).toFixed(2)} GB` },
-          { label: 'Linhas', value: formatNumber(datasetSummary?.total_rows ?? null) },
+          { label: 'Região', value: tablesQuery.data.location, icon: <MapPin size={14} /> },
+          {
+            label: 'Tabelas',
+            value: String(datasetSummary?.total_tables ?? 0),
+            icon: <Table2 size={14} />,
+          },
+          {
+            label: 'Views',
+            value: String(datasetSummary?.total_views ?? 0),
+            icon: <Eye size={14} />,
+          },
+          {
+            label: 'Tamanho',
+            value: `${(datasetSummary?.total_size_gb ?? 0).toFixed(2)} GB`,
+            icon: <HardDrive size={14} />,
+          },
+          {
+            label: 'Linhas',
+            value: formatNumber(datasetSummary?.total_rows ?? null),
+            icon: <AlignJustify size={14} />,
+          },
           {
             label: 'Freshness',
             value: worstStatus ? SLA_LABELS[worstStatus] : '—',
+            icon: <Clock size={14} />,
             alert: worstStatus === 'stale' || worstStatus === 'warning_7d_1m',
           },
         ]}

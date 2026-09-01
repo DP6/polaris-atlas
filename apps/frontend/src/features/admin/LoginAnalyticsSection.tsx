@@ -1,3 +1,4 @@
+import { Calendar, CalendarDays, UserCircle, Users } from 'lucide-react'
 import {
   CartesianGrid,
   Line,
@@ -89,10 +90,26 @@ export function LoginAnalyticsSection() {
     <CollapsibleSection title="Acessos ao Hub">
       <KpiCards
         items={[
-          { label: 'Acessos hoje', value: String(today?.login_count ?? 0) },
-          { label: 'Usuários únicos hoje', value: String(today?.unique_users ?? 0) },
-          { label: 'Acessos esta semana', value: String(thisWeek?.login_count ?? 0) },
-          { label: 'Acessos este mês', value: String(thisMonth?.login_count ?? 0) },
+          {
+            label: 'Acessos hoje',
+            value: String(today?.login_count ?? 0),
+            icon: <Users size={14} />,
+          },
+          {
+            label: 'Usuários únicos hoje',
+            value: String(today?.unique_users ?? 0),
+            icon: <UserCircle size={14} />,
+          },
+          {
+            label: 'Acessos esta semana',
+            value: String(thisWeek?.login_count ?? 0),
+            icon: <Calendar size={14} />,
+          },
+          {
+            label: 'Acessos este mês',
+            value: String(thisMonth?.login_count ?? 0),
+            icon: <CalendarDays size={14} />,
+          },
         ]}
       />
 

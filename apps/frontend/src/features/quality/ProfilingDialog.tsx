@@ -1,3 +1,4 @@
+import { Copy, Gauge, Percent, Table2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { MetricGrid, MetricTile } from '@/components/MetricTile'
 import { SqlPreview } from '@/components/SqlPreview'
@@ -347,23 +348,32 @@ export function ProfilingDialog({
                           {
                             label: 'Amostradas',
                             value: formatNumber(runMutation.data.table_summary.total_sampled_rows),
+                            icon: <Percent size={14} />,
                           },
                           {
                             label: 'Total da tabela',
                             value: formatNumber(runMutation.data.table_summary.total_table_rows),
+                            icon: <Table2 size={14} />,
                           },
                           {
                             label: 'Duplicatas est.',
                             value: formatPercent(
                               runMutation.data.table_summary.estimated_duplicate_pct,
                             ),
+                            icon: <Copy size={14} />,
                           },
                           {
                             label: 'Densidade geral',
                             value: formatPercent(runMutation.data.table_summary.overall_density),
+                            icon: <Gauge size={14} />,
                           },
                         ].map((item) => (
-                          <MetricTile key={item.label} label={item.label} value={item.value} />
+                          <MetricTile
+                            key={item.label}
+                            label={item.label}
+                            value={item.value}
+                            icon={item.icon}
+                          />
                         ))}
                       </MetricGrid>
 

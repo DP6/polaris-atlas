@@ -93,6 +93,12 @@ Checagem de backend: `description` de dataset **é** mudança de backend
   colunas de contagem por faixa (ordenáveis) continuam — a barra é
   adicional. Fecha a história de "mesmo componente nos dois lados" com
   o Catálogo de Dados. Cosmético (sem AC novo).
+- **`feat/fe-refresh-kpi-icons`** (PR 9): ícone no chip de cada KPI
+  (`MetricTile.icon`, mapeamento do brief) — `CatalogDatasetPage`
+  (Região/Tabelas/Views/Tamanho/Linhas/Freshness), `BudgetPage`,
+  `ProfilingDialog`, `LoginAnalyticsSection`, `AccessRequestAnalyticsSection`.
+  As mini-stat rows à mão de `PiiTab`/`FinOpsPage` (readout de dry-run,
+  não usam `MetricTile`) ficaram fora — converter é refactor à parte.
 
 ---
 
