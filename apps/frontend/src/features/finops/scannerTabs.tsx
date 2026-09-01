@@ -3,7 +3,6 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { LoadingState } from '@/components/LoadingState'
-import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { Badge } from '@/components/ui/badge'
@@ -26,7 +25,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { WarningCallout } from '@/components/WarningCallout'
 import { ColumnTypeScopePicker } from '@/features/finops/ColumnTypeScopePicker'
 import {
@@ -34,15 +32,16 @@ import {
   usePartitionCandidates,
   useRunColumnTypeSuggestions,
 } from '@/features/finops/hooks'
-import { useProjectContext } from '@/features/projects/ProjectContext'
 import { useTableFilterSort } from '@/hooks/useTableFilterSort'
 import { formatBytes, formatNumber, formatUsd } from '@/lib/format'
 import { ApiError } from '@/lib/http-client'
 import { cn, linkClass } from '@/lib/utils'
 import type { ColumnTypeCandidate, ColumnTypeSuggestion, PartitionCandidate } from '@/types/finops'
 
-const PARTITION_TAB = 'partition'
-const COLUMN_TYPES_TAB = 'column-types'
+// Os dois "corpos" do scanner de desperdício, exportados pras páginas de
+// sub-rota `/finops/scanner/particionamento` e `/finops/scanner/tipos-coluna`
+// (antes eram abas de `FinOpsPage`, removida na rodada 3).
+
 const DATASET_FILTER_ALL = 'all'
 const ESTIMATE_FILTER_ALL = 'all'
 const ESTIMATE_FILTER_WITH = 'with'
@@ -55,39 +54,6 @@ type EstimateFilter =
 function matchesSearch(datasetId: string, tableId: string, term: string): boolean {
   const needle = term.toLowerCase()
   return tableId.toLowerCase().includes(needle) || datasetId.toLowerCase().includes(needle)
-}
-
-export function FinOpsPage() {
-  const { projectId } = useProjectContext()
-
-  return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
-        back={{ to: '/finops', label: 'Visão geral de FinOps' }}
-        title="FinOps — Scanner de desperdício"
-        description={
-          'Candidatas a particionamento e sugestões de tipo de coluna, com estimativa de custo. ' +
-          'Tabelas sem uso ficou só em Governança > "Tabelas sem consumidor", pra não duplicar a ' +
-          'mesma informação em dois lugares.'
-        }
-      />
-
-      <Tabs defaultValue={PARTITION_TAB}>
-        <TabsList className="w-fit">
-          <TabsTrigger value={PARTITION_TAB}>Candidatas a particionamento</TabsTrigger>
-          <TabsTrigger value={COLUMN_TYPES_TAB}>Tipos de coluna</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value={PARTITION_TAB}>
-          <PartitionCandidatesTab projectId={projectId} />
-        </TabsContent>
-
-        <TabsContent value={COLUMN_TYPES_TAB}>
-          <ColumnTypesTab projectId={projectId} />
-        </TabsContent>
-      </Tabs>
-    </div>
-  )
 }
 
 type PartitionSortKey =
@@ -111,7 +77,7 @@ function comparePartition(
   return a.table_id.localeCompare(b.table_id)
 }
 
-function PartitionCandidatesTab({ projectId }: { projectId: string | undefined }) {
+export function PartitionCandidatesTab({ projectId }: { projectId: string | undefined }) {
   const [selectedScope, setSelectedScope] = useState<Set<string>>(new Set())
   const [scopeOpen, setScopeOpen] = useState(true)
   const [hasRun, setHasRun] = useState(false)
@@ -399,7 +365,7 @@ function ColumnTypeSuggestionsList({ suggestions }: { suggestions: ColumnTypeSug
   )
 }
 
-function ColumnTypesTab({ projectId }: { projectId: string | undefined }) {
+export function ColumnTypesTab({ projectId }: { projectId: string | undefined }) {
   const [samplePercent, setSamplePercent] = useState(10)
   const [selectedScope, setSelectedScope] = useState<Set<string>>(new Set())
   const [scopeOpen, setScopeOpen] = useState(true)

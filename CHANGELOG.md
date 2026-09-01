@@ -57,6 +57,22 @@ barras verticais sempre visíveis.
   componente — sem mudança.
 - Doc-sync: `design-system.md`, `docs/specs/freshness.md`.
 
+### R3-finops-overview — `feat/r3-finops-overview` (só front-end)
+
+- `DatasetSidebar`: NavLink **"Visão geral"** (`Gauge`, `to="/finops" end`) como 1º filho
+  do grupo FinOps.
+- `FinOpsOverviewPage`: o `OptionCardGrid` (Scanner / Budget / Configurar budget) subiu
+  pra logo após o `PageHeader`, antes dos big numbers.
+
+### R3-finops-scanner-cards — `feat/r3-finops-scanner-cards` (só front-end)
+
+- `/finops/scanner` deixou de ser 2 abas e virou **overview de 2 cards** (`ScannerOverviewPage`)
+  → sub-rotas `/finops/scanner/particionamento` (`PartitionCandidatesPage`) e
+  `/finops/scanner/tipos-coluna` (`ColumnTypesPage`), cada uma com `PageHeader` + voltar.
+- `FinOpsPage.tsx` → renomeado `scannerTabs.tsx`; os dois corpos (`PartitionCandidatesTab`,
+  `ColumnTypesTab`) agora são `export`, o wrapper `FinOpsPage` + `<Tabs>` foram removidos.
+- `router.tsx`: 3 rotas no lugar de 1. Doc-sync: `finops-column-types.md`.
+
 ## Refresh visual do Hub — rodada 2 (2026-09)
 
 Segunda rodada, sobre as lacunas que a rodada 1 marcou como "especificado,

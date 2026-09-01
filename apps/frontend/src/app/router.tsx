@@ -9,8 +9,10 @@ import { CatalogDatasetPage } from '@/features/catalog/CatalogDatasetPage'
 import { CatalogOverviewPage } from '@/features/catalog/CatalogOverviewPage'
 import { SearchPage } from '@/features/catalog/SearchPage'
 import { BudgetPage } from '@/features/finops/BudgetPage'
+import { ColumnTypesPage } from '@/features/finops/ColumnTypesPage'
 import { FinOpsOverviewPage } from '@/features/finops/FinOpsOverviewPage'
-import { FinOpsPage } from '@/features/finops/FinOpsPage'
+import { PartitionCandidatesPage } from '@/features/finops/PartitionCandidatesPage'
+import { ScannerOverviewPage } from '@/features/finops/ScannerOverviewPage'
 import { DatasetFreshnessPage } from '@/features/freshness/DatasetFreshnessPage'
 import { FreshnessPage } from '@/features/freshness/FreshnessPage'
 import { GovernanceOverviewPage } from '@/features/governance/GovernanceOverviewPage'
@@ -61,7 +63,9 @@ export function AppRoutes() {
             <Route path="access" element={<AccessAnalysisPage />} />
           </Route>
           <Route path="finops" element={<FinOpsOverviewPage />} />
-          <Route path="finops/scanner" element={<FinOpsPage />} />
+          <Route path="finops/scanner" element={<ScannerOverviewPage />} />
+          <Route path="finops/scanner/particionamento" element={<PartitionCandidatesPage />} />
+          <Route path="finops/scanner/tipos-coluna" element={<ColumnTypesPage />} />
           <Route path="finops/budget" element={<BudgetPage />} />
           <Route path="search" element={<SearchPage />} />
           <Route path="storage" element={<BucketsPage />} />

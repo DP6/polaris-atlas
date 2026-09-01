@@ -222,7 +222,8 @@ Frontend:
 apps/frontend/src/
 ├── components/ui/checkbox.tsx           # novo, via shadcn CLI
 ├── features/finops/
-│   ├── FinOpsPage.tsx                    # + aba "Tipos de coluna" (ColumnTypesTab)
+│   ├── scannerTabs.tsx                   # ColumnTypesTab (era aba de FinOpsPage; rodada 3 → sub-rota)
+│   ├── ColumnTypesPage.tsx               # rodada 3 — /finops/scanner/tipos-coluna (PageHeader + ColumnTypesTab)
 │   ├── ColumnTypeScopePicker.tsx          # novo — datasets com checkbox, expande em tabelas
 │   ├── ColumnTypeSuggestionBadges.tsx     # novo — badges de sugestão, compartilhado entre as duas telas
 │   ├── ColumnTypeSuggestionsTab.tsx       # novo — aba do modal de profiling (por tabela)
@@ -232,9 +233,11 @@ apps/frontend/src/
 └── types/finops.ts                        # + Column Type*
 ```
 
-Aba de projeto (`FinOpsPage.tsx`): fluxo em duas etapas
-(estimar → escanear) com `ColumnTypeScopePicker` antes dos botões — sem
-seleção, botões ficam desabilitados. Tabela de resultado agrupada por
+Tela de projeto (`scannerTabs.tsx::ColumnTypesTab`, montada em
+`ColumnTypesPage` na sub-rota `/finops/scanner/tipos-coluna` — rodada 3;
+antes era aba de `FinOpsPage`): fluxo em duas etapas (estimar → escanear)
+com `ColumnTypeScopePicker` antes dos botões — sem seleção, botões ficam
+desabilitados. Tabela de resultado agrupada por
 tabela (dataset.tabela → sugestões como badges via
 `ColumnTypeSuggestionBadges`), reaproveitando `useTableFilterSort`.
 
