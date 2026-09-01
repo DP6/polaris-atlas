@@ -1,56 +1,77 @@
-import { SLA_FILL_COLOR, SLA_LABELS, SLA_ORDER } from '@/features/freshness/sla'
+import { SLA_ORDER, SLA_SEVERITY } from '@/features/freshness/sla'
 import { cn } from '@/lib/utils'
-import type { FreshnessCounts } from '@/types/freshness'
+import type { FreshnessCounts, SLAStatus } from '@/types/freshness'
 
-// Barra horizontal empilhada: proporção das tabelas de um dataset entre as
-// 6 faixas de SLA de freshness. Componente compartilhado — os cards do
-// Catálogo de Dados e o Freshness usam o MESMO (brief §"Freshness" e
-// §"Catálogo de Dados"). Sem query nova: consome `FreshnessCounts`, que já
-// vem do cache D-1 do domínio de freshness.
+// Distribuição de freshness em 3 BARRAS VERTICAIS (verde / amarelo /
+// vermelho) — as 3 sempre presentes, o que varia é a ALTURA de cada uma
+// (∝ contagem). As 6 faixas de SLA são colapsadas nas 3 severidades via
+// `SLA_SEVERITY`. Componente compartilhado: cards do Catálogo de Dados e
+// o Freshness usam o mesmo (sem query nova — consome `FreshnessCounts`,
+// que vem do cache D-1 do domínio de freshness).
 //
-// Acessível como `role="img"` + `aria-label`/`title` com a decomposição
-// completa (mouse vê o `title` nativo). Um tooltip flutuante por segmento
-// entra na versão maior do Freshness, não aqui no mini de card.
+// Acessível como `role="img"` + `aria-label`/`title` com a decomposição.
+
+type Severity = 'ok' | 'warn' | 'error'
+
+const SEVERITY_ORDER: Severity[] = ['ok', 'warn', 'error']
+const SEVERITY_FILL: Record<Severity, string> = {
+  ok: 'bg-status-ok',
+  warn: 'bg-status-warn',
+  error: 'bg-status-error',
+}
+const SEVERITY_LABEL: Record<Severity, string> = {
+  ok: 'no prazo',
+  warn: 'atrasadas',
+  error: 'muito atrasadas',
+}
+// Faixa com 0 ainda aparece como um traço — nunca some.
+const MIN_HEIGHT_PCT = 6
+
+function bySeverity(counts: FreshnessCounts): Record<Severity, number> {
+  const acc: Record<Severity, number> = { ok: 0, warn: 0, error: 0 }
+  for (const status of SLA_ORDER as SLAStatus[]) {
+    acc[SLA_SEVERITY[status]] += counts[status]
+  }
+  return acc
+}
+
 export function SlaDistributionBar({
   counts,
   className,
-  height = 'h-2',
+  height = 'h-10',
 }: {
   counts: FreshnessCounts
   className?: string
-  // Classe de altura Tailwind (`h-2` no card, `h-3`/`h-4` em painel maior).
+  // Classe de altura Tailwind do container (`h-8` em célula de tabela,
+  // `h-10`/`h-12` em card/painel).
   height?: string
 }) {
-  const total = SLA_ORDER.reduce((sum, status) => sum + counts[status], 0)
-  const label = summarize(counts, total)
+  const grouped = bySeverity(counts)
+  const total = SEVERITY_ORDER.reduce((sum, s) => sum + grouped[s], 0)
+  const max = Math.max(...SEVERITY_ORDER.map((s) => grouped[s]), 1)
+  const label =
+    total === 0
+      ? 'Sem tabelas monitoradas para freshness'
+      : `Distribuição de freshness: ${SEVERITY_ORDER.map((s) => `${grouped[s]} ${SEVERITY_LABEL[s]}`).join(', ')}`
 
   return (
     <div
-      className={cn('flex w-full overflow-hidden rounded-pill bg-muted', height, className)}
+      className={cn('flex w-full items-end gap-1', height, className)}
       role="img"
       aria-label={label}
       title={label}
     >
-      {total > 0 &&
-        SLA_ORDER.map((status) => {
-          const value = counts[status]
-          if (value === 0) return null
-          return (
-            <div
-              key={status}
-              style={{ width: `${(value / total) * 100}%` }}
-              className={cn('h-full', SLA_FILL_COLOR[status])}
-            />
-          )
-        })}
+      {SEVERITY_ORDER.map((severity) => {
+        const value = grouped[severity]
+        const pct = Math.max((value / max) * 100, MIN_HEIGHT_PCT)
+        return (
+          <div
+            key={severity}
+            className={cn('flex-1 rounded-sm', SEVERITY_FILL[severity])}
+            style={{ height: `${pct}%` }}
+          />
+        )
+      })}
     </div>
   )
-}
-
-function summarize(counts: FreshnessCounts, total: number): string {
-  if (total === 0) return 'Sem tabelas monitoradas para freshness'
-  const parts = SLA_ORDER.filter((status) => counts[status] > 0).map(
-    (status) => `${counts[status]} em "${SLA_LABELS[status]}"`,
-  )
-  return `Distribuição de SLA: ${parts.join(', ')}`
 }

@@ -191,8 +191,8 @@ export function DatasetFreshnessTable({ datasets }: { datasets: DatasetFreshness
               </TableCell>
               <TableCell>{dataset.location}</TableCell>
               <TableCell className="text-right">{dataset.total_tables}</TableCell>
-              <TableCell className="min-w-[120px]">
-                <SlaDistributionBar counts={dataset} />
+              <TableCell className="min-w-[90px]">
+                <SlaDistributionBar counts={dataset} height="h-8" />
               </TableCell>
               {SLA_ORDER.map((status) => {
                 const value = dataset[status]

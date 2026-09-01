@@ -24,9 +24,9 @@ export function SlaRow({ counts }: { counts: FreshnessCounts }) {
           )
         })}
       </div>
-      {/* Mesma barra empilhada dos cards do Catálogo de Dados — visão
+      {/* Mesmas 3 barras verticais dos cards do Catálogo de Dados — visão
           agregada da distribuição de SLA (refresh visual, brief §Freshness). */}
-      <SlaDistributionBar counts={counts} height="h-2.5" />
+      <SlaDistributionBar counts={counts} height="h-12" />
     </div>
   )
 }

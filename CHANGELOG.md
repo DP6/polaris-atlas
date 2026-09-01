@@ -46,6 +46,17 @@ barras verticais sempre visíveis.
   `Σ dataset.total_size_bytes` — campo já existe em `DatasetSummary`, vem de
   `TABLE_STORAGE` no backend, sem agregação nova). Ícone `HardDrive`.
 
+### R3-freshness — `feat/r3-freshness` (só front-end)
+
+- `SlaDistributionBar` reescrito: **3 barras verticais** (verde/amarelo/
+  vermelho — as 6 faixas de SLA colapsadas em `SLA_SEVERITY`) no lugar da
+  barra horizontal empilhada. As 3 **sempre presentes**; varia só a altura
+  (∝ contagem, altura mínima 6% pra faixa com 0). Prop `height` = classe
+  do container. Call sites: `SlaRow` `h-12`, `DatasetFreshnessTable` `h-8`,
+  `DatasetOverviewCard` default `h-10`. `TableFreshnessTable` não usa o
+  componente — sem mudança.
+- Doc-sync: `design-system.md`, `docs/specs/freshness.md`.
+
 ## Refresh visual do Hub — rodada 2 (2026-09)
 
 Segunda rodada, sobre as lacunas que a rodada 1 marcou como "especificado,
