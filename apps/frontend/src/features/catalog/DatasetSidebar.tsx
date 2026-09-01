@@ -404,7 +404,12 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
           </nav>
         </SidebarSection>
 
-        <SidebarSection label="Favoritos" open={favoritesOpen} onOpenChange={setFavoritesOpen}>
+        <SidebarSection
+          label="Favoritos"
+          to="/favoritos"
+          open={favoritesOpen}
+          onOpenChange={setFavoritesOpen}
+        >
           <div className="flex flex-col gap-3">
             {projectFavorites && projectFavorites.length > 0 ? (
               <QuantityPicker value={favoritesLimit} onChange={setFavoritesLimit} />
@@ -509,26 +514,37 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
           </nav>
         </SidebarSection>
 
-        {recentTables && recentTables.length > 0 && (
-          <SidebarSection label="Recentes" open={recentOpen} onOpenChange={setRecentOpen}>
-            <QuantityPicker value={recentLimit} onChange={setRecentLimit} />
-            <nav className="flex flex-col gap-0.5">
-              {recentTables.map((view) => (
-                <Link
-                  key={`${view.dataset_id}.${view.table_id}.${view.viewed_at}`}
-                  to={`/datasets/${view.dataset_id}`}
-                  state={{ highlightTable: view.table_id }}
-                  className="dp6-nav-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-foreground hover:bg-muted"
-                >
-                  <History size={12} className="shrink-0 text-muted-foreground" />
-                  <span className="truncate" title={`${view.dataset_id}.${view.table_id}`}>
-                    {view.dataset_id}.{view.table_id}
-                  </span>
-                </Link>
-              ))}
-            </nav>
-          </SidebarSection>
-        )}
+        <SidebarSection
+          label="Recentes"
+          to="/recentes"
+          open={recentOpen}
+          onOpenChange={setRecentOpen}
+        >
+          {recentTables && recentTables.length > 0 ? (
+            <>
+              <QuantityPicker value={recentLimit} onChange={setRecentLimit} />
+              <nav className="flex flex-col gap-0.5">
+                {recentTables.map((view) => (
+                  <Link
+                    key={`${view.dataset_id}.${view.table_id}.${view.viewed_at}`}
+                    to={`/datasets/${view.dataset_id}`}
+                    state={{ highlightTable: view.table_id }}
+                    className="dp6-nav-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-foreground hover:bg-muted"
+                  >
+                    <History size={12} className="shrink-0 text-muted-foreground" />
+                    <span className="truncate" title={`${view.dataset_id}.${view.table_id}`}>
+                      {view.dataset_id}.{view.table_id}
+                    </span>
+                  </Link>
+                ))}
+              </nav>
+            </>
+          ) : (
+            <p className="px-3 text-sm text-muted-foreground">
+              Nenhuma tabela aberta recentemente.
+            </p>
+          )}
+        </SidebarSection>
       </SidebarServiceGroup>
 
       <SidebarServiceGroup

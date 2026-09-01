@@ -86,6 +86,16 @@ barras verticais sempre visíveis.
   passam `lookback_days`; copies "mês corrente" → "período" / "Janela analisada".
 - `pnpm lint` + `pnpm build` verdes.
 
+### R3-fav-recent — `feat/r3-fav-recent` (só front-end)
+
+- Novas rotas `/favoritos` (`FavoritesPage`) e `/recentes` (`RecentsPage`) — a lista
+  completa no `<main>`, reusando `useFavorites`/`useUpdateFavoriteNickname`/`useHistory`,
+  `Panel`, `EmptyState`, `FavoriteNickname`.
+- `DatasetSidebar`: as `SidebarSection` "Favoritos" e "Recentes" ganharam `to=` (nome →
+  página; chevron continua abrindo a lista inline). "Recentes" deixou de ser escondida
+  quando vazia (mostra um aviso).
+- `pnpm lint` + `pnpm build` verdes.
+
 ## Refresh visual do Hub — rodada 2 (2026-09)
 
 Segunda rodada, sobre as lacunas que a rodada 1 marcou como "especificado,

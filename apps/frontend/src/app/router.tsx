@@ -8,6 +8,8 @@ import { RequireAuth } from '@/features/auth/RequireAuth'
 import { CatalogDatasetPage } from '@/features/catalog/CatalogDatasetPage'
 import { CatalogOverviewPage } from '@/features/catalog/CatalogOverviewPage'
 import { SearchPage } from '@/features/catalog/SearchPage'
+import { FavoritesPage } from '@/features/favorites/FavoritesPage'
+import { RecentsPage } from '@/features/favorites/RecentsPage'
 import { BudgetPage } from '@/features/finops/BudgetPage'
 import { ColumnTypesPage } from '@/features/finops/ColumnTypesPage'
 import { FinOpsOverviewPage } from '@/features/finops/FinOpsOverviewPage'
@@ -44,6 +46,8 @@ export function AppRoutes() {
         <Route path="/" element={<AppLayout />}>
           <Route index element={<CatalogOverviewPage />} />
           <Route path="datasets/:datasetId" element={<CatalogDatasetPage />} />
+          <Route path="favoritos" element={<FavoritesPage />} />
+          <Route path="recentes" element={<RecentsPage />} />
           <Route path="governanca" element={<GovernanceOverviewPage />} />
           <Route path="freshness" element={<FreshnessPage />} />
           <Route path="freshness/:datasetId" element={<DatasetFreshnessPage />} />
