@@ -621,6 +621,29 @@ def test_get_budget_sets_warning_when_no_events(monkeypatch):
     assert "proj" in result.warning
 
 
+def test_get_budget_without_user_email_leaves_budget_target_none(monkeypatch):
+    _stub_budget_events(monkeypatch, [_event([("proj", "RAW", "a")], _now(), total_billed_bytes=1)])
+
+    result = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj")
+
+    assert result.budget_target_usd is None
+
+
+def test_get_budget_injects_user_budget_target_from_firestore(monkeypatch):
+    _stub_budget_events(monkeypatch, [_event([("proj", "RAW", "a")], _now(), total_billed_bytes=1)])
+    monkeypatch.setattr(
+        service.budget_repository,
+        "get_project_budget_amount",
+        lambda client, email, project_id: 250.0,
+    )
+
+    result = service.get_budget(
+        MagicMock(), MagicMock(), MagicMock(), "proj", user_email="a@dp6.com.br"
+    )
+
+    assert result.budget_target_usd == 250.0
+
+
 # --- _pick_suggestion ----------------------------------------------------------
 
 

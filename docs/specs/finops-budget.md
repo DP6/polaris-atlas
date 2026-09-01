@@ -1,13 +1,14 @@
 # Spec — Domínio: FinOps — Budget de custo
 
-**Versão:** 1.4 (cache de audit log **incremental** — mesmo mecanismo de
-`finops-waste-scanner.md` v1.4; request path não escaneia mais ao vivo.
-A janela do cache subiu de 30 → **31 dias**, o que faz o
-`_BUDGET_RETENTION_CAVEAT` do dia 31 deixar de ser sempre-verdadeiro —
-ver ASM-001)
+**Versão:** 1.5 (refresh visual R2-9 — CRUD de meta de custo por usuário:
+novo `domains/budget` no Firestore, endpoints GET/PUT/DELETE
+`/finops/{p}/budgets`, e `budget_target_usd` injetado no
+`GET /finops/{p}/budget`. v1.4: cache de audit log **incremental** — mesmo
+mecanismo de `finops-waste-scanner.md` v1.4; request path não escaneia
+mais ao vivo. A janela do cache subiu de 30 → **31 dias** — ver ASM-001)
 **Status:** Aprovada
 **Fase:** 4 — FinOps (segunda frente: budget por dataset/projeto)
-**Última atualização:** 2026-08-28
+**Última atualização:** 2026-09-01
 
 ---
 
@@ -165,9 +166,72 @@ janela fixa como o scanner de desperdício.
     "daily_average_usd": 0.592,
     "projected_month_total_usd": 18.35
   },
+  "budget_target_usd": 250.0,
   "warning": null
 }
 ```
+
+`budget_target_usd` (v1.5, refresh visual R2-9) — a meta de custo mensal
+que **o usuário logado** cadastrou pra este projeto (escopo `project`),
+lida do Firestore (ver "Cadastro de budget"). `null` quando não há
+cadastro — o `ComboChart` do FinOps simplesmente não desenha a linha de
+referência. Só o escopo `project` alimenta este campo; budgets de
+dataset/tabela aparecem só no CRUD abaixo (a linha do gráfico geral do
+projeto não teria como representar N metas de granularidade menor).
+Depende de `get_current_user` (o endpoint deixou de ser puramente
+project-scoped — passou a ter recorte por usuário).
+
+---
+
+## Cadastro de budget (CRUD — v1.5, refresh visual R2-9)
+
+Metas de custo **por usuário**, não compartilhadas (ASM-005 do brief /
+ASM-002 abaixo). Firestore, coleção `users/{email}/budgets/{doc_id}` —
+mesmo lugar e mesmo racional dos favoritos (`domains/favorites`), sem
+superfície de permissão nova. `doc_id` determinístico pelo alvo:
+
+| `scope` | `doc_id` | Campos exigidos no upsert |
+|---|---|---|
+| `project` | `{project_id}` | — |
+| `dataset` | `{project_id}__{dataset_id}` | `dataset_id` |
+| `table` | `{project_id}__{dataset_id}__{table_id}` | `dataset_id` + `table_id` |
+
+Registro salvo: `{ project_id, scope, dataset_id, table_id, amount_usd,
+period: "month", created_by, created_at, updated_at }`. `amount_usd` é
+sempre mensal nesta fase (`period` fixo — cadastro simples). `created_at`
+/ `created_by` são **preservados** num upsert repetido do mesmo alvo
+(reeditar o valor não reordena a lista, ordenada por `updated_at` desc,
+nem reatribui autoria) — mesmo comportamento de `favorites.add_favorite`
+pra `added_at`.
+
+### GET /api/v1/finops/{project_id}/budgets
+Lista os budgets do usuário logado no projeto. Filtro por `project_id` é
+in-memory (coleção pequena — um punhado de budgets por usuário — evita
+exigir índice composto no Firestore). Ordenado por `updated_at` desc.
+
+```json
+{ "project_id": "observability-hub-dev",
+  "budgets": [
+    { "project_id": "observability-hub-dev", "scope": "project",
+      "dataset_id": null, "table_id": null, "amount_usd": 250.0,
+      "period": "month", "created_by": "ana@dp6.com.br",
+      "created_at": "2026-09-01T12:00:00Z", "updated_at": "2026-09-01T12:00:00Z" } ] }
+```
+
+### PUT /api/v1/finops/{project_id}/budgets
+Upsert de um budget. Body `{ scope, dataset_id?, table_id?, amount_usd }`
+(`BudgetUpsertRequest`). Validação de coerência escopo×campos no schema
+(422 se `scope=dataset` sem `dataset_id`, `scope=table` sem `table_id`,
+`scope=project` com qualquer um, ou `amount_usd <= 0`). Retorna o
+`BudgetEntry` salvo (200).
+
+### DELETE /api/v1/finops/{project_id}/budgets
+Remove um budget. Query params `scope` (obrigatório), `dataset_id`,
+`table_id`. `204` mesmo se o doc não existia (idempotente, aponta pro
+`doc_id` exato sem query — igual ao DELETE de favoritos).
+
+Os três exigem `require_project_access` (dependency do router, path tem
+`project_id`) **e** `get_current_user` (recorte por usuário).
 
 ---
 
@@ -245,13 +309,19 @@ def get_budget(
 apps/backend/src/observability_hub/
 ├── api/v1/
 │   └── finops.py          # + GET /finops/{project_id}/budget?group_by=...
+│                          # + GET/PUT/DELETE /finops/{project_id}/budgets (CRUD, v1.5)
 ├── domains/finops/
-│   ├── service.py          # + get_budget(), _group_keys()
+│   ├── service.py          # + get_budget(), _group_keys(); get_budget aceita user_email → budget_target_usd
 │   ├── repository.py       # ScanEvent + job_id/principal_email/query_text; get_scan_events_cached() (cache, ver finops-waste-scanner.md v1.4); _parse_table_ref filtra INFORMATION_SCHEMA
-│   └── schemas.py          # + BudgetGroupBy, CostGroup, CostlyQuery, CostProjection, BudgetResponse (+ cache_updated_at)
-└── tests/unit/finops/
-    ├── test_service.py      # + testes de get_budget por dimensão de group_by
-    └── test_repository.py   # + testes de extração de job_id/principal_email/query_text + filtro INFORMATION_SCHEMA
+│   └── schemas.py          # + BudgetGroupBy, CostGroup, CostlyQuery, CostProjection, BudgetResponse (+ cache_updated_at, + budget_target_usd)
+├── domains/budget/          # v1.5 — CRUD de meta de custo por usuário (Firestore, espelha domains/favorites)
+│   ├── schemas.py           # BudgetScope, BudgetEntry, BudgetUpsertRequest, BudgetListResponse
+│   ├── repository.py        # _budget_doc_id, list/upsert/remove_budget, get_project_budget_amount
+│   └── service.py           # wrappers finos sobre repository
+└── tests/unit/
+    ├── finops/test_service.py      # + testes de get_budget por dimensão de group_by + budget_target_usd
+    ├── finops/test_repository.py   # + testes de extração de job_id/principal_email/query_text + filtro INFORMATION_SCHEMA
+    └── budget/{test_repository,test_service}.py  # v1.5 — doc_id por escopo, preservação de created_at, get_project_budget_amount
 ```
 
 Frontend (`apps/frontend/src/features/finops/BudgetPage.tsx`): duas
@@ -331,11 +401,23 @@ usuarios (ASM-005 do brief).
 | AC-FIN-RV-01 | Grafico de custo = combo **coluna (diario) + linha (acumulado)**, com projecao tracejada e linha de budget. | `test_finops_cost_combo_chart` |
 | AC-FIN-RV-02 | Filtros do grafico: dataset, tabela, granularidade (mes/dia), tipo de custo (query / storage / ambos). | `test_finops_cost_chart_filters` |
 | AC-FIN-RV-03 | **Dois scores distintos**: (a) "Eficiencia de custo" geral do projeto (anel composto - ja prototipado); (b) "Score por tabela" individual - coluna "Score" ordenavel (anel compacto + numero) no scanner de desperdicio / Top ofensores **e** anel grande + decomposicao no drill-down da linha (Q-002). | `test_finops_two_distinct_scores` |
-| AC-FIN-RV-04 | Cadastro de budget com granularidade por **dataset e por tabela**. So cadastro simples - sem convite/aceite/compartilhamento. | `test_budget_granularity_dataset_and_table` |
+| AC-FIN-RV-04 | Cadastro de budget com granularidade por **dataset e por tabela** (`scope=project\|dataset\|table` no CRUD). So cadastro simples - sem convite/aceite/compartilhamento. GET/PUT/DELETE `/finops/{p}/budgets`, por usuario (Firestore). O valor de `scope=project` volta como `budget_target_usd` no `GET /finops/{p}/budget`. | `test_upsert_budget_dataset_scope_uses_two_segment_doc_id`, `test_upsert_request_rejects_dataset_scope_without_dataset_id`, `test_get_budget_injects_user_budget_target_from_firestore` |
 | AC-FIN-RV-05 | "Top ofensores" com mini-grafico de tendencia de 7 dias por linha. | `test_finops_top_offenders_trend` |
+
+Status R2-9 (2026-09): **AC-FIN-RV-04 implementado** (backend CRUD +
+`budget_target_usd`). AC-FIN-RV-01/02/03/05 seguem pendentes (R2-10 =
+`cost-series` pro AC-02; R2-11 = score por tabela pro AC-03; R2-12 = a
+tela `FinOpsOverviewPage` consumindo tudo, pros AC-01/05).
 
 Suposicao **ASM-FIN-RV-01** (aberta): AC-FIN-RV-02/03 podem exigir
 agregacao nova no backend (custo por dataset x dia x tipo; insumos do score
 por tabela). Confirmar na implementacao o que e derivavel do que ja existe
 vs. endpoint/campo novo - com estimativa de custo (dry run) de qualquer
 query BQ nova, regra do CLAUDE.md.
+
+Suposicao **ASM-FIN-RV-02** (confirmada, R2-9): o budget mora em
+`users/{email}/budgets` (por usuario), nao em `projects/{projectId}/budgets`
+(compartilhado). Satisfaz ASM-005 do brief ("sem compartilhamento") sem
+adicionar superficie de permissao nova — cada usuario ve e edita so os
+seus, mesma fronteira dos favoritos. Se um dia o produto quiser budget de
+equipe, e um endpoint/colecao nova, nao uma migracao deste.

@@ -72,6 +72,10 @@ class BudgetResponse(BaseModel):
     total_cost_usd: float
     top_queries: list[CostlyQuery]
     projection: CostProjection
+    # Meta de custo mensal do usuário logado pra este projeto (escopo=project),
+    # lida do Firestore (domains/budget). None = nenhum budget cadastrado —
+    # o gráfico do FinOps simplesmente não desenha a linha de referência.
+    budget_target_usd: float | None = None
     cache_updated_at: datetime | None = None
     warning: str | None = None
 

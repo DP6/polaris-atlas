@@ -3056,3 +3056,29 @@ implementação**
   raiz, engolindo exceção. **"Jobs agendados" fica "—"** (exige integrar
   Scheduled Queries / Data Transfer — fora desta rodada). pytest 786 ok.
 - `lineage.md` §pendente marcada feita. design-system.md.
+
+### R2-9 — `feat/r2-finops-budget-crud` (backend)
+
+- **Novo domínio `domains/budget`** (Firestore, espelha `domains/favorites`):
+  meta de custo mensal **por usuário**, coleção `users/{email}/budgets/{doc_id}`.
+  `doc_id` determinístico por escopo — `project` = `{project_id}`, `dataset`
+  = `{project_id}__{dataset_id}`, `table` = `+__{table_id}`. `created_at` /
+  `created_by` preservados em upsert repetido (reeditar valor não reordena
+  nem reatribui autoria).
+- **API (em `api/v1/finops.py`, mesmo prefixo + `require_project_access`):**
+  `GET /finops/{p}/budgets` (lista do usuário, filtro por projeto in-memory),
+  `PUT /finops/{p}/budgets` (upsert; validação escopo×campos no
+  `BudgetUpsertRequest` — 422 se `dataset` sem `dataset_id`, `table` sem
+  `table_id`, `amount_usd <= 0`), `DELETE /finops/{p}/budgets?scope=&dataset_id=&table_id=`
+  (204, idempotente). Os três somam `Depends(get_current_user)` ao
+  dependency de router.
+- **B2:** `BudgetResponse.budget_target_usd` — `GET /finops/{p}/budget`
+  agora lê o budget de `scope=project` do usuário logado (`get_budget`
+  ganhou `user_email`; endpoint passa `user.email`). `null` quando não
+  cadastrado → o `ComboChart` do FinOps não desenha a linha de referência.
+- **Sem BigQuery** (B1/B2 são 100% Firestore — nenhum dry-run a reportar).
+- Testes: `tests/unit/budget/{test_repository,test_service}.py` novos +
+  2 casos de `budget_target_usd` em `tests/unit/finops/test_service.py`.
+  `uv run pytest tests/unit` = 803 ok, `ruff check` limpo.
+- `docs/specs/finops-budget.md` → v1.5 (CRUD documentado, AC-FIN-RV-04
+  marcado implementado, ASM-FIN-RV-02 confirmada: store por usuário).

@@ -26,6 +26,7 @@ from observability_hub.core.exceptions import (
     InvalidSamplePercentError,
     LoggingQuotaExceededError,
 )
+from observability_hub.domains.budget import repository as budget_repository
 from observability_hub.domains.finops import repository, sql_builder
 from observability_hub.domains.finops.repository import ScanEvent, TableRefTuple
 from observability_hub.domains.finops.schemas import (
@@ -266,6 +267,7 @@ def get_budget(
     project_id: str,
     group_by: BudgetGroupBy = BudgetGroupBy.TABLE,
     limit: int = _BUDGET_TOP_N_DEFAULT,
+    user_email: str | None = None,
 ) -> BudgetResponse:
     now = datetime.now(UTC)
     month_start = _month_start(now)
@@ -354,6 +356,12 @@ def get_budget(
     else:
         warning = None
 
+    budget_target_usd = (
+        budget_repository.get_project_budget_amount(firestore_client, user_email, project_id)
+        if user_email
+        else None
+    )
+
     return BudgetResponse(
         project_id=project_id,
         period_start=month_start,
@@ -363,6 +371,7 @@ def get_budget(
         total_cost_usd=total_cost_usd,
         top_queries=top_queries,
         projection=projection,
+        budget_target_usd=budget_target_usd,
         cache_updated_at=cache_updated_at,
         warning=warning,
     )
