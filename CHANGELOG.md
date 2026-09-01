@@ -65,6 +65,12 @@ Checagem de backend: `description` de dataset **é** mudança de backend
   `Boxes` nos datasets; ícone do serviço em `--primary`; mais respiro
   entre grupos (`space-y-4`, `gap-4`). `index.css` +2 utilitárias →
   `design-system.md` §Vida atualizado no mesmo PR.
+- **`feat/fe-refresh-tables`** (PR 5): hover de linha de tabela no novo
+  tratamento — regra global em `index.css` (`[data-slot=table-body]
+  [data-slot=table-row]:hover` → gradiente amarelo + barra lateral `inset
+  3px`), substitui o `hover:bg-muted` uniforme do `ui/table`. Zero
+  arquivo de feature tocado. `design-system.md` §Vida + `ui-ux-rules.md`
+  §Tabelas no mesmo PR.
 
 ---
 

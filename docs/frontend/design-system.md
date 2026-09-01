@@ -179,6 +179,12 @@ grain, scanlines, "sweep", parallax de cursor). Ver
 | `.dp6-nav-active` | Item de nav **ativo** da sidebar: barra de acento `3px` à esquerda com glow (`::before`) + fundo em gradiente `--primary/14 → transparent`. Substitui o bloco amarelo chapado. Par com `rounded-lg` + `text-foreground` + ícone `text-primary` no `NavLink`. Ver `frontend-visual-refresh-plan.md` §1 (Q-001). |
 | `.dp6-nav-item` | Item de nav em **hover**: dica de glow (anel `inset` fino em `--primary`) — mais contido que `.dp6-hoverable` (numa lista vertical densa o glow cheio vira ruído). |
 
+Além das classes, uma **regra global** (não utilitária, mesmo padrão da
+regra de foco): `[data-slot="table-body"] [data-slot="table-row"]:hover` →
+gradiente amarelo sutil + barra lateral `inset 3px` em `--primary` na
+primeira célula. Substitui o `hover:bg-muted` uniforme que o `ui/table` já
+aplicava em toda linha. Restrita ao corpo (não pega o cabeçalho).
+
 **Movimento:** teto de transição sobe pra **≤300ms** (era ≤200ms) pros
 hovers/entradas. O reset de `prefers-reduced-motion` no fim do `index.css`
 continua **absoluto e intocado** — nada de `!important` que fure ele, nada

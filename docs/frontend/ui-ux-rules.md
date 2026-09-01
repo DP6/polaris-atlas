@@ -62,6 +62,7 @@ protótipo** — não ilimitado.
 | **Left-align sempre, exceto números → right-align.** Não centralizar texto em célula. | Leitura em coluna; números alinham pela unidade. |
 | **Ordenação via `SortableTableHead` + `useTableFilterSort`**; paginação via `PaginationBar` + `usePagination`. | Pipeline único (filtra → ordena → pagina) em vez de reimplementar por tabela. Ver [`patterns.md`](patterns.md). |
 | **Estado vazio da tabela = `EmptyStateRow`** (dentro do `<TableBody>`, com `colSpan`), não uma linha "—" solta. | — |
+| **Hover de linha = gradiente amarelo sutil + barra lateral `inset 3px`** em `--primary` (refresh visual — regra global em `index.css`, não precisa de classe por tabela). | Sinaliza a linha sob o cursor melhor que o `bg-muted` chapado numa tela densa; consistente com o hover de card/menu. |
 
 ## Movimento
 

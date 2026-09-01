@@ -361,6 +361,23 @@ summary:focus-visible,
   box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-primary) 22%, transparent);
 }
 
+/* Hover de linha de tabela — gradiente amarelo sutil + barra lateral com
+   glow (refresh visual — brief §4). Vale pra toda `<tr>` do corpo do
+   `ui/table` (o primitivo já aplica um `hover:bg-muted` uniforme em todas
+   — isto substitui). Fora de `@layer` e com seletor de atributo pra
+   vencer as utilitárias do Tailwind, igual à regra de foco global.
+   Restrito ao `table-body` pra não pegar a linha de cabeçalho. */
+[data-slot="table-body"] [data-slot="table-row"]:hover {
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--color-primary) 9%, transparent),
+    transparent 60%
+  );
+}
+[data-slot="table-body"] [data-slot="table-row"]:hover > [data-slot="table-cell"]:first-child {
+  box-shadow: inset 3px 0 0 var(--color-primary);
+}
+
 /* Scrollbar sutil, coerente com a densidade "estilo Metabase". */
 * {
   scrollbar-width: thin;
