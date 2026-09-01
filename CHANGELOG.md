@@ -3150,3 +3150,31 @@ implementação**
   tests/unit` = 821 ok, `ruff check`/`format` limpos.
 - `docs/specs/finops-budget.md` → v1.7 (fórmula + Q-002 aberta),
   `finops-waste-scanner.md` AC-WASTE-RV-01.
+
+### R2-12 — `feat/r2-finops-overview` (só front-end, consome R2-9/10/11)
+
+- **`FinOpsOverviewPage` na rota `/finops`** (goal 4); o scanner de 2 abas
+  virou `/finops/scanner` (`router.tsx` + NavLink "Scanner de desperdício"
+  da sidebar; `FinOpsPage` ganhou `back` pra `/finops`).
+- Big numbers: Gasto no mês / Meta mensal / Projeção do mês (alerta se
+  passar da meta) / Tabelas de baixo score (< 50). `ComboChart` (barra por
+  período + linha acumulada + `refLine` de meta) com `ChoiceToggle` de
+  granularidade (dia/mês) e tipo de custo (tudo/query/storage) →
+  `useCostSeries`. Aviso quando `storage_available=false`.
+- `CompositeScoreRing` "Eficiência de custo" (`project_efficiency_score`)
+  + `Panel` "Top ofensores": tabela ordenada pior-primeiro, anel compacto
+  na coluna Score, linha expansível mostrando a decomposição em
+  `factors[]` (nome · % · peso · detalhe).
+- `OptionCardGrid`: Scanner de desperdício, Budget de custo, Configurar
+  budget (→ `BudgetConfigDialog` novo — escopo projeto/dataset/tabela,
+  valor mensal, lista das metas com remover inline; usa
+  `useBudgets`/`useUpsertBudget`/`useRemoveBudget`).
+- `lib/api/finops.ts` + `types/finops.ts` + `features/finops/hooks.ts`:
+  `getCostSeries`, `getTableScores`, `listBudgets`/`upsertBudget`/
+  `removeBudget` + tipos; `BudgetResponse` ganhou `budget_target_usd` e
+  `cache_updated_at`.
+- Sem `index.css` nem componente compartilhado novo (só feature files +
+  2 helpers locais) → sem sync de design-system. `pnpm lint` + `pnpm
+  build` verdes. `vite build` mantém o aviso pré-existente de chunk > 500
+  kB (xyflow/recharts no bundle principal) — R2-7b (lazy) fica como
+  follow-up opcional, não regressão desta branch.

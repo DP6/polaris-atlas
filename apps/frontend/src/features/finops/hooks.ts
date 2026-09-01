@@ -1,6 +1,12 @@
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { finopsApi } from '@/lib/api/finops'
-import type { BudgetGroupBy } from '@/types/finops'
+import type {
+  BudgetGroupBy,
+  BudgetScope,
+  BudgetUpsertRequest,
+  CostSeriesGranularity,
+  CostType,
+} from '@/types/finops'
 
 // enabled: false até o usuário escolher o escopo (datasets/tabelas) no
 // seletor e clicar em "Executar" — escanear o projeto inteiro sem gate
@@ -27,6 +33,73 @@ export function useBudget(
     queryKey: ['finops-budget', projectId, groupBy, limit],
     queryFn: () => finopsApi.getBudget(projectId as string, groupBy, limit),
     enabled: Boolean(projectId) && enabled,
+  })
+}
+
+export function useCostSeries(
+  projectId: string | undefined,
+  opts: {
+    granularity?: CostSeriesGranularity
+    costType?: CostType
+    lookbackDays?: number
+    datasets?: string[]
+    tables?: string[]
+  } = {},
+) {
+  return useQuery({
+    queryKey: [
+      'finops-cost-series',
+      projectId,
+      opts.granularity,
+      opts.costType,
+      opts.lookbackDays,
+      opts.datasets,
+      opts.tables,
+    ],
+    queryFn: () => finopsApi.getCostSeries(projectId as string, opts),
+    enabled: Boolean(projectId),
+  })
+}
+
+export function useTableScores(projectId: string | undefined, datasets?: string[], limit = 100) {
+  return useQuery({
+    queryKey: ['finops-table-scores', projectId, datasets, limit],
+    queryFn: () => finopsApi.getTableScores(projectId as string, datasets, limit),
+    enabled: Boolean(projectId),
+  })
+}
+
+export function useBudgets(projectId: string | undefined) {
+  return useQuery({
+    queryKey: ['finops-budgets', projectId],
+    queryFn: () => finopsApi.listBudgets(projectId as string),
+    enabled: Boolean(projectId),
+  })
+}
+
+export function useUpsertBudget(projectId: string | undefined) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: BudgetUpsertRequest) => finopsApi.upsertBudget(projectId as string, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['finops-budgets', projectId] })
+      queryClient.invalidateQueries({ queryKey: ['finops-budget', projectId] })
+    },
+  })
+}
+
+export function useRemoveBudget(projectId: string | undefined) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (vars: {
+      scope: BudgetScope
+      datasetId?: string | null
+      tableId?: string | null
+    }) => finopsApi.removeBudget(projectId as string, vars.scope, vars.datasetId, vars.tableId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['finops-budgets', projectId] })
+      queryClient.invalidateQueries({ queryKey: ['finops-budget', projectId] })
+    },
   })
 }
 

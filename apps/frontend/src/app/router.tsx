@@ -9,6 +9,7 @@ import { CatalogDatasetPage } from '@/features/catalog/CatalogDatasetPage'
 import { CatalogOverviewPage } from '@/features/catalog/CatalogOverviewPage'
 import { SearchPage } from '@/features/catalog/SearchPage'
 import { BudgetPage } from '@/features/finops/BudgetPage'
+import { FinOpsOverviewPage } from '@/features/finops/FinOpsOverviewPage'
 import { FinOpsPage } from '@/features/finops/FinOpsPage'
 import { DatasetFreshnessPage } from '@/features/freshness/DatasetFreshnessPage'
 import { FreshnessPage } from '@/features/freshness/FreshnessPage'
@@ -59,7 +60,8 @@ export function AppRoutes() {
             <Route path="history" element={<HistoryAnalysisPage />} />
             <Route path="access" element={<AccessAnalysisPage />} />
           </Route>
-          <Route path="finops" element={<FinOpsPage />} />
+          <Route path="finops" element={<FinOpsOverviewPage />} />
+          <Route path="finops/scanner" element={<FinOpsPage />} />
           <Route path="finops/budget" element={<BudgetPage />} />
           <Route path="search" element={<SearchPage />} />
           <Route path="storage" element={<BucketsPage />} />

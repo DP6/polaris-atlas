@@ -63,6 +63,7 @@ export function FinOpsPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
+        back={{ to: '/finops', label: 'Visão geral de FinOps' }}
         title="FinOps — Scanner de desperdício"
         description={
           'Candidatas a particionamento e sugestões de tipo de coluna, com estimativa de custo. ' +

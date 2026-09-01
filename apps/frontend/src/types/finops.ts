@@ -55,7 +55,91 @@ export interface BudgetResponse {
   total_cost_usd: number
   top_queries: CostlyQuery[]
   projection: CostProjection
+  // Meta de custo mensal do usuário logado pra este projeto (escopo=project),
+  // ou null se não cadastrada — desenha a linha de referência do gráfico.
+  budget_target_usd: number | null
+  cache_updated_at: string | null
   warning: string | null
+}
+
+// --- Série temporal de custo (R2-10) --------------------------------------
+
+export type CostSeriesGranularity = 'day' | 'month'
+export type CostType = 'all' | 'query' | 'storage'
+
+export interface CostSeriesPoint {
+  period: string
+  query_cost_usd: number
+  storage_cost_usd: number
+  total_cost_usd: number
+}
+
+export interface CostSeriesResponse {
+  project_id: string
+  granularity: CostSeriesGranularity
+  cost_type: CostType
+  period_start: string
+  period_end: string
+  points: CostSeriesPoint[]
+  storage_available: boolean
+  cache_updated_at: string | null
+  warning: string | null
+}
+
+// --- Score de eficiência de custo por tabela (R2-11) ---------------------
+
+export interface TableScoreFactor {
+  name: string
+  value: number
+  weight: number
+  detail: string
+}
+
+export interface TableScore {
+  dataset_id: string
+  table_id: string
+  score: number
+  size_bytes: number
+  observed_cost_usd_30d: number
+  is_partitioned: boolean
+  factors: TableScoreFactor[]
+}
+
+export interface TableScoresResponse {
+  project_id: string
+  lookback_days: number
+  project_efficiency_score: number
+  tables: TableScore[]
+  cache_updated_at: string | null
+  warning: string | null
+}
+
+// --- Cadastro de budget (R2-9) -----------------------------------------
+
+export type BudgetScope = 'project' | 'dataset' | 'table'
+
+export interface BudgetEntry {
+  project_id: string
+  scope: BudgetScope
+  dataset_id: string | null
+  table_id: string | null
+  amount_usd: number
+  period: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface BudgetListResponse {
+  project_id: string
+  budgets: BudgetEntry[]
+}
+
+export interface BudgetUpsertRequest {
+  scope: BudgetScope
+  dataset_id?: string | null
+  table_id?: string | null
+  amount_usd: number
 }
 
 export type SuggestedColumnType = 'INT64' | 'FLOAT64' | 'BOOL' | 'DATE' | 'DATETIME' | 'TIMESTAMP'
