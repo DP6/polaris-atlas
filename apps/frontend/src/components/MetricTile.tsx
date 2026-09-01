@@ -4,6 +4,9 @@ import { cn } from '@/lib/utils'
 interface MetricTileProps {
   label: string
   value: ReactNode
+  // Ícone lucide (`<Clock size={14} />`) — renderizado num "chip" acima do
+  // rótulo. Mapeamento por KPI em docs/specs/frontend-visual-refresh.md.
+  icon?: ReactNode
   // Realça a borda quando o valor merece atenção (ex: budget estourado,
   // freshness stale).
   alert?: boolean
@@ -13,15 +16,23 @@ interface MetricTileProps {
 // Tile de métrica único da plataforma — valor em text-title, rótulo em
 // text-label uppercase. Substitui o `KpiCards` interno e os tiles à mão
 // de BudgetPage/ProfilingDialog (p-3/p-4 e text-lg/xl/2xl divergentes).
-export function MetricTile({ label, value, alert, className }: MetricTileProps) {
+export function MetricTile({ label, value, icon, alert, className }: MetricTileProps) {
   return (
     <div
       className={cn(
-        'rounded-lg border bg-card p-4',
+        'dp6-hoverable rounded-lg border bg-card p-4',
         alert ? 'border-status-error' : 'border-border',
         className,
       )}
     >
+      {icon && (
+        <span
+          aria-hidden="true"
+          className="mb-2.5 inline-flex size-6 items-center justify-center rounded-md border border-primary/25 bg-primary/10 text-primary [&_svg]:size-3.5"
+        >
+          {icon}
+        </span>
+      )}
       <p className="mb-1 text-label text-muted-foreground uppercase tracking-wide">{label}</p>
       <p className="font-bold text-title">{value}</p>
     </div>

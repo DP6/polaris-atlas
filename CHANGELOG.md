@@ -5,6 +5,58 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Refresh visual do Hub — fundação de tokens (2026-09)
+
+Primeira fatia do refresh visual (brief:
+`docs/specs/frontend-visual-refresh.md`; plano fatiado em 13 PRs:
+`docs/specs/frontend-visual-refresh-plan.md`). Decisões de design tomadas
+sobre um protótipo (`~/polaris-hub-mockup/`) levadas ao app real — dev
+primeiro, prod só com aprovação explícita do usuário.
+
+### O que foi feito (PR `feat/fe-refresh-foundation`)
+
+- **Raio "quase quadrado":** `--radius` 8px → **10px** nos dois temas.
+  Escala derivada achatada de propósito — `--radius-xl == --radius-lg ==
+  --radius` — pra card (`rounded-xl`) e botão/input (`rounded-lg`) caírem
+  os dois em 10px. Pill (`--radius-pill`, badge/toggle/avatar) intocado.
+- **Tokens novos** (`index.css`): `--primary-2`/`--color-primary-2`
+  (`#ffca45`, topo de gradiente), `--glow` (rgba tintado, por tema),
+  `--shadow-glow` (classe `shadow-glow`), `--ease-dp6` (`ease-dp6`).
+- **Utilitárias plain-CSS:** `.dp6-hoverable` (glow + contorno fino em
+  `--primary` + `translateY(-2px)` gated em `no-preference`),
+  `.dp6-glass`, `.dp6-headline-glow`, `.dp6-gradient-primary`.
+- **Componentes compartilhados:** `MetricTile` ganhou prop `icon` (chip
+  acima do rótulo) + `.dp6-hoverable` embutido; `PageHeader` ganhou o
+  glow radial contido atrás do `<h1>`; novo `components/ChartTooltip.tsx`
+  (+ `useChartTooltip`) — tooltip flutuante de gráfico via portal.
+- **Harness atualizado no mesmo PR** (regra do próprio harness):
+  `design-system.md` §Raio + §Vida (nova) + §Catálogo; `ui-ux-rules.md`
+  §Identidade visual (relaxada) + §Movimento (teto ≤300ms).
+
+### Decisão de arquitetura
+
+- A regra "flat, sem gradiente/sombra" foi **relaxada, não abolida**: só
+  o que o protótipo usa em `.panel`/`.kpi`/`.btn.primary`. Os efeitos de
+  fundo de tela cheia do protótipo (constelação, aurora, grain,
+  scanlines, sweep, parallax) **não** foram adotados — o princípio
+  "ferramenta densa, rapidez > espetáculo" continua. Registrado como
+  ASM-006/007 no brief.
+- Botão primário com gradiente é **opt-in via `className`
+  (`.dp6-gradient-primary`)**, não override global de `ui/button` — a
+  primitiva shadcn é read-only (regra do design-system).
+- `--radius-xl == --radius-lg` quebra a monotonicidade da escala shadcn
+  de propósito; documentado em `design-system.md` §Raio.
+
+### Perguntas em aberto resolvidas por decisão (reconfirmar no review)
+
+Q-001 (item ativo da sidebar), Q-002 (onde vive o score por tabela do
+FinOps), Q-003 (fonte do mini-gráfico dos cards de dataset) — respondidas
+em `frontend-visual-refresh-plan.md` §1, usuário ausente até o review.
+Checagem de backend: `description` de dataset **é** mudança de backend
+(`DatasetSummary` não tem o campo) — sliced como PR 7.
+
+---
+
 ## Harness de front-end (`docs/skills/frontend.md` → `docs/frontend/`)
 
 Toda a orientação de front-end vivia num arquivo só, `docs/skills/frontend.md`

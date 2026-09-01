@@ -25,6 +25,7 @@ ver como foi feito, seguir o mesmo caminho.
 | Sidebar de navegação em dois níveis | `features/catalog/DatasetSidebar.tsx` |
 | Tela de login / identidade dp6 | `features/auth/LoginPage.tsx`, `app/topbar.tsx` |
 | Gráfico (Recharts) | `features/admin/UsageHeatmapGrid.tsx`, seções de analytics do Admin |
+| Tooltip flutuante de gráfico (segue o cursor) | `components/ChartTooltip.tsx` + `useChartTooltip` — sem tela canônica ainda (chega com os PRs de quality/finops/admin do refresh visual) |
 | Grafo de nós (xyflow) | `features/lineage/LineageGraph.tsx` |
 
 Ver também os padrões descritos em [`patterns.md`](patterns.md) — cada um

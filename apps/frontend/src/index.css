@@ -64,18 +64,29 @@
   --color-accent-purple: var(--accent-purple);
   --color-accent-green: var(--accent-green);
   --color-accent-orange: var(--accent-orange);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+  /* Amarelo dp6 mais claro — SÓ como topo de gradiente (botão primário,
+     barra ativa, preenchimento de gráfico). Nunca como texto (mesma regra
+     do --primary). */
+  --color-primary-2: var(--primary-2);
+  /* Raio "quase quadrado" (docs/frontend/design-system.md §Raio — refresh
+     visual 2026-09). --radius = 10px; a escala derivada é achatada de
+     propósito pra que retângulo (card `rounded-xl`, botão/input `rounded-lg`,
+     tabela) caia todo em ~10px. `xl == lg` é intencional. Pill continua
+     9999px. */
+  --radius-sm: calc(var(--radius) - 3px);
+  --radius-md: calc(var(--radius) - 1px);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
-  /* Raio de componente unificado (docs/frontend/design-system.md: cards 8px, sem
-     hardcode de rounded-[Npx] espalhado). --radius-control = botão/input/
-     card/tabela/popover; --radius-pill = badge/toggle. */
+  --radius-xl: var(--radius);
+  --radius-2xl: calc(var(--radius) + 4px);
+  --radius-3xl: calc(var(--radius) + 10px);
+  --radius-4xl: calc(var(--radius) + 16px);
   --radius-control: var(--radius);
   --radius-pill: 9999px;
+
+  /* Movimento dp6 — curva única pros hovers/entradas "com vida" do refresh
+     visual. prefers-reduced-motion continua neutralizando tudo pelo reset
+     global no fim deste arquivo. */
+  --ease-dp6: cubic-bezier(0.16, 1, 0.3, 1);
 
   /* Escala tipográfica — 5 níveis com propósito definido. Par
      `--text-x` + `--text-x--line-height` = utilitário `text-x` já traz o
@@ -95,6 +106,10 @@
      borda). e1 = popover/menu; e2 = dialog. */
   --shadow-elevation-1: 0 1px 2px rgb(0 0 0 / 0.06), 0 2px 8px rgb(0 0 0 / 0.08);
   --shadow-elevation-2: 0 4px 12px rgb(0 0 0 / 0.12), 0 8px 32px rgb(0 0 0 / 0.16);
+  /* Glow amarelo dp6 — sombra de destaque no hover de card/painel/linha e
+     no botão primário (refresh visual 2026-09). --glow é o rgba tintado
+     (por tema); shadow-glow é a sombra pronta pra classe `shadow-glow`. */
+  --shadow-glow: 0 18px 40px -20px var(--glow);
 }
 
 /* Light — inversão de --color-bg-* e --color-text-* só, mesmo acento
@@ -112,6 +127,10 @@
   --popover-foreground: #1d1d1b;
   --primary: #ffb302;
   --primary-foreground: #1d1d1b;
+  /* topo do gradiente amarelo — ver --color-primary-2 em @theme inline */
+  --primary-2: #ffca45;
+  /* rgba tintado do glow amarelo; no claro mais discreto que no dark */
+  --glow: rgba(255, 179, 2, 0.22);
   --secondary: #e9e9e6;
   --secondary-foreground: #1d1d1b;
   --muted: #e9e9e6;
@@ -122,7 +141,8 @@
   --border: #dedcda;
   --input: #dedcda;
   --ring: #ffb302;
-  --radius: 0.5rem;
+  /* Raio "quase quadrado" — 10px (refresh visual 2026-09). */
+  --radius: 0.625rem;
   --status-ok: #34d399;
   --status-warn: #ffb302;
   --status-error: #e53e3e;
@@ -159,6 +179,8 @@
   --popover-foreground: #ffffff;
   --primary: #ffb302;
   --primary-foreground: #1d1d1b;
+  --primary-2: #ffca45;
+  --glow: rgba(255, 179, 2, 0.3);
   --secondary: #3a3a38;
   --secondary-foreground: #ffffff;
   --muted: #3a3a38;
@@ -174,7 +196,8 @@
   --border: #3a3a38;
   --input: #3a3a38;
   --ring: #ffb302;
-  --radius: 0.5rem;
+  /* Raio "quase quadrado" — 10px (refresh visual 2026-09). */
+  --radius: 0.625rem;
   --status-ok: #34d399;
   --status-warn: #ffb302;
   --status-error: #e53e3e;
@@ -244,6 +267,60 @@ summary:focus-visible,
   align-self: stretch;
   width: 2px;
   background: var(--color-primary);
+}
+
+/* ============================================================
+   "Vida" dp6 — refresh visual 2026-09 (docs/frontend/design-system.md
+   §Vida, docs/frontend/ui-ux-rules.md §Identidade visual). Gradiente
+   sutil / glow amarelo / glass leve — na medida do protótipo, NÃO os
+   efeitos de fundo de tela cheia (constelação, aurora, grain, sweep).
+   ============================================================ */
+
+/* Hover "com vida": glow amarelo + contorno fino em primary + leve
+   elevação. Usar em card/painel/linha de tabela clicável/item de menu
+   que hoje só mudam a borda no hover. Funciona tanto em superfície com
+   `border` (MetricTile) quanto com `ring` (ui/card) — o contorno vem
+   pelo box-shadow, não por border-color. */
+.dp6-hoverable {
+  transition:
+    box-shadow 0.25s var(--ease-dp6),
+    transform 0.25s var(--ease-dp6),
+    border-color 0.25s var(--ease-dp6);
+}
+.dp6-hoverable:hover {
+  box-shadow:
+    var(--shadow-glow),
+    0 0 0 1px color-mix(in oklab, var(--color-primary) 35%, transparent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .dp6-hoverable:hover {
+    transform: translateY(-2px);
+  }
+}
+
+/* Glass leve — superfície semitransparente + blur. Opt-in em painéis
+   sobre áreas com algo atrás pra desfocar (raro no app denso); na dúvida,
+   `bg-card` sólido continua o padrão. */
+.dp6-glass {
+  background: color-mix(in oklab, var(--color-card) 82%, transparent);
+  backdrop-filter: blur(12px) saturate(1.1);
+}
+
+/* Glow radial amarelo contido no próprio box — usado pelo PageHeader
+   atrás do <h1>. Contido de propósito (sem ::before vazando pra fora):
+   não cria scrollbar horizontal nem corta o anel de foco das ações. */
+.dp6-headline-glow {
+  background: radial-gradient(120% 140% at 100% 0%, var(--glow), transparent 55%);
+}
+
+/* Gradiente do botão primário / barra ativa / preenchimento de gráfico.
+   Opt-in via className nos CTAs "herói" (não é override global do
+   ui/button — a primitiva shadcn é read-only). */
+.dp6-gradient-primary {
+  background-image: linear-gradient(180deg, var(--color-primary-2), var(--color-primary));
+  box-shadow:
+    0 6px 22px -6px var(--glow),
+    inset 0 0 0 1px color-mix(in oklab, var(--color-primary) 40%, transparent);
 }
 
 /* Scrollbar sutil, coerente com a densidade "estilo Metabase". */

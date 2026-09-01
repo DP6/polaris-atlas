@@ -18,7 +18,15 @@ interface PageHeaderProps {
 // com <h1> duplicado entre estados, e a rota índice sem <h1> nenhum).
 export function PageHeader({ title, description, actions, back, className }: PageHeaderProps) {
   return (
-    <div className={cn('flex flex-col gap-2', className)}>
+    // dp6-headline-glow: glow radial amarelo contido no próprio box, atrás
+    // do <h1> (refresh visual 2026-09). Contido de propósito — não vaza
+    // pra fora nem corta o anel de foco das ações.
+    <div
+      className={cn(
+        'dp6-headline-glow -mx-2 flex flex-col gap-2 rounded-xl px-2 py-1.5',
+        className,
+      )}
+    >
       {back && (
         <Link
           to={back.to}

@@ -11,13 +11,21 @@ Acessibilidade (é obrigatória, tem arquivo próprio): [`accessibility.md`](acc
 
 ## Identidade visual
 
+Relaxada no refresh visual 2026-09 (brief:
+`docs/specs/frontend-visual-refresh.md`; tokens/utilitárias em
+[`design-system.md`](design-system.md) §Vida). Gradiente sutil, glow
+amarelo, glass leve e movimento passam a ser aceitos **na medida do
+protótipo** — não ilimitado.
+
 | Regra | Por quê |
 |---|---|
-| **Sem gradientes.** | A identidade dp6 é *flat*. |
-| **Sem `box-shadow` pesado.** Profundidade vem de **borda** (`border-border`) ou, no máximo, `--shadow-elevation-1/2` em popover/dialog. | Consistência com o visual dp6; borda lê melhor em tela densa. |
+| **Gradiente sutil OK** — topo `--primary-2` → `--primary` em botão herói (`.dp6-gradient-primary`), barra ativa da sidebar, preenchimento de gráfico. Fora disso, superfície é cor chapada (`bg-card`). | O gradiente marca o elemento de ação/estado; espalhado, vira ruído. |
+| **Glow amarelo é a afordância de hover** — card, painel, linha de tabela clicável, item de menu usam `.dp6-hoverable` (glow `--shadow-glow` + contorno fino em `--primary`), não só troca de `border-color`. | Dá "vida" e sinaliza interatividade melhor que uma borda 1px numa tela densa. |
+| **`box-shadow` pesado continua proibido** fora de: `--shadow-elevation-1/2` (popover/dialog) e `--shadow-glow` (hover/botão herói). Profundidade estática ainda vem de **borda**. | Consistência; borda lê melhor em tela densa. |
+| **Nada de efeito de fundo de tela cheia** — constelação em canvas, aurora/blobs, film grain, scanlines, "sweep" de página, parallax de cursor (tudo isso existe no protótipo e **não** foi adotado). | O Hub é ferramenta de análise densa — "rapidez > espetáculo" continua valendo. |
 | **No máximo 2 cores de destaque por tela.** | O amarelo dp6 perde força se competir com 3+ acentos. Acentos secundários (`--accent-*`) são pontuais. |
 | **Só as fontes Ubuntu / Verdana.** | `--font-sans` já resolve; qualquer outra família quebra a identidade e adiciona peso de carregamento. |
-| **Amarelo `#FFB302` é preenchimento, nunca texto** sobre `--background`/`--card`. | ≈1.7:1 de contraste no tema claro — falha WCAG AA. Vale para `text-primary` e `text-status-*` sem `-foreground`. |
+| **Amarelo `#FFB302` / `--primary-2` é preenchimento, nunca texto** sobre `--background`/`--card`. | ≈1.7:1 de contraste no tema claro — falha WCAG AA. Vale para `text-primary` e `text-status-*` sem `-foreground`. |
 
 ## Layout e densidade
 
@@ -59,6 +67,7 @@ Acessibilidade (é obrigatória, tem arquivo próprio): [`accessibility.md`](acc
 
 | Regra | Por quê |
 |---|---|
-| **Transições ≤ 200ms.** Sem animação longa/decorativa. | Ferramenta de trabalho: rapidez > espetáculo. |
-| **Respeitar `prefers-reduced-motion` sempre.** O reset global em `index.css` já cobre animação/transição/scroll — não adicionar efeito que o ignore. | WCAG 2.3.3 / boa prática AA; enjôo vestibular. |
+| **Transições ≤ 300ms** (era ≤200; subiu no refresh visual 2026-09 — o protótipo usa .25–.28s nos hovers "com vida"). Entradas de gráfico (draw de linha/barra) podem ir a ~1.4s **uma vez**, no mount. Nada de loop decorativo. | Ferramenta de trabalho: rapidez > espetáculo, mas o hover/entrada ganhou um respiro. |
+| **Curva padrão = `--ease-dp6`** (`ease-dp6`) pros hovers/entradas do refresh. | Consistência entre telas de sessões diferentes. |
+| **Respeitar `prefers-reduced-motion` sempre.** O reset global em `index.css` já cobre animação/transição/scroll — não adicionar efeito que o ignore (`.dp6-hoverable` já gate o `translateY` em `no-preference`). | WCAG 2.3.3 / boa prática AA; enjôo vestibular. |
 | **Sem skeleton loader elaborado.** Carregando = `LoadingState` (spinner + texto, cor `muted`). | Skeleton fiel dá manutenção alta e engana sobre o layout final; o ganho percebido é baixo numa tela densa. |

@@ -120,13 +120,21 @@ Escala **semântica** (tokens em `@theme inline`, cada um com
 
 ## Raio, elevação, espaçamento
 
-- **Raio de componente:** `--radius-control` (botão, input, card, tabela,
-  popover) e `--radius-pill` (`9999px`, para badge/toggle). Não
-  re-hardcodar `rounded-[Npx]`. Existe também a escala derivada
-  `--radius-sm…--radius-4xl` (múltiplos de `--radius` = `0.5rem`).
-- **Elevação:** um par sutil só — `--shadow-elevation-1` (popover/menu),
-  `--shadow-elevation-2` (dialog). Sem `box-shadow` pesado; a identidade
-  dp6 prioriza **borda**.
+- **Raio de componente — "quase quadrado", `--radius = 10px`** (refresh
+  visual 2026-09). Todo **retângulo** (card, painel, tabela, input, botão)
+  cai em ~10px; **pill** (`--radius-pill = 9999px`: badge, toggle, avatar)
+  continua totalmente redondo. Não re-hardcodar `rounded-[Npx]`.
+  - A escala derivada `--radius-sm…--radius-4xl` foi **achatada de
+    propósito**: `--radius-xl == --radius-lg == --radius` (10px). Motivo:
+    card usa `rounded-xl`, botão/input usam `rounded-lg` — os dois
+    precisam bater em 10px. `sm`/`md` ficam 1–3px menores (chip pequeno,
+    botão `xs`/`sm`); `2xl`+ crescem em passos fixos (`+4/+10/+16px`) pro
+    dialog e afins.
+  - `--radius-control` = `--radius` (mantido como apelido semântico).
+- **Elevação:** `--shadow-elevation-1` (popover/menu), `--shadow-elevation-2`
+  (dialog). **Glow amarelo** (`--shadow-glow` = `0 18px 40px -20px
+  var(--glow)`) no **hover** de card/painel/linha e no botão primário — ver
+  §Vida. Fora disso, profundidade continua vindo de **borda**.
 - **Espaçamento** (escala 4/8/12/16/24/32):
 
   | Entre o quê | classe |
@@ -139,6 +147,40 @@ Escala **semântica** (tokens em `@theme inline`, cada um com
 - **Container de conteúdo:** `max-w-[1400px] mx-auto` — já aplicado no
   `apps/frontend/src/app/layout.tsx`, não estica de ponta a ponta em
   monitor largo.
+
+---
+
+## Vida — gradiente, glow, glass, movimento
+
+Refresh visual 2026-09 (brief: `docs/specs/frontend-visual-refresh.md`). A
+regra antiga "sem gradiente, sem sombra, flat" foi **relaxada** — na medida
+do protótipo (`.panel`/`.kpi`/`.btn.primary`), **não** ilimitado. O que
+**não** entrou: efeitos de fundo de tela cheia (constelação, aurora/blobs,
+grain, scanlines, "sweep", parallax de cursor). Ver
+[`ui-ux-rules.md`](ui-ux-rules.md) §Identidade visual pra fronteira.
+
+**Tokens** (em `index.css`):
+
+| Token | O que é |
+|---|---|
+| `--primary-2` / `--color-primary-2` | Amarelo dp6 mais claro (`#ffca45`). **Só** topo de gradiente (botão primário, barra ativa, preenchimento de gráfico). Nunca texto. |
+| `--glow` | `rgba(255,179,2, .30)` no dark / `.22` no claro — o rgba tintado do glow. |
+| `--shadow-glow` | Sombra pronta: `0 18px 40px -20px var(--glow)`. Classe `shadow-glow`. |
+| `--ease-dp6` / `ease-dp6` | `cubic-bezier(.16,1,.3,1)` — curva única dos hovers/entradas do refresh. |
+
+**Utilitárias plain-CSS** (em `index.css`, fora de `@layer`):
+
+| Classe | Uso |
+|---|---|
+| `.dp6-hoverable` | Hover "com vida": glow + contorno fino em `--primary` (via `box-shadow`, funciona com `border` **ou** `ring`) + `translateY(-2px)` (só com `prefers-reduced-motion: no-preference`). Em card/painel/linha de tabela clicável/item de menu que hoje só trocam a borda. Já embutida no `MetricTile`. |
+| `.dp6-glass` | Superfície semitransparente + `backdrop-filter: blur`. **Opt-in**, raro (o app é denso e quase não tem o que desfocar atrás); na dúvida `bg-card` sólido. |
+| `.dp6-headline-glow` | Glow radial amarelo **contido no próprio box** (sem `::before` vazando) — usado pelo `PageHeader` atrás do `<h1>`. |
+| `.dp6-gradient-primary` | Gradiente + inset ring + glow do botão "herói". **Opt-in via `className`** num `<Button variant="default">` específico (a primitiva `ui/button` é read-only, não dá pra override global). |
+
+**Movimento:** teto de transição sobe pra **≤300ms** (era ≤200ms) pros
+hovers/entradas. O reset de `prefers-reduced-motion` no fim do `index.css`
+continua **absoluto e intocado** — nada de `!important` que fure ele, nada
+de animação contínua/decorativa, nada de skeleton.
 
 ---
 
@@ -172,7 +214,8 @@ primitivos — compõem primitivos de `ui/`.
 | `EmptyState` / `EmptyStateRow` | Estado vazio: ícone + título + descrição/ação. `EmptyStateRow` (com `colSpan`) para dentro de `<TableBody>`. | — |
 | `StatusBadge` | Badge de estado: **ícone + rótulo**, nunca só cor (WCAG 1.4.1). `status="ok\|warn\|error\|info\|running\|neutral"`. | Badge sem semântica de estado (use `Badge` de `ui/`) |
 | `CacheStalenessBadge` | Indicador "Cache atualizado há Xh" nas telas servidas por cache pré-computado (lineage, órfãs, mapa de acesso). `cacheUpdatedAt = null` → não renderiza (veio ao vivo). | Fora dessas telas |
-| `MetricTile` / `MetricGrid` | Tile de KPI: valor `text-title` bold, rótulo `text-label uppercase`. `alert` → borda `--status-error`. `MetricGrid` = grid `auto-fill` (sem breakpoint mágico). | Um número solto no meio de texto |
+| `MetricTile` / `MetricGrid` | Tile de KPI: valor `text-title` bold, rótulo `text-label uppercase`. `icon` (lucide, num "chip" acima do rótulo — mapeamento por KPI no brief). `alert` → borda `--status-error`. Hover "com vida" (`.dp6-hoverable`) embutido. `MetricGrid` = grid `auto-fill`. | Um número solto no meio de texto |
+| `ChartTooltip` + `useChartTooltip` | Tooltip flutuante que segue o cursor, compartilhado por gráfico/mini-gráfico (crosshair de linha, hover de barra). Portal pro `<body>`, `pointer-events-none`. `useChartTooltip()` → `{ state, show, move, hide }`; `<ChartTooltip state={…} />` uma vez por tela. | Tooltip ancorado num elemento fixo (use `ui/tooltip`) |
 | `ChoiceToggle` | Grupo "escolher um" em pills (`role="group"` + `aria-pressed`, `aria-label` obrigatório). `size="sm\|md"`. | Mais de ~5 opções, ou multi-seleção (use `Select`/checkboxes) |
 | `DateField` | `<input type="date">` com `<Label htmlFor>` associada e altura `h-8` consistente com os filtros. | Input de data sem rótulo visível |
 | `SortableTableHead` | `<th>` clicável com seta de ordenação (`active`, `direction`, `align`). Par com `useTableFilterSort`. | Cabeçalho de coluna não-ordenável |
