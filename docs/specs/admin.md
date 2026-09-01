@@ -997,7 +997,7 @@ Ver brief `frontend-visual-refresh.md` (sec. Administracao) e
 | AC-ADM-RV-01 | ✅ (R2-5) "Acessos ao Hub" = `<ComboChart>` coluna + linha; `<ChoiceToggle>` "Coluna: Acumulado / Período" troca qual série é coluna e qual é linha (eixo Y duplo). | `LoginAnalyticsSection` — visual |
 | AC-ADM-RV-02 | ✅ (R2-5) `<ChoiceToggle>` "Granularidade: Dia / Mês" — usa os buckets `daily`/`monthly` que a resposta já traz. | `LoginAnalyticsSection` — visual |
 | AC-ADM-RV-03 | ✅ (R2-5) dois `<DateField>` "De"/"Até" → `?from=&to=` no endpoint (backend B7). Sem eles, janela `lookback_days=90`. | `test_get_login_analytics_from_to_window` |
-| AC-ADM-RV-04 | ✅ (R2-5) `<Funnel>` novo — `<polygon>` por estágio afunilando pela razão com o 1º; rótulo + valor + % numa **coluna ao lado** (nunca por dentro). `role="img"` + `aria-label` com a decomposição. | `Funnel` — visual |
+| AC-ADM-RV-04 | ✅ (R2-5; reescrito na rodada 3) `<Funnel>` = barras horizontais **centradas** afunilando de cima pra baixo (largura ∝ contagem), rótulo + valor + % **acima** de cada barra. A versão R2-5 usava `<polygon>` SVG esticado, que distorcia dentro do container de altura fixa (`h-56`) — trocado por `<div>`s com `width: %` + `mx-auto`. `role="img"` + `aria-label` + `<table>` sr-only. | `Funnel` — visual |
 
 Suposicao **ASM-ADM-RV-01** (resolvida — R2-5): AC-ADM-RV-03 exigiu sim
 parametro novo no endpoint (`?from=&to=`) — implementado (B7). Layout:

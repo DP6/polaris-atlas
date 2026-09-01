@@ -1,3 +1,4 @@
+import { Panel } from '@/components/Panel'
 import { AccessRequestAnalyticsSection } from '@/features/admin/AccessRequestAnalyticsSection'
 import { FavoritesAnalyticsSection } from '@/features/admin/FavoritesAnalyticsSection'
 import { LoginAnalyticsSection } from '@/features/admin/LoginAnalyticsSection'
@@ -7,8 +8,9 @@ import { ProfilingActivitySection } from '@/features/admin/ProfilingActivitySect
 import { RetentionFunnelSection } from '@/features/admin/RetentionFunnelSection'
 import { UsageHeatmapSection } from '@/features/admin/UsageHeatmapSection'
 
-// Layout de BLOCOS (não mais scroll corrido de CollapsibleSection): o
-// combo de acessos (rico) ocupa a largura toda; funil + heatmap dividem
+// Layout de BLOCOS: toda seção fica dentro de um `<Panel>` (as que ainda
+// usam `CollapsibleSection` puro por dentro ganham a moldura pelo wrapper).
+// O combo de acessos (rico) ocupa a largura toda; funil + heatmap dividem
 // uma linha 2-col; as seções pesadas de tabela seguem empilhadas full-width.
 export function AdminUsageTab() {
   return (
@@ -20,11 +22,21 @@ export function AdminUsageTab() {
         <UsageHeatmapSection />
       </div>
 
-      <FavoritesAnalyticsSection />
-      <ProfilingActivitySection />
-      <AccessRequestAnalyticsSection />
-      <NavigationAnalyticsSection />
-      <PiiScanActivitySection />
+      <Panel>
+        <FavoritesAnalyticsSection />
+      </Panel>
+      <Panel>
+        <ProfilingActivitySection />
+      </Panel>
+      <Panel>
+        <AccessRequestAnalyticsSection />
+      </Panel>
+      <Panel>
+        <NavigationAnalyticsSection />
+      </Panel>
+      <Panel>
+        <PiiScanActivitySection />
+      </Panel>
     </div>
   )
 }

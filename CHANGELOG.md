@@ -115,6 +115,22 @@ barras verticais sempre visíveis.
   na overview). `BucketBrowserPage` breadcrumb → `/storage/buckets`.
 - Doc-sync: `nav-overview-screens.md`. `pnpm lint` + `pnpm build` verdes.
 
+### R3-admin — `feat/r3-admin` (só front-end)
+
+- **Funil de retenção reescrito** (`components/Funnel.tsx`): barras horizontais centradas
+  afunilando de cima pra baixo (largura ∝ contagem) + rótulo/valor/% acima de cada barra +
+  `<table>` sr-only. A versão R2-5 (`<polygon>` SVG com `preserveAspectRatio="none"`)
+  distorcia dentro do `h-56`.
+- **Todas as seções da aba "Uso do Hub" viram bloco:** `AdminUsageTab` embrulha
+  `FavoritesAnalyticsSection`, `ProfilingActivitySection`, `AccessRequestAnalyticsSection`,
+  `NavigationAnalyticsSection`, `PiiScanActivitySection` em `<Panel>` (as que ainda usam
+  `CollapsibleSection` por dentro ganham a moldura pelo wrapper).
+- **Combobox `Command` no dark:** `CommandItem` ganhou `data-selected:bg-primary/10` +
+  `data-[checked=true]:bg-primary/15 font-medium` — o item destacado/escolhido pinta um
+  fundo amarelo suave (antes `bg-muted` sumia no dark). Vale pra todo combobox
+  (ProjectSelector, pickers do Admin, SaveRunToFolderDialog).
+- Doc-sync: `design-system.md`, `docs/specs/admin.md`. `pnpm lint` + `pnpm build` verdes.
+
 ## Refresh visual do Hub — rodada 2 (2026-09)
 
 Segunda rodada, sobre as lacunas que a rodada 1 marcou como "especificado,
