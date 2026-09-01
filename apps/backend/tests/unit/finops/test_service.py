@@ -7,10 +7,12 @@ import pytest
 
 from observability_hub.core.exceptions import InvalidSamplePercentError
 from observability_hub.domains.finops import service, sql_builder
-from observability_hub.domains.finops.repository import ScanEvent
+from observability_hub.domains.finops.repository import ScanEvent, StorageTimelineDay
 from observability_hub.domains.finops.schemas import (
     BudgetGroupBy,
     ColumnTypeScanRequest,
+    CostSeriesGranularity,
+    CostType,
     SuggestedColumnType,
 )
 
@@ -642,6 +644,122 @@ def test_get_budget_injects_user_budget_target_from_firestore(monkeypatch):
     )
 
     assert result.budget_target_usd == 250.0
+
+
+# --- get_cost_series ---------------------------------------------------------
+
+
+def _stub_cost_series(monkeypatch, events, timeline):
+    """events -> cache de audit log; timeline -> retorno de
+    repository.get_storage_cost_timeline (lista de StorageTimelineDay, [] ou
+    None p/ indisponível)."""
+    monkeypatch.setattr(
+        service.repository, "get_scan_events_cached", lambda *a, **kw: (events, None)
+    )
+    monkeypatch.setattr(service, "discover_regions", lambda project_id, client: ["US"])
+    monkeypatch.setattr(service.repository, "get_storage_cost_timeline", lambda *a, **kw: timeline)
+
+
+def _cost_series(monkeypatch, events=None, timeline=None, **kwargs):
+    _stub_cost_series(monkeypatch, events or [], timeline)
+    return service.get_cost_series(
+        MagicMock(), MagicMock(), MagicMock(), MagicMock(), "proj", **kwargs
+    )
+
+
+def test_get_cost_series_buckets_query_cost_on_the_event_day(monkeypatch):
+    today = _now()
+    result = _cost_series(
+        monkeypatch,
+        events=[_event([("proj", "RAW", "a")], today, total_billed_bytes=10**12)],
+        timeline=[],
+    )
+
+    day_key = today.date().isoformat()
+    by_key = {p.period: p for p in result.points}
+    assert by_key[day_key].query_cost_usd > 0
+    assert by_key[day_key].total_cost_usd == by_key[day_key].query_cost_usd
+
+
+def test_get_cost_series_contiguous_daily_periods_no_gaps(monkeypatch):
+    result = _cost_series(monkeypatch, events=[], timeline=[], lookback_days=10)
+
+    assert len(result.points) == 10
+    days = [p.period for p in result.points]
+    assert days == sorted(days)
+
+
+def test_get_cost_series_storage_unavailable_sets_flag_and_warning(monkeypatch):
+    result = _cost_series(monkeypatch, events=[], timeline=None)
+
+    assert result.storage_available is False
+    assert result.warning is not None
+    assert "storage" in result.warning.lower()
+
+
+def test_get_cost_series_adds_storage_cost_when_timeline_present(monkeypatch):
+    today = _now().date()
+    result = _cost_series(
+        monkeypatch,
+        events=[],
+        timeline=[StorageTimelineDay(usage_date=today, logical_bytes=5 * 1024**4)],
+    )
+
+    by_key = {p.period: p for p in result.points}
+    assert result.storage_available is True
+    assert by_key[today.isoformat()].storage_cost_usd > 0
+
+
+def test_get_cost_series_cost_type_query_skips_storage(monkeypatch):
+    calls = {"timeline": 0, "regions": 0}
+
+    def _count_timeline(*a, **kw):
+        calls["timeline"] += 1
+        return []
+
+    def _count_regions(*a, **kw):
+        calls["regions"] += 1
+        return ["US"]
+
+    monkeypatch.setattr(service.repository, "get_scan_events_cached", lambda *a, **kw: ([], None))
+    monkeypatch.setattr(service, "discover_regions", _count_regions)
+    monkeypatch.setattr(service.repository, "get_storage_cost_timeline", _count_timeline)
+
+    result = service.get_cost_series(
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        "proj",
+        cost_type=CostType.QUERY,
+    )
+
+    assert calls == {"timeline": 0, "regions": 0}
+    assert result.storage_available is False
+
+
+def test_get_cost_series_month_granularity_uses_year_month_keys(monkeypatch):
+    result = _cost_series(
+        monkeypatch,
+        events=[],
+        timeline=[],
+        granularity=CostSeriesGranularity.MONTH,
+        lookback_days=31,
+    )
+
+    assert all(len(p.period) == 7 and p.period[4] == "-" for p in result.points)
+
+
+def test_get_cost_series_dataset_filter_excludes_nonmatching_query_events(monkeypatch):
+    today = _now()
+    result = _cost_series(
+        monkeypatch,
+        events=[_event([("proj", "OTHER", "x")], today, total_billed_bytes=10**12)],
+        timeline=[],
+        datasets=["RAW"],
+    )
+
+    assert all(p.query_cost_usd == 0 for p in result.points)
 
 
 # --- _pick_suggestion ----------------------------------------------------------

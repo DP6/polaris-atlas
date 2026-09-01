@@ -1,11 +1,13 @@
 # Spec — Domínio: FinOps — Budget de custo
 
-**Versão:** 1.5 (refresh visual R2-9 — CRUD de meta de custo por usuário:
-novo `domains/budget` no Firestore, endpoints GET/PUT/DELETE
-`/finops/{p}/budgets`, e `budget_target_usd` injetado no
-`GET /finops/{p}/budget`. v1.4: cache de audit log **incremental** — mesmo
-mecanismo de `finops-waste-scanner.md` v1.4; request path não escaneia
-mais ao vivo. A janela do cache subiu de 30 → **31 dias** — ver ASM-001)
+**Versão:** 1.6 (refresh visual R2-10 — `GET /finops/{p}/cost-series`:
+série temporal de custo query+storage pro gráfico combo da visão geral,
+com filtros de dataset/tabela/granularidade/tipo. Storage vem de
+`INFORMATION_SCHEMA.TABLE_STORAGE_USAGE_TIMELINE_BY_PROJECT`, degrada pra
+`storage_available=false` sem 500. v1.5: CRUD de meta de custo por usuário
+(`domains/budget`, GET/PUT/DELETE `/finops/{p}/budgets`, `budget_target_usd`
+no `GET /finops/{p}/budget`). v1.4: cache de audit log **incremental**,
+janela 30 → **31 dias** — ver ASM-001)
 **Status:** Aprovada
 **Fase:** 4 — FinOps (segunda frente: budget por dataset/projeto)
 **Última atualização:** 2026-09-01
@@ -235,6 +237,78 @@ Os três exigem `require_project_access` (dependency do router, path tem
 
 ---
 
+## Série temporal de custo (`cost-series` — v1.6, refresh visual R2-10)
+
+Alimenta o gráfico combo da visão geral de FinOps (AC-FIN-RV-01/02):
+custo de **query** e de **storage** por período, filtrável.
+
+### GET /api/v1/finops/{project_id}/cost-series
+
+**Parâmetros opcionais (query):**
+- `granularity` — `day` (default) ou `month`. Chave do ponto = `YYYY-MM-DD`
+  ou `YYYY-MM`.
+- `cost_type` — `all` (default), `query`, `storage`. `query` pula a
+  timeline de storage inteira (`storage_available=false`).
+- `lookback_days` — 1–31, default 30. Teto de 31 porque o cache de audit
+  log só guarda 31 dias (v1.4) e o gráfico combina os dois eixos.
+- `datasets` — repetível; restringe a esses datasets.
+- `tables` — repetível, forma `dataset.table`; restringe a essas tabelas.
+
+**Response 200 (`CostSeriesResponse`):**
+```json
+{
+  "project_id": "observability-hub-dev",
+  "granularity": "day",
+  "cost_type": "all",
+  "period_start": "2026-08-03T00:00:00Z",
+  "period_end": "2026-09-01T14:00:00Z",
+  "points": [
+    { "period": "2026-08-03", "query_cost_usd": 1.23,
+      "storage_cost_usd": 0.44, "total_cost_usd": 1.67 }
+  ],
+  "storage_available": true,
+  "cache_updated_at": null,
+  "warning": null
+}
+```
+
+`points` é **contíguo** (um ponto por dia/mês da janela, mesmo sem custo
+— o gráfico não pode ter buraco).
+
+### De onde vem cada série
+
+| Série | Fonte | Custo BQ |
+|---|---|---|
+| `query_cost_usd` | Mesmo cache de audit log de `get_budget` (`get_scan_events_cached`, 31 dias) — nenhum scan novo. `total_billed_bytes` do evento somado no dia do `timestamp`, `× settings.bigquery_price_usd_per_tib`. Fan-out **não** aplicado: cada evento conta **uma vez** por período (evita inflar o total); com filtro de dataset/tabela, o evento entra se **qualquer** tabela real referenciada casar. | $0 (cache) |
+| `storage_cost_usd` | `INFORMATION_SCHEMA.TABLE_STORAGE_USAGE_TIMELINE_BY_PROJECT` (fan-out por região, agregado no SQL — `SUM(COALESCE(total_logical_usage_bytes, total_physical_usage_bytes, 0))` por `usage_date`). Custo do dia = `bytes_GB × tarifa active / dias_do_mês` — usa a tarifa `active` (ignora o desconto long-term → linha de storage é um teto suave) e assume cobrança lógica/on-demand (mesma premissa de "É uma estimativa" acima). | Ver "Dry-run" abaixo |
+
+### `storage_available` e degradação
+
+`get_storage_cost_timeline` devolve `None` se **nenhuma** região respondeu
+(permissão de metadado ausente, view indisponível na região, schema
+diferente do esperado) — o service marca `storage_available=false`,
+`storage_cost_usd` fica `0` em todos os pontos, `query_cost_usd` continua
+válido, e um `warning` explica. Uma região que falha sozinha é ignorada
+(as outras contam). **Nunca vira 500** — lição do incidente da rodada 1
+(SQL nova quebrando `/validate` → 500 sem header de CORS → "Failed to
+fetch"): qualquer `GoogleAPICallError`/`ValueError` da query é engolido
+por região.
+
+### Dry-run (regra do CLAUDE.md)
+
+A query nova toca **só** `INFORMATION_SCHEMA.TABLE_STORAGE_USAGE_TIMELINE_BY_PROJECT`,
+uma view de metadado — o BigQuery **não cobra** query sobre
+`INFORMATION_SCHEMA` (mesma base $0 já assumida em
+`repository.list_all_table_refs` / `get_date_like_columns`, que rodam
+`region-X.INFORMATION_SCHEMA.*`). Um `dry_run` retornaria
+`total_bytes_processed = 0`. Isso **precisa ser confirmado em dev** após o
+deploy da branch `feat/r2-finops-cost-series` (o deploy é a verificação —
+não há credencial de GCP no ambiente de desenvolvimento local pra rodar o
+dry-run antes). Se por algum motivo a view cobrar, a degradação acima
+ainda protege o endpoint; ajustar aqui se o dry-run em dev mostrar bytes.
+
+---
+
 ## Agrupamento configurável (`group_by`)
 
 Uma ou mais chaves por evento, calculadas em `service._group_keys()`:
@@ -310,17 +384,18 @@ apps/backend/src/observability_hub/
 ├── api/v1/
 │   └── finops.py          # + GET /finops/{project_id}/budget?group_by=...
 │                          # + GET/PUT/DELETE /finops/{project_id}/budgets (CRUD, v1.5)
+│                          # + GET /finops/{project_id}/cost-series (v1.6)
 ├── domains/finops/
-│   ├── service.py          # + get_budget(), _group_keys(); get_budget aceita user_email → budget_target_usd
-│   ├── repository.py       # ScanEvent + job_id/principal_email/query_text; get_scan_events_cached() (cache, ver finops-waste-scanner.md v1.4); _parse_table_ref filtra INFORMATION_SCHEMA
-│   └── schemas.py          # + BudgetGroupBy, CostGroup, CostlyQuery, CostProjection, BudgetResponse (+ cache_updated_at, + budget_target_usd)
+│   ├── service.py          # + get_budget(), _group_keys(); get_budget aceita user_email → budget_target_usd; + get_cost_series() (v1.6)
+│   ├── repository.py       # ScanEvent + job_id/principal_email/query_text; get_scan_events_cached() (cache, ver finops-waste-scanner.md v1.4); _parse_table_ref filtra INFORMATION_SCHEMA; + StorageTimelineDay + get_storage_cost_timeline() (v1.6)
+│   └── schemas.py          # + BudgetGroupBy, CostGroup, CostlyQuery, CostProjection, BudgetResponse (+ cache_updated_at, + budget_target_usd); + CostSeriesGranularity, CostType, CostSeriesPoint, CostSeriesResponse (v1.6)
 ├── domains/budget/          # v1.5 — CRUD de meta de custo por usuário (Firestore, espelha domains/favorites)
 │   ├── schemas.py           # BudgetScope, BudgetEntry, BudgetUpsertRequest, BudgetListResponse
 │   ├── repository.py        # _budget_doc_id, list/upsert/remove_budget, get_project_budget_amount
 │   └── service.py           # wrappers finos sobre repository
 └── tests/unit/
-    ├── finops/test_service.py      # + testes de get_budget por dimensão de group_by + budget_target_usd
-    ├── finops/test_repository.py   # + testes de extração de job_id/principal_email/query_text + filtro INFORMATION_SCHEMA
+    ├── finops/test_service.py      # + testes de get_budget por dimensão de group_by + budget_target_usd + get_cost_series (v1.6)
+    ├── finops/test_repository.py   # + testes de extração de job_id/principal_email/query_text + filtro INFORMATION_SCHEMA + get_storage_cost_timeline (v1.6)
     └── budget/{test_repository,test_service}.py  # v1.5 — doc_id por escopo, preservação de created_at, get_project_budget_amount
 ```
 
@@ -353,6 +428,10 @@ tinha com o texto da query inline na célula).
 | Cache hit / miss (`EventCacheNotReadyError`) / falha de cache / `429` no Job | Idêntico ao documentado em `finops-waste-scanner.md` v1.4, "Casos de borda" e "Critérios de aceite" — `get_scan_events_cached` é compartilhado pelos dois endpoints; o request path não escaneia mais ao vivo |
 | `limit` fora do intervalo 1–50 | HTTP 422 (validação do `Query(ge=1, le=50)`) |
 | `group_by` fora do enum | HTTP 422 (validação do `Query` com `BudgetGroupBy`) |
+| **cost-series:** `lookback_days` fora de 1–31 | Clampado no service (não é 422) — o teto de 31 é o limite do cache, não uma escolha do chamador |
+| **cost-series:** timeline de storage indisponível em todas as regiões | `storage_available=false`, `storage_cost_usd=0` em todos os pontos, `query_cost_usd` intacto, `warning` explica — nunca 500 |
+| **cost-series:** dia sem query e sem storage | Ponto presente com os três valores `0` (série contígua, sem buraco) |
+| **cost-series:** `cost_type=query` | Timeline de storage nem é consultada; `storage_available=false` |
 
 ---
 
@@ -361,6 +440,8 @@ tinha com o texto da query inline na célula).
 | ID | Suposição | Status |
 |---|---|---|
 | ASM-001 | `budget` usa o mesmo cache de `partition-candidates` (não um scan com janela month-to-date variável): o recorte pro mês corrente já era feito por `event.timestamp < month_start` no service, não pela janela do scan. Desde a v1.4 a janela do cache é **31 dias** (evicção do Job incremental), então o mês corrente inteiro cabe — o efeito colateral da v1.3 (o `_BUDGET_RETENTION_CAVEAT` disparar sempre no dia 31) foi revertido. | confirmada |
+| ASM-002 | **cost-series:** `INFORMATION_SCHEMA.TABLE_STORAGE_USAGE_TIMELINE_BY_PROJECT` é uma view de metadado que o BigQuery **não cobra** (query $0), mesma base de `list_all_table_refs`/`get_date_like_columns`. Precisa ser confirmada por `dry_run` em dev depois do deploy de `feat/r2-finops-cost-series` — não há credencial de GCP no ambiente local pra rodar antes. Se cobrar, a degradação `storage_available=false` já protege; ajustar a fonte da série de storage. | aberta |
+| ASM-003 | **cost-series:** custo de storage por dia usa a tarifa `active` e bytes lógicos (`total_logical_usage_bytes`, com fallback pra `total_physical_usage_bytes`), dividido pelos dias do mês — a linha de storage é um teto suave (ignora desconto long-term) e assume cobrança lógica/on-demand, mesma premissa do resto do domínio. Suficiente pra um gráfico direcional; não é fatura. | confirmada |
 
 ---
 
@@ -399,15 +480,17 @@ usuarios (ASM-005 do brief).
 | ID | Comportamento | Teste |
 |---|---|---|
 | AC-FIN-RV-01 | Grafico de custo = combo **coluna (diario) + linha (acumulado)**, com projecao tracejada e linha de budget. | `test_finops_cost_combo_chart` |
-| AC-FIN-RV-02 | Filtros do grafico: dataset, tabela, granularidade (mes/dia), tipo de custo (query / storage / ambos). | `test_finops_cost_chart_filters` |
+| AC-FIN-RV-02 | Filtros do grafico: dataset, tabela, granularidade (mes/dia), tipo de custo (query / storage / ambos). **Backend (R2-10):** `GET /finops/{p}/cost-series?granularity=&cost_type=&lookback_days=&datasets=&tables=` → série contígua de `query_cost_usd`/`storage_cost_usd`/`total_cost_usd` por período. | `test_get_cost_series_month_granularity_uses_year_month_keys`, `test_get_cost_series_dataset_filter_excludes_nonmatching_query_events`, `test_get_cost_series_cost_type_query_skips_storage`, `test_get_cost_series_adds_storage_cost_when_timeline_present` |
 | AC-FIN-RV-03 | **Dois scores distintos**: (a) "Eficiencia de custo" geral do projeto (anel composto - ja prototipado); (b) "Score por tabela" individual - coluna "Score" ordenavel (anel compacto + numero) no scanner de desperdicio / Top ofensores **e** anel grande + decomposicao no drill-down da linha (Q-002). | `test_finops_two_distinct_scores` |
 | AC-FIN-RV-04 | Cadastro de budget com granularidade por **dataset e por tabela** (`scope=project\|dataset\|table` no CRUD). So cadastro simples - sem convite/aceite/compartilhamento. GET/PUT/DELETE `/finops/{p}/budgets`, por usuario (Firestore). O valor de `scope=project` volta como `budget_target_usd` no `GET /finops/{p}/budget`. | `test_upsert_budget_dataset_scope_uses_two_segment_doc_id`, `test_upsert_request_rejects_dataset_scope_without_dataset_id`, `test_get_budget_injects_user_budget_target_from_firestore` |
 | AC-FIN-RV-05 | "Top ofensores" com mini-grafico de tendencia de 7 dias por linha. | `test_finops_top_offenders_trend` |
 
-Status R2-9 (2026-09): **AC-FIN-RV-04 implementado** (backend CRUD +
-`budget_target_usd`). AC-FIN-RV-01/02/03/05 seguem pendentes (R2-10 =
-`cost-series` pro AC-02; R2-11 = score por tabela pro AC-03; R2-12 = a
-tela `FinOpsOverviewPage` consumindo tudo, pros AC-01/05).
+Status (2026-09): **AC-FIN-RV-04 implementado** (R2-9 — backend CRUD +
+`budget_target_usd`). **AC-FIN-RV-02: backend implementado** (R2-10 —
+`GET /finops/{p}/cost-series`); a parte de UI (montar os filtros no
+gráfico) fica na R2-12. AC-FIN-RV-01/03/05 seguem pendentes (R2-11 =
+score por tabela pro AC-03; R2-12 = a tela `FinOpsOverviewPage`
+consumindo tudo, pros AC-01/05).
 
 Suposicao **ASM-FIN-RV-01** (aberta): AC-FIN-RV-02/03 podem exigir
 agregacao nova no backend (custo por dataset x dia x tipo; insumos do score

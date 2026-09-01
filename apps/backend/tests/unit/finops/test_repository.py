@@ -1,9 +1,9 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-from google.api_core.exceptions import Forbidden
+from google.api_core.exceptions import Forbidden, GoogleAPICallError
 
 from observability_hub.core.exceptions import (
     EventCacheNotReadyError,
@@ -365,6 +365,85 @@ def test_list_all_table_refs_no_filter_when_datasets_not_provided():
     called_sql, called_kwargs = client.query.call_args
     assert "WHERE" not in called_sql[0]
     assert called_kwargs["job_config"] is None
+
+
+# --- get_storage_cost_timeline -------------------------------------------------
+
+
+def _timeline_row(usage_date, logical_bytes):
+    return SimpleNamespace(usage_date=usage_date, logical_bytes=logical_bytes)
+
+
+def test_get_storage_cost_timeline_returns_none_for_no_regions():
+    assert repository.get_storage_cost_timeline(MagicMock(), "proj", [], date(2026, 8, 1)) is None
+
+
+def test_get_storage_cost_timeline_merges_regions_and_sums_same_day():
+    client = MagicMock()
+    d = date(2026, 8, 10)
+
+    def _query(sql, job_config=None):
+        result = MagicMock()
+        if "region-US" in sql:
+            result.result.return_value = [_timeline_row(d, 100)]
+        else:
+            result.result.return_value = [_timeline_row(d, 25)]
+        return result
+
+    client.query.side_effect = _query
+
+    out = repository.get_storage_cost_timeline(client, "proj", ["US", "EU"], date(2026, 8, 1))
+
+    assert out == [repository.StorageTimelineDay(usage_date=d, logical_bytes=125)]
+
+
+def test_get_storage_cost_timeline_returns_none_when_all_regions_fail():
+    client = MagicMock()
+    client.query.side_effect = GoogleAPICallError("no such view")
+
+    out = repository.get_storage_cost_timeline(client, "proj", ["US", "EU"], date(2026, 8, 1))
+
+    assert out is None
+
+
+def test_get_storage_cost_timeline_tolerates_one_failing_region():
+    client = MagicMock()
+    d = date(2026, 8, 10)
+
+    def _query(sql, job_config=None):
+        if "region-EU" in sql:
+            raise GoogleAPICallError("boom")
+        result = MagicMock()
+        result.result.return_value = [_timeline_row(d, 7)]
+        return result
+
+    client.query.side_effect = _query
+
+    out = repository.get_storage_cost_timeline(client, "proj", ["US", "EU"], date(2026, 8, 1))
+
+    assert out == [repository.StorageTimelineDay(usage_date=d, logical_bytes=7)]
+
+
+def test_get_storage_cost_timeline_passes_dataset_and_table_filters_as_params():
+    client = MagicMock()
+    result = MagicMock()
+    result.result.return_value = []
+    client.query.return_value = result
+
+    repository.get_storage_cost_timeline(
+        client,
+        "proj",
+        ["US"],
+        date(2026, 8, 1),
+        datasets=["RAW"],
+        tables=["RAW.events"],
+    )
+
+    called_sql, called_kwargs = client.query.call_args
+    assert "table_schema IN UNNEST(@datasets)" in called_sql[0]
+    assert "CONCAT(table_schema, '.', table_name) IN UNNEST(@tables)" in called_sql[0]
+    param_names = {p.name for p in called_kwargs["job_config"].query_parameters}
+    assert param_names == {"since", "datasets", "tables"}
 
 
 # --- get_date_like_columns -------------------------------------------------------

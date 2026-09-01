@@ -22,6 +22,9 @@ from observability_hub.domains.finops.schemas import (
     ColumnTypeEstimateResponse,
     ColumnTypeScanRequest,
     ColumnTypeSuggestionsResponse,
+    CostSeriesGranularity,
+    CostSeriesResponse,
+    CostType,
     PartitionCandidatesResponse,
 )
 
@@ -69,6 +72,33 @@ def get_budget(
         group_by=group_by,
         limit=limit,
         user_email=user.email,
+    )
+
+
+@router.get("/{project_id}/cost-series", response_model=CostSeriesResponse)
+def get_cost_series(
+    project_id: str,
+    granularity: CostSeriesGranularity = Query(default=CostSeriesGranularity.DAY),
+    cost_type: CostType = Query(default=CostType.ALL),
+    lookback_days: int = Query(default=30, ge=1, le=31),
+    datasets: list[str] | None = Query(default=None),
+    tables: list[str] | None = Query(default=None),
+    client: bigquery.Client = Depends(get_client),
+    logging_client: cloud_logging.Client = Depends(get_logging_client),
+    storage_client: storage.Client = Depends(get_storage_client),
+    firestore_client: firestore.Client = Depends(get_firestore_client),
+) -> CostSeriesResponse:
+    return service.get_cost_series(
+        client,
+        logging_client,
+        storage_client,
+        firestore_client,
+        project_id,
+        granularity=granularity,
+        cost_type=cost_type,
+        lookback_days=lookback_days,
+        datasets=datasets,
+        tables=tables,
     )
 
 

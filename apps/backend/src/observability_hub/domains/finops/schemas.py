@@ -80,6 +80,42 @@ class BudgetResponse(BaseModel):
     warning: str | None = None
 
 
+class CostSeriesGranularity(str, Enum):
+    DAY = "day"
+    MONTH = "month"
+
+
+class CostType(str, Enum):
+    ALL = "all"
+    QUERY = "query"
+    STORAGE = "storage"
+
+
+class CostSeriesPoint(BaseModel):
+    # "2026-08-14" (day) ou "2026-08" (month) — ISO, ordenável como string.
+    period: str
+    query_cost_usd: float
+    storage_cost_usd: float
+    total_cost_usd: float
+
+
+class CostSeriesResponse(BaseModel):
+    project_id: str
+    granularity: CostSeriesGranularity
+    cost_type: CostType
+    # Janela efetiva coberta pelos pontos (derivada do cache de audit log
+    # de 31 dias + do que a timeline de storage devolveu).
+    period_start: datetime
+    period_end: datetime
+    points: list[CostSeriesPoint]
+    # False quando a INFORMATION_SCHEMA.TABLE_STORAGE_USAGE_TIMELINE_BY_PROJECT
+    # não pôde ser lida (erro de permissão/schema/região) — os pontos ainda
+    # trazem query_cost_usd, storage_cost_usd fica 0. Nunca vira 500.
+    storage_available: bool
+    cache_updated_at: datetime | None = None
+    warning: str | None = None
+
+
 class SuggestedColumnType(str, Enum):
     INT64 = "INT64"
     FLOAT64 = "FLOAT64"

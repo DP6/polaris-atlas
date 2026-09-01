@@ -10,7 +10,7 @@ proíbe lógica de negócio em api/.
 import calendar
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from google.cloud import bigquery, firestore, storage
 from google.cloud import logging as cloud_logging
@@ -40,6 +40,10 @@ from observability_hub.domains.finops.schemas import (
     CostGroup,
     CostlyQuery,
     CostProjection,
+    CostSeriesGranularity,
+    CostSeriesPoint,
+    CostSeriesResponse,
+    CostType,
     PartitionCandidate,
     PartitionCandidatesResponse,
     SuggestedColumnType,
@@ -372,6 +376,167 @@ def get_budget(
         top_queries=top_queries,
         projection=projection,
         budget_target_usd=budget_target_usd,
+        cache_updated_at=cache_updated_at,
+        warning=warning,
+    )
+
+
+# Janela máxima da série — o cache de audit log guarda 31 dias
+# (finops-waste-scanner.md v1.4), então o eixo de "custo de query" não
+# pode ir além disso. A timeline de storage cobre mais, mas o gráfico
+# combina os dois, então a janela efetiva é a do cache.
+_COST_SERIES_MAX_LOOKBACK_DAYS = 31
+
+_STORAGE_TIMELINE_UNAVAILABLE_WARNING = (
+    "A linha de custo de storage não pôde ser montada: a view "
+    "INFORMATION_SCHEMA.TABLE_STORAGE_USAGE_TIMELINE_BY_PROJECT não "
+    "respondeu no projeto '{project_id}' (permissão de metadado ausente, "
+    "view indisponível na região, ou schema diferente do esperado). A "
+    "linha de custo de query continua válida."
+)
+
+
+def _period_key(d: date, granularity: CostSeriesGranularity) -> str:
+    if granularity == CostSeriesGranularity.MONTH:
+        return d.strftime("%Y-%m")
+    return d.isoformat()
+
+
+def _iter_periods(start: date, end: date, granularity: CostSeriesGranularity) -> list[str]:
+    """Lista contígua de chaves de período de start a end (inclusive) — o
+    gráfico precisa de pontos sem buraco mesmo em dias/meses sem custo."""
+    keys: list[str] = []
+    seen: set[str] = set()
+    cursor = start
+    while cursor <= end:
+        key = _period_key(cursor, granularity)
+        if key not in seen:
+            seen.add(key)
+            keys.append(key)
+        cursor += timedelta(days=1)
+    return keys
+
+
+def _storage_cost_for_day(logical_bytes: int, day: date) -> float:
+    """Custo de storage *incorrido naquele dia* = custo mensal daquele
+    volume dividido pelos dias do mês. Usa a tarifa `active` (ignora o
+    desconto de long-term → a linha de storage é um teto suave) e assume
+    cobrança lógica/on-demand, mesma premissa do resto do Hub (ver
+    docs/specs/finops-budget.md, 'É uma estimativa')."""
+    gb = logical_bytes / (1024**3)
+    days_in_month = calendar.monthrange(day.year, day.month)[1]
+    monthly = gb * settings.bigquery_storage_price_usd_per_gb_month_active
+    return monthly / days_in_month
+
+
+def get_cost_series(
+    client: bigquery.Client,
+    logging_client: cloud_logging.Client,
+    storage_client: storage.Client,
+    firestore_client: firestore.Client,
+    project_id: str,
+    granularity: CostSeriesGranularity = CostSeriesGranularity.DAY,
+    cost_type: CostType = CostType.ALL,
+    lookback_days: int = 30,
+    datasets: list[str] | None = None,
+    tables: list[str] | None = None,
+) -> CostSeriesResponse:
+    """Série temporal de custo (query + storage) pro gráfico combo da
+    visão geral de FinOps (AC-FIN-RV-02). Custo de query vem do mesmo
+    cache de audit log de get_budget (nenhum scan novo); custo de storage
+    vem da timeline de INFORMATION_SCHEMA (metadado, $0), que degrada pra
+    `storage_available=False` se indisponível — nunca 500."""
+    lookback_days = max(1, min(lookback_days, _COST_SERIES_MAX_LOOKBACK_DAYS))
+    now = datetime.now(UTC)
+    start_date = (now - timedelta(days=lookback_days - 1)).date()
+    end_date = now.date()
+
+    want_query = cost_type in (CostType.ALL, CostType.QUERY)
+    want_storage = cost_type in (CostType.ALL, CostType.STORAGE)
+
+    dataset_filter = set(datasets) if datasets else None
+    table_filter = set(tables) if tables else None
+
+    # --- custo de query, do cache de audit log ------------------------------
+    query_cost_by_period: dict[str, float] = {}
+    cache_updated_at: datetime | None = None
+    warning: str | None = None
+    if want_query:
+        events, cache_updated_at, quota_warning = _scan_events_or_quota_warning(
+            logging_client, storage_client, firestore_client, project_id
+        )
+        warning = quota_warning
+        for event in events:
+            if event.timestamp is None or event.timestamp.date() < start_date:
+                continue
+            if event.total_billed_bytes <= 0:
+                continue
+            real_tables = [ref for ref in event.referenced_tables if ref[0] == project_id]
+            if not real_tables:
+                continue
+            if dataset_filter is not None and not any(
+                d in dataset_filter for _p, d, _t in real_tables
+            ):
+                continue
+            if table_filter is not None and not any(
+                f"{d}.{t}" in table_filter for _p, d, t in real_tables
+            ):
+                continue
+            key = _period_key(event.timestamp.date(), granularity)
+            cost = _estimate_query_cost_usd(event.total_billed_bytes)
+            query_cost_by_period[key] = query_cost_by_period.get(key, 0.0) + cost
+
+    # --- custo de storage, da timeline de INFORMATION_SCHEMA ---------------
+    storage_cost_by_period: dict[str, float] = {}
+    storage_available = True
+    if want_storage:
+        # discover_regions propaga ProjectNotFound/AccessDenied igual aos
+        # outros endpoints de finops (scan_partition_candidates) — se a SA
+        # não alcança o projeto, é 404/403, não série vazia silenciosa.
+        regions = discover_regions(project_id, client=client)
+        timeline = repository.get_storage_cost_timeline(
+            client,
+            project_id,
+            regions,
+            start_date,
+            datasets=datasets,
+            tables=tables,
+        )
+        if timeline is None:
+            storage_available = False
+            storage_warning = _STORAGE_TIMELINE_UNAVAILABLE_WARNING.format(project_id=project_id)
+            warning = f"{warning} {storage_warning}".strip() if warning else storage_warning
+        else:
+            for day in timeline:
+                if day.usage_date < start_date:
+                    continue
+                key = _period_key(day.usage_date, granularity)
+                storage_cost_by_period[key] = storage_cost_by_period.get(
+                    key, 0.0
+                ) + _storage_cost_for_day(day.logical_bytes, day.usage_date)
+    else:
+        storage_available = False
+
+    points = [
+        CostSeriesPoint(
+            period=key,
+            query_cost_usd=round(query_cost_by_period.get(key, 0.0), 6),
+            storage_cost_usd=round(storage_cost_by_period.get(key, 0.0), 6),
+            total_cost_usd=round(
+                query_cost_by_period.get(key, 0.0) + storage_cost_by_period.get(key, 0.0), 6
+            ),
+        )
+        for key in _iter_periods(start_date, end_date, granularity)
+    ]
+
+    return CostSeriesResponse(
+        project_id=project_id,
+        granularity=granularity,
+        cost_type=cost_type,
+        period_start=datetime.combine(start_date, datetime.min.time(), tzinfo=UTC),
+        period_end=now,
+        points=points,
+        storage_available=storage_available,
         cache_updated_at=cache_updated_at,
         warning=warning,
     )

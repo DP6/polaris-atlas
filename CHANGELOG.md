@@ -3082,3 +3082,40 @@ implementação**
   `uv run pytest tests/unit` = 803 ok, `ruff check` limpo.
 - `docs/specs/finops-budget.md` → v1.5 (CRUD documentado, AC-FIN-RV-04
   marcado implementado, ASM-FIN-RV-02 confirmada: store por usuário).
+- **Incidente de deploy (não-código):** o push do R2-9 falhou 3× no CI
+  antes de passar — 1ª por `502 Bad Gateway` no `docker push` pro
+  Artifact Registry, 2ª/3ª por startup probe do Cloud Run na mesma janela
+  de degradação do GCP (`us-central1`, ~15:22–15:30 UTC). Código
+  verificado local (pytest 803 + `uvicorn observability_hub.main:app`
+  sobe limpo com o entrypoint exato do container); 4ª tentativa (mesmo
+  digest, zero mudança) passou. `backend-dev` nunca ficou fora do ar — o
+  Cloud Run só troca tráfego pra revisão `Ready`.
+
+### R2-10 — `feat/r2-finops-cost-series` (backend)
+
+- **`GET /finops/{project_id}/cost-series`** (`domains/finops`, AC-FIN-RV-02):
+  série temporal contígua de custo **query + storage** por dia/mês pro
+  gráfico combo da visão geral. Params: `granularity` (day/month),
+  `cost_type` (all/query/storage), `lookback_days` (1–31, clampado),
+  `datasets`, `tables`.
+- **Custo de query:** do mesmo cache de audit log de `get_budget`
+  (`get_scan_events_cached`, 31 dias) — **nenhum scan novo**. Cada evento
+  conta uma vez por período (sem fan-out — evita inflar o total); com
+  filtro, o evento entra se qualquer tabela real casar.
+- **Custo de storage:** `SUM(COALESCE(total_logical_usage_bytes,
+  total_physical_usage_bytes,0))` por `usage_date` de
+  `INFORMATION_SCHEMA.TABLE_STORAGE_USAGE_TIMELINE_BY_PROJECT` (fan-out
+  por região, agregado no SQL). Custo do dia = `GB × tarifa active /
+  dias_do_mês`. `repository.get_storage_cost_timeline` → `None` se
+  **nenhuma** região respondeu → `storage_available=false` +
+  `query_cost_usd` intacto + `warning`; **nunca 500** (lição do incidente
+  da rodada 1). Região que falha sozinha é ignorada.
+- **Dry-run:** a query toca só `INFORMATION_SCHEMA.*` (view de metadado,
+  BQ não cobra — mesma base $0 de `list_all_table_refs` /
+  `get_date_like_columns`). **Sem credencial de GCP no ambiente local pra
+  rodar `dry_run` antes** — confirmar em dev pós-deploy (ASM-002 da
+  spec); a degradação `storage_available=false` protege se a view cobrar.
+- Testes: `tests/unit/finops/test_service.py` (+8, `get_cost_series`),
+  `test_repository.py` (+5, `get_storage_cost_timeline`). `uv run pytest
+  tests/unit` = 815 ok, `ruff check`/`format` limpos.
+- `docs/specs/finops-budget.md` → v1.6.
