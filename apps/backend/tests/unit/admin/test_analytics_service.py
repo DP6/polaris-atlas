@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from unittest.mock import MagicMock
 
 from observability_hub.domains.admin import analytics_service as service
@@ -52,6 +52,33 @@ def test_get_login_analytics_buckets_by_day_week_month(monkeypatch):
     assert monthly_by_period["2026-08"].unique_users == 2
 
     assert len(result.recent_events) == 3
+
+
+def test_get_login_analytics_from_to_window(monkeypatch):
+    """AC-ADM-RV-03: `from_date` vira o `since` passado ao repositório;
+    `to_date` filtra o limite superior (fim do dia UTC, inclusivo) depois."""
+    client = MagicMock()
+    captured = {}
+    events = [
+        {"email": "b@dp6.com.br", "logged_in_at": datetime(2026, 8, 20, 9, tzinfo=UTC)},
+        {"email": "c@dp6.com.br", "logged_in_at": datetime(2026, 8, 25, 23, 59, tzinfo=UTC)},
+        {"email": "d@dp6.com.br", "logged_in_at": datetime(2026, 8, 26, 8, tzinfo=UTC)},
+    ]
+
+    def fake_list(client, since):
+        captured["since"] = since
+        return events
+
+    monkeypatch.setattr(service.repository, "list_login_events", fake_list)
+
+    result = service.get_login_analytics(
+        client, from_date=date(2026, 8, 15), to_date=date(2026, 8, 25)
+    )
+
+    assert captured["since"] == datetime(2026, 8, 15, 0, 0, tzinfo=UTC)
+    periods = {b.period for b in result.daily}
+    assert periods == {"2026-08-20", "2026-08-25"}  # 26/08 caiu (> to_date)
+    assert len(result.recent_events) == 2
 
 
 def test_get_login_analytics_recent_events_capped_at_50(monkeypatch):

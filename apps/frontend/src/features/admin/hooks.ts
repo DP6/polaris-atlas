@@ -250,10 +250,10 @@ export function useCreateAccessRequests() {
   })
 }
 
-export function useLoginAnalytics(lookbackDays?: number) {
+export function useLoginAnalytics(params?: { lookbackDays?: number; from?: string; to?: string }) {
   return useQuery({
-    queryKey: ['admin-login-analytics', lookbackDays],
-    queryFn: () => adminApi.getLoginAnalytics(lookbackDays),
+    queryKey: ['admin-login-analytics', params?.lookbackDays, params?.from, params?.to],
+    queryFn: () => adminApi.getLoginAnalytics(params),
   })
 }
 

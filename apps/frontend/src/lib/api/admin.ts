@@ -122,10 +122,14 @@ export const adminApi = {
       `/api/v1/admin/access-requests/${encodeURIComponent(requestId)}/deny`,
     ),
 
-  getLoginAnalytics: (lookbackDays?: number) =>
-    httpClient.get<LoginAnalyticsResponse>(
-      `/api/v1/admin/analytics/logins${lookbackDays ? `?lookback_days=${lookbackDays}` : ''}`,
-    ),
+  getLoginAnalytics: (params?: { lookbackDays?: number; from?: string; to?: string }) => {
+    const qs = new URLSearchParams()
+    if (params?.lookbackDays) qs.set('lookback_days', String(params.lookbackDays))
+    if (params?.from) qs.set('from', params.from)
+    if (params?.to) qs.set('to', params.to)
+    const suffix = qs.toString() ? `?${qs.toString()}` : ''
+    return httpClient.get<LoginAnalyticsResponse>(`/api/v1/admin/analytics/logins${suffix}`)
+  },
 
   getFavoritesAnalytics: () =>
     httpClient.get<FavoritesAnalyticsResponse>('/api/v1/admin/analytics/favorites'),

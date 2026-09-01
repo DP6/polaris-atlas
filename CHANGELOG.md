@@ -71,6 +71,22 @@ nome; a busca global de tabela era só um link pra `/search`.
   `PageHeader` + `<TableSearchPanel>`. `types/catalog.ts` SearchMode +1.
   ASM-CAT-01 resolvida; AC-CAT-OV-06 novo em `catalog.md`.
 
+### R2-5 — `feat/r2-admin-usage-blocks` (backend + front-end)
+
+- Novos `components/ComboChart.tsx` (coluna+linha recharts, eixo Y duplo,
+  extraído do ComposedChart de BudgetPage) e `components/Funnel.tsx`
+  (trapézios `<polygon>` afunilando, rótulo/valor/% por FORA, `role=img`).
+- `LoginAnalyticsSection`: `LineChart` → `ComboChart` + `ChoiceToggle` de
+  troca de métrica (coluna = Acumulado/Período) + toggle Dia/Mês (buckets
+  daily/monthly) + `DateField` De/Até. Vira `<Panel>`.
+- `RetentionFunnelSection`: `BarChart` → `<Funnel>`. Vira `<Panel>`.
+- `AdminUsageTab`: `flex-col gap-8` de `CollapsibleSection` → blocos —
+  combo full-width, funil+heatmap 2-col, tabelas empilhadas.
+- **Backend (B7):** `?from=&to=` no `GET /admin/analytics/logins` — `from`
+  vira o `since`, `to` filtra o topo (fim do dia UTC). Sem eles,
+  `lookback_days` como antes. `admin.md` + teste. pytest 786 ok.
+  ACs AC-ADM-RV-01..04 marcados ✅, ASM-ADM-RV-01 resolvida.
+
 ## Refresh visual do Hub — fundação de tokens (2026-09)
 
 Primeira fatia do refresh visual (brief:

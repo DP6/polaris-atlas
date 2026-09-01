@@ -760,6 +760,13 @@ Filtra silenciosamente projetos já acessíveis ou com pedido pendente
 duplicado — ver "Solicitação de acesso" acima.
 
 ### GET /api/v1/admin/analytics/logins?lookback_days=90
+
+Params opcionais (refresh visual rodada 2, AC-ADM-RV-03): `from` e `to`
+(datas `YYYY-MM-DD`). Quando `from` é dado, ele vira o `since` da busca no
+Firestore (no lugar de `lookback_days`); `to` filtra o limite superior
+(fim do dia UTC, inclusivo) depois. Sem `from`/`to` → comportamento antigo
+(`lookback_days`). ASM-ADM-RV-01 resolvida.
+
 ### GET /api/v1/admin/analytics/favorites
 ### GET /api/v1/admin/analytics/profiling?limit=200
 Ver "Analytics de uso (v1.2)" acima.
@@ -987,11 +994,13 @@ Ver brief `frontend-visual-refresh.md` (sec. Administracao) e
 
 | ID | Comportamento | Teste |
 |---|---|---|
-| AC-ADM-RV-01 | "Acessos ao Hub" = combo **linha + coluna** (diario x acumulado) com **controle na propria tela** pra o usuario escolher qual metrica e linha e qual e coluna - sem mapeamento fixo no design (ASM-004 do brief). | `test_admin_access_combo_swap_control` |
-| AC-ADM-RV-02 | Seletor de granularidade **dia / mes** no grafico de acessos. | `test_admin_access_granularity_toggle` |
-| AC-ADM-RV-03 | **Filtro de periodo (de / ate)** no grafico de acessos - novo, alem da granularidade. | `test_admin_access_date_range_filter` |
-| AC-ADM-RV-04 | Funil de retencao como **trapezios geometricos** afunilando, com os rotulos **FORA** do trapezio (ao lado), nunca centralizados por dentro - nota tecnica do brief: rotulo dentro colide com o valor nos estagios estreitos (ex.: 38%). | `test_retention_funnel_trapezoids_labels_outside` |
+| AC-ADM-RV-01 | ✅ (R2-5) "Acessos ao Hub" = `<ComboChart>` coluna + linha; `<ChoiceToggle>` "Coluna: Acumulado / Período" troca qual série é coluna e qual é linha (eixo Y duplo). | `LoginAnalyticsSection` — visual |
+| AC-ADM-RV-02 | ✅ (R2-5) `<ChoiceToggle>` "Granularidade: Dia / Mês" — usa os buckets `daily`/`monthly` que a resposta já traz. | `LoginAnalyticsSection` — visual |
+| AC-ADM-RV-03 | ✅ (R2-5) dois `<DateField>` "De"/"Até" → `?from=&to=` no endpoint (backend B7). Sem eles, janela `lookback_days=90`. | `test_get_login_analytics_from_to_window` |
+| AC-ADM-RV-04 | ✅ (R2-5) `<Funnel>` novo — `<polygon>` por estágio afunilando pela razão com o 1º; rótulo + valor + % numa **coluna ao lado** (nunca por dentro). `role="img"` + `aria-label` com a decomposição. | `Funnel` — visual |
 
-Suposicao **ASM-ADM-RV-01** (aberta): AC-ADM-RV-03 (filtro de/ate) pode
-exigir parametro novo no endpoint de analytics de acessos - hoje e
-janela fixa (`LOOKBACK_DAYS`). Confirmar na implementacao.
+Suposicao **ASM-ADM-RV-01** (resolvida — R2-5): AC-ADM-RV-03 exigiu sim
+parametro novo no endpoint (`?from=&to=`) — implementado (B7). Layout:
+`AdminUsageTab` deixou de ser `flex-col gap-8` de `CollapsibleSection` e
+virou blocos — combo de acessos full-width, funil + heatmap numa linha
+2-col, seções de tabela empilhadas.

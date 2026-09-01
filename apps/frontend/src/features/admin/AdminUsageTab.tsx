@@ -7,12 +7,19 @@ import { ProfilingActivitySection } from '@/features/admin/ProfilingActivitySect
 import { RetentionFunnelSection } from '@/features/admin/RetentionFunnelSection'
 import { UsageHeatmapSection } from '@/features/admin/UsageHeatmapSection'
 
+// Layout de BLOCOS (não mais scroll corrido de CollapsibleSection): o
+// combo de acessos (rico) ocupa a largura toda; funil + heatmap dividem
+// uma linha 2-col; as seções pesadas de tabela seguem empilhadas full-width.
 export function AdminUsageTab() {
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6">
       <LoginAnalyticsSection />
-      <RetentionFunnelSection />
-      <UsageHeatmapSection />
+
+      <div className="grid gap-6 lg:grid-cols-2 [&>*]:min-w-0">
+        <RetentionFunnelSection />
+        <UsageHeatmapSection />
+      </div>
+
       <FavoritesAnalyticsSection />
       <ProfilingActivitySection />
       <AccessRequestAnalyticsSection />
