@@ -30,6 +30,17 @@ de retenção em trapézios com rótulo por fora.
   isolate` só quando ligado). `design-system.md` §Vida + tabela de
   componentes + `ui-ux-rules.md` §Identidade atualizados no mesmo PR.
 
+### R2-2 — `feat/r2-panel-component` (só front-end)
+
+- Novo `components/Panel.tsx` — "bloco" da plataforma (protótipo `.panel`):
+  container 10px com `border` + `bg-card` + borda-gradiente `.dp6-panel`
+  (`::after` mascarado). Props `title`/`subtitle`/`actions`/`as`/`filterRow`
+  (filtros DENTRO do painel, não soltos antes da `<Table>`)/`hoverable`/`glass`.
+- `.dp6-panel` nova no `index.css`. `AssetsTable` (tabela de tabelas de um
+  dataset) é o primeiro adotante — vira `<Panel title="Ativos" subtitle=…
+  filterRow=…>`. Roll pras outras ~20 tabelas soltas na R2-3.
+- `design-system.md` (linha do componente + `.dp6-panel` implícito em §Vida).
+
 ## Refresh visual do Hub — fundação de tokens (2026-09)
 
 Primeira fatia do refresh visual (brief:
