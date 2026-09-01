@@ -131,6 +131,11 @@ barras verticais sempre visíveis.
   (ProjectSelector, pickers do Admin, SaveRunToFolderDialog).
 - Doc-sync: `design-system.md`, `docs/specs/admin.md`. `pnpm lint` + `pnpm build` verdes.
 
+### R3-page-bottom-space — `feat/r3-page-bottom-space` (só front-end)
+
+- `AppLayout`: `<main>` de `p-6` → `px-6 pt-6 pb-16` — respiro no fim de toda página
+  (cards/ícones/texto não encostavam na borda inferior ao rolar até o fim).
+
 ## Refresh visual do Hub — rodada 2 (2026-09)
 
 Segunda rodada, sobre as lacunas que a rodada 1 marcou como "especificado,
