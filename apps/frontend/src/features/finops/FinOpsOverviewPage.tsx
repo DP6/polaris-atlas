@@ -102,6 +102,27 @@ export function FinOpsOverviewPage() {
         }
       />
 
+      <OptionCardGrid>
+        <OptionCard
+          icon={<Search size={18} />}
+          title="Scanner de desperdício"
+          description="Candidatas a particionamento e sugestões de tipo de coluna, com estimativa de custo."
+          to="/finops/scanner"
+        />
+        <OptionCard
+          icon={<TrendingUp size={18} />}
+          title="Budget de custo"
+          description="Custo agrupável (tabela / dataset / usuário / dia), queries mais caras e projeção do mês."
+          to="/finops/budget"
+        />
+        <OptionCard
+          icon={<Target size={18} />}
+          title="Configurar budget"
+          description="Cadastrar metas de custo mensais por projeto, dataset ou tabela."
+          onClick={() => setConfigOpen(true)}
+        />
+      </OptionCardGrid>
+
       {budget?.warning && <WarningCallout>{budget.warning}</WarningCallout>}
 
       <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(13rem,1fr))]">
@@ -205,27 +226,6 @@ export function FinOpsOverviewPage() {
           <TopOffendersTable tables={scores?.tables ?? []} />
         </Panel>
       </div>
-
-      <OptionCardGrid>
-        <OptionCard
-          icon={<Search size={18} />}
-          title="Scanner de desperdício"
-          description="Candidatas a particionamento e sugestões de tipo de coluna, com estimativa de custo."
-          to="/finops/scanner"
-        />
-        <OptionCard
-          icon={<TrendingUp size={18} />}
-          title="Budget de custo"
-          description="Custo agrupável (tabela / dataset / usuário / dia), queries mais caras e projeção do mês."
-          to="/finops/budget"
-        />
-        <OptionCard
-          icon={<Target size={18} />}
-          title="Configurar budget"
-          description="Cadastrar metas de custo mensais por projeto, dataset ou tabela."
-          onClick={() => setConfigOpen(true)}
-        />
-      </OptionCardGrid>
 
       <BudgetConfigDialog projectId={projectId} open={configOpen} onOpenChange={setConfigOpen} />
     </div>

@@ -6,6 +6,7 @@ import {
   Database,
   DollarSign,
   FolderKanban,
+  Gauge,
   HardDrive,
   History,
   PiggyBank,
@@ -295,6 +296,10 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
 
         <SidebarSection label="FinOps" to="/finops" open={finopsOpen} onOpenChange={setFinopsOpen}>
           <nav className="flex flex-col gap-0.5">
+            <NavLink to="/finops" end className={NAV_LINK_CLASS}>
+              <Gauge size={16} />
+              Visão geral
+            </NavLink>
             <NavLink to="/finops/scanner" className={NAV_LINK_CLASS}>
               <PiggyBank size={16} />
               Scanner de desperdício
