@@ -105,6 +105,32 @@ Checagem de backend: `description` de dataset **é** mudança de backend
   `ProfilingDialog` "Executar profile", `ColumnTypeSuggestionsTab`
   "Escanear", `FinOpsPage` "Executar". Opt-in via `className` — a
   primitiva `ui/button` continua intocada.
+- **`docs/fe-refresh-deferred-specs`** (PR 11, docs): ACs de "refresh
+  visual — pendente" nas specs de lineage/quality/finops/storage/admin +
+  `frontend-visual-refresh-plan.md` §5 (estado real).
+- **`fix/catalog-description-safe`** (PR 12): reverte a leitura de
+  `description` da PR 7 — ver "Erros cometidos e aprendizados".
+
+### Erros cometidos e aprendizados
+
+- **PR 7 quebrou `GET /projects/{id}/validate` em `dev` ("Failed to
+  fetch" ao selecionar um projeto).** O `LEFT JOIN` com
+  `region-{region}.INFORMATION_SCHEMA.SCHEMATA_OPTIONS` +
+  `SAFE.JSON_VALUE` era SQL que os testes unitários **não exercitam** (o
+  `bigquery.Client` é mockado — `client.query().result()` devolve rows
+  fixas), então `pytest` passou com a query inválida. Em runtime, o
+  `BadRequest` do BigQuery virou um 500 **não tratado** → como o
+  `ServerErrorMiddleware` do Starlette fica por fora do `CORSMiddleware`,
+  a resposta de erro saiu **sem `Access-Control-Allow-Origin`** → o
+  browser reporta `TypeError: Failed to fetch`, não o 500 real. Reverti
+  a query (`get_datasets_summary` volta ao original, `description: None`
+  fixo). Aprendizados: (1) query BQ nova **exige** teste de integração
+  contra um projeto real antes de subir — mock de client não é
+  suficiente pra validar SQL; (2) `INFORMATION_SCHEMA.SCHEMATA_OPTIONS`
+  region-qualified e `SAFE.JSON_VALUE` precisam ser confirmados num
+  dataset real; (3) sintoma "Failed to fetch" (não o erro real) =
+  provável 500 sem CORS por exceção não tratada — olhar o handler de
+  exceção antes de assumir rede/cold start.
 
 ---
 

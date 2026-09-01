@@ -179,11 +179,12 @@ visual é do usuário, em `dev`.** Nada foi mergeado em `main`.
 | 4 | `feat/fe-refresh-sidebar` | item ativo Q-001 (`.dp6-nav-active`), hover glow (`.dp6-nav-item`), ícone `Boxes` nos datasets, ícone do serviço em `--primary`, mais respiro | lint+build |
 | 5 | `feat/fe-refresh-tables` | hover de linha global (`[data-slot=table-body] tr:hover` → gradiente + barra `inset 3px`) — vale pras ~30 tabelas | lint+build |
 | 6 | `feat/catalogo-de-dados-overview` | rota `/` vira overview do domínio (`CatalogOverviewPage` + `DatasetOverviewCard` + `SlaDistributionBar` compartilhada + `KpiCards.icon`). ACs `AC-CAT-OV-*` em `catalog.md`; `SlaDistributionBar` em `freshness.md` | lint+build |
-| 7 | `feat/catalog-dataset-description` | **backend** — `DatasetSummary.description` via `SCHEMATA_OPTIONS` + `SAFE.JSON_VALUE` (1 query/região, $0, cache 5min). Frontend: descrição no card. ACs `AC-CAT-DESC-*` | `pytest` 783 ✓, ruff ✓, lint+build |
+| 7 | `feat/catalog-dataset-description` | **backend, PARCIAL** — `DatasetSummary.description` (campo/tipo/card ok). A leitura via `SCHEMATA_OPTIONS` + `SAFE.JSON_VALUE` **quebrou `/validate` em `dev`** ("Failed to fetch") e foi revertida no PR 12 — o repository devolve `description: None` fixo. Repopular exige teste de integração (AC-CAT-DESC-03). | `pytest` ✓, ruff ✓ (mas mock não pega SQL inválido — ver PR 12) |
 | 8 | `feat/fe-refresh-freshness` | `SlaRow` + `DatasetFreshnessTable` usam a `SlaDistributionBar` (coluna "Distribuição" + barra agregada). Cosmético | lint+build |
 | 9 | `feat/fe-refresh-kpi-icons` | ícone no chip de cada KPI (mapeamento do brief) em `CatalogDatasetPage`, `BudgetPage`, `ProfilingDialog`, `LoginAnalyticsSection`, `AccessRequestAnalyticsSection` | lint+build |
 | 10 | `feat/fe-refresh-primary-cta` | `.dp6-gradient-primary` nos CTAs herói (`DatasetScopeGate`, `ProfilingDialog`, `ColumnTypeSuggestionsTab`, `FinOpsPage`) | lint+build |
 | 11 | `docs/fe-refresh-deferred-specs` | esta atualização de §5 + ACs/notas de "implementação pendente" nas specs de lineage/quality/finops/storage/admin | docs |
+| 12 | `fix/catalog-description-safe` | **hotfix** — reverte a query de `description` da PR 7 que quebrou `/validate` em `dev` ("Failed to fetch"). `get_datasets_summary` volta ao original; `description: None`. Ver `CHANGELOG` §"Erros cometidos e aprendizados" | `pytest tests/unit` 783 ✓, ruff ✓; **backend redeployado em `dev`** |
 
 ### Especificado, implementação PENDENTE (precisa de iteração visual em `dev` com o usuário)
 
