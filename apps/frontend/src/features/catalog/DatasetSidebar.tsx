@@ -137,7 +137,7 @@ function QuantityPicker({
   )
 }
 
-// Subseção dentro de um serviço (Governança, FinOps, Catálogo,
+// Subseção dentro de um serviço (Governança, FinOps, Catálogo de Dados,
 // Favoritos, Análises de qualidade, Recentes) — todas recolhidas por padrão
 // (`open` vem de fora, sempre iniciado em `false` no componente pai).
 function SidebarSection({
@@ -236,7 +236,7 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
           </nav>
         </SidebarSection>
 
-        <SidebarSection label="Catálogo" open={catalogOpen} onOpenChange={setCatalogOpen}>
+        <SidebarSection label="Catálogo de Dados" open={catalogOpen} onOpenChange={setCatalogOpen}>
           <NavLink to="/search" className={NAV_LINK_CLASS}>
             <Search size={16} />
             Buscar tabelas
