@@ -306,11 +306,53 @@ summary:focus-visible,
   backdrop-filter: blur(12px) saturate(1.1);
 }
 
-/* Glow radial amarelo contido no próprio box — usado pelo PageHeader
-   atrás do <h1>. Contido de propósito (sem ::before vazando pra fora):
-   não cria scrollbar horizontal nem corta o anel de foco das ações. */
+/* Glow radial amarelo do PageHeader, atrás do <h1>. Pintado como
+   `background` na própria box (não `::before` vazando) — sem scrollbar
+   horizontal, sem cortar o anel de foco das ações. Elipse suave e
+   deslocada do canto (protótipo `.page-head::before`) — a versão antiga
+   `at 100% 0%` lia como um degradê duro coladinho no canto. */
 .dp6-headline-glow {
-  background: radial-gradient(120% 140% at 100% 0%, var(--glow), transparent 55%);
+  background: radial-gradient(ellipse 60% 60% at 78% 25%, var(--glow), transparent 70%);
+}
+
+/* Motivo gráfico dp6 — 3 barras diagonais (1 preenchida), acento decorativo
+   no canto direito de cabeçalhos de tela-índice/overview (protótipo
+   `.brand-bars`). Auto-contido: `overflow:hidden` clipa as barras skewed;
+   `-z-10` + `isolate` no PageHeader mantém atrás do conteúdo sem cair
+   atrás do <main>. Opt-in via `showBrandBars` — some quando o header tem
+   ações à direita que colidiriam. */
+.dp6-brand-bars {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  width: 220px;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.5;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 40%);
+  mask-image: linear-gradient(90deg, transparent, #000 40%);
+}
+.dp6-brand-bars i {
+  position: absolute;
+  inset-block: -20%;
+  width: 34px;
+  transform: skewX(-18deg);
+  border: 1.5px solid color-mix(in oklab, var(--foreground) 14%, transparent);
+}
+.dp6-brand-bars i.fill {
+  background: linear-gradient(var(--primary), var(--primary-2));
+  border-color: transparent;
+  box-shadow: 0 0 40px var(--glow);
+}
+.dp6-brand-bars i:nth-child(1) {
+  inset-inline-end: 120px;
+}
+.dp6-brand-bars i:nth-child(2) {
+  inset-inline-end: 60px;
+}
+.dp6-brand-bars i:nth-child(3) {
+  inset-inline-end: 0;
 }
 
 /* Gradiente do botão primário / barra ativa / preenchimento de gráfico.

@@ -5,6 +5,31 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Refresh visual do Hub — rodada 2 (2026-09)
+
+Segunda rodada, sobre as lacunas que a rodada 1 marcou como "especificado,
+implementação pendente" (`docs/specs/frontend-visual-refresh-plan.md` §5) +
+1 bug. Plano completo em
+`~/.claude/plans/gere-um-plano-altera-es-unified-wilkes.md` (fatiado em
+~13 branches R2-*, empilhadas sobre a ponta da rodada 1). Decisões
+travadas com o usuário: chooser de análise com os 7 módulos ativos em
+tela cheia; cabeçalho de grupo da sidebar = chevron abre lista + label
+abre overview; escopo de backend completo (budget CRUD, score por tabela,
+4º modo de busca, filtro de/até no Admin, `table_type` no lineage); funil
+de retenção em trapézios com rótulo por fora.
+
+### R2-1 — `feat/r2-pageheader-brandbars` (só front-end)
+
+- `.dp6-headline-glow` reworkada: elipse suave `at 78% 25%` no lugar do
+  wash duro `at 100% 0%` (o usuário leu o antigo como "degradê" colado no
+  canto). Continua `background` na box, sem `::before` vazando.
+- `.dp6-brand-bars` nova: motivo de 3 barras diagonais `skewX(-18deg)` (1
+  preenchida + glow) no canto direito, auto-contido (`overflow:hidden` +
+  `mask` + `z-index:-1`). Novo `components/BrandBars.tsx`.
+- `PageHeader` ganhou `showBrandBars?: boolean` (opt-in; `relative
+  isolate` só quando ligado). `design-system.md` §Vida + tabela de
+  componentes + `ui-ux-rules.md` §Identidade atualizados no mesmo PR.
+
 ## Refresh visual do Hub — fundação de tokens (2026-09)
 
 Primeira fatia do refresh visual (brief:
