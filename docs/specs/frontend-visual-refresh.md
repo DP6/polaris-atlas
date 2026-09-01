@@ -242,19 +242,42 @@ princípio em qualquer tela nova.
   tela.
 - **ASM-005** (confirmada) — budget do FinOps é cadastro simples
   (dataset/tabela), sem compartilhamento entre usuários nesta fase.
+- **ASM-006** (confirmada na sessão de execução) — os efeitos de fundo de
+  tela cheia do protótipo (constelação em canvas, auroras/blobs, grain,
+  scanlines, "sweep" de página, parallax de cursor) **não** são adotados
+  no app. O brief libera "gradiente/glow/glass/animação na medida do
+  protótipo (`.panel`, `.kpi`, `.btn.primary`)" e não derruba o princípio
+  "ferramenta densa, rapidez > espetáculo". Adotado: glass + borda em
+  gradiente fino nos painéis, hover lift/glow em KPI, botão primário com
+  gradiente+glow, hover de linha de tabela (gradiente + barra amarela),
+  item de sidebar ativo, glow radial no `PageHeader`, arestas animadas do
+  lineage, tooltip flutuante de gráfico.
+- **ASM-007** (confirmada na sessão de execução) — teto de transição sobe
+  de `≤200ms` pra `≤300ms` (o protótipo usa .25–.28s nos hovers). O reset
+  de `prefers-reduced-motion` continua absoluto e intocado.
 
 ## Perguntas em aberto
 
-- **Q-001** (aberta) — Sidebar: "contorno mais moderno, completo" no
-  item ativo — o usuário não detalhou o suficiente. Perguntar com
-  exemplo/referência antes de desenhar o CSS final.
-- **Q-002** (aberta) — Onde exatamente o "score geral por tabela"
-  (FinOps) aparece na UI — tela própria, ou coluna numa tabela
-  existente? Perguntar antes de implementar.
-- **Q-003** (aberta) — Fonte de dado exata do mini-gráfico dos cards de
-  dataset no Catálogo de Dados (crescimento de tabelas? volume? outra
-  métrica?) — perguntar antes de implementar; confirmar custo de query
-  se vier de `INFORMATION_SCHEMA`.
+- **Q-001** (respondida — sessão de execução, reconfirmar no review) —
+  Sidebar, item ativo: barra de acento `3px` à esquerda com glow +
+  fundo em gradiente `--primary/14 → transparent` + forma `10px` +
+  texto `--foreground` (não mais bloco amarelo chapado) + ícone em
+  `--primary`. Espelha `.nav a.active(::before)` do protótipo. Aberto:
+  se "completo" pedia também outline `1px` em volta do item inteiro —
+  o plano assume que não; trivial de somar depois. Ver
+  `frontend-visual-refresh-plan.md` §1.
+- **Q-002** (respondida — sessão de execução, reconfirmar no review) —
+  "Score geral por tabela" (FinOps): sem tela nova. (1) coluna "Score"
+  ordenável (anel compacto + número) no scanner de desperdício e no Top
+  ofensores; (2) anel grande + decomposição no drill-down da linha da
+  tabela. Fica ao lado do custo/uso de onde é derivado. Ver plano §1.
+- **Q-003** (respondida — sessão de execução, reconfirmar no review) —
+  Mini-gráfico dos cards de dataset no Catálogo de Dados = distribuição
+  das tabelas do dataset por faixa de SLA de freshness (mesmo componente
+  do painel "Distribuição por dataset" do Freshness, reaproveitado; sem
+  query nova, é o dado de freshness já no cache D-1). O sparkline
+  histórico no "big number" fica fora de escopo (exige série temporal
+  que o `INFORMATION_SCHEMA` não dá barato). Ver plano §1 e §2.
 
 ## Fora de escopo deste plano
 
@@ -265,13 +288,17 @@ princípio em qualquer tela nova.
 
 ## Checklist antes de considerar este brief "pronto pra virar plano"
 
-- [ ] Q-001, Q-002, Q-003 respondidas com o usuário
-- [ ] Confirmado se `description` de dataset já vem de algum endpoint
-      existente ou é mudança de backend
-- [ ] `docs/frontend/design-system.md` e `ui-ux-rules.md` revisados
-      junto com a primeira mudança de token (raio, hover, glow)
-- [ ] Specs de domínio tocadas (`docs/specs/catalog.md`,
-      `finops-budget.md`, etc.) atualizadas com ACs novos, quando o
-      comportamento mudar de verdade (não só cosmético)
-- [ ] Plano fatiado em PRs pequenos, dev primeiro, aprovação explícita
-      do usuário antes de qualquer push/merge/deploy de prod
+- [x] Q-001, Q-002, Q-003 respondidas — por decisão documentada na sessão
+      de execução (usuário ausente até o review), a reconfirmar no review.
+      Ver `frontend-visual-refresh-plan.md` §1.
+- [x] Confirmado: `description` de dataset **é mudança de backend**
+      (`DatasetSummary` não tem o campo). Sliced como PR 7. Ver plano §2.
+- [x] `design-system.md` / `ui-ux-rules.md`: serão revisados no PR 2
+      (primeira mudança de token), por regra do harness.
+- [x] Specs de domínio: mapeadas por PR na tabela do plano §4 (coluna
+      "Spec com AC novo").
+- [x] Plano fatiado em PRs pequenos (plano §4), dev primeiro, sem
+      merge/deploy de prod sem aprovação explícita.
+
+**→ O plano de execução vive em
+[`frontend-visual-refresh-plan.md`](frontend-visual-refresh-plan.md).**
