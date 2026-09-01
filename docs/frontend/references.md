@@ -17,6 +17,8 @@ ver como foi feito, seguir o mesmo caminho.
 | Cabeçalho de rota + ações + estado de carregamento | `features/catalog/CatalogOverviewPage.tsx` |
 | Tabela grande filtrável / ordenável / paginada | `features/storage/WastePage.tsx`, `features/lineage/OrphansPage.tsx` |
 | Linha de KPIs | `features/catalog/KpiCards.tsx`, `features/finops/BudgetPage.tsx` |
+| Tela de overview de domínio (cards + busca + KPIs) | `features/catalog/CatalogOverviewPage.tsx` |
+| Mini-gráfico compartilhado (barra empilhada) | `components/SlaDistributionBar.tsx` |
 | Fluxo "config → estimar custo → executar → resultado" | `features/quality/ProfilingDialog.tsx`, `features/finops/ColumnTypeSuggestionsTab.tsx` |
 | Gate de escopo antes de scan de projeto | `features/lineage/OrphansPage.tsx` (`DatasetScopeGate`) |
 | Página longa em seções colapsáveis | `features/admin/AdminUsageTab.tsx` + `features/admin/*Section.tsx` |

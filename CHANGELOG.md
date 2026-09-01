@@ -71,6 +71,14 @@ Checagem de backend: `description` de dataset **é** mudança de backend
   3px`), substitui o `hover:bg-muted` uniforme do `ui/table`. Zero
   arquivo de feature tocado. `design-system.md` §Vida + `ui-ux-rules.md`
   §Tabelas no mesmo PR.
+- **`feat/catalogo-de-dados-overview`** (PR 6): rota `/` deixa de ser um
+  `EmptyState` e vira a tela de overview do domínio — `PageHeader` +
+  KPIs (com ícone) + grade de `DatasetOverviewCard` (ícone, contagem,
+  tamanho, região, `SlaDistributionBar`) + busca por dataset + link pra
+  `/search`. Novo `components/SlaDistributionBar.tsx` (barra empilhada
+  compartilhada, consome `FreshnessCounts`, sem query nova — Q-003).
+  `KpiCards` ganhou `icon`. ACs novos em `catalog.md` (overview +
+  `description` como PR 7) e `freshness.md` (componente compartilhado).
 
 ---
 

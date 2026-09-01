@@ -171,7 +171,23 @@ apps/backend/src/observability_hub/
 └── tests/unit/freshness/
     ├── test_service.py
     └── test_schemas.py
+
+apps/frontend/src/
+└── components/SlaDistributionBar.tsx   # barra empilhada compartilhada
 ```
+
+### `SlaDistributionBar` — componente compartilhado (refresh visual 2026-09)
+
+Barra horizontal empilhada com a proporção das tabelas de um dataset entre
+as 6 faixas de SLA, colorida por `SLA_FILL_COLOR`. Consome `FreshnessCounts`
+(já servido pelo endpoint `GET /freshness/{project}` por dataset) — **sem
+query nova**. `role="img"` + `aria-label`/`title` com a decomposição
+completa.
+
+Reaproveitada por: cards do Catálogo de Dados (`DatasetOverviewCard`, PR 6)
+e — quando o Freshness for repaginado (PR 8) — a visão de projeto do
+próprio Freshness (hoje `DatasetFreshnessTable`, uma tabela de contagens
+por faixa). É o "mesmo componente visual" que o brief pede nos dois lados.
 
 ---
 

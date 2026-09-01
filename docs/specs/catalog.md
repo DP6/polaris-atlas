@@ -509,6 +509,70 @@ apps/frontend/src/
 
 ---
 
+## Visão geral do Catálogo de Dados (rota `/`) — refresh visual 2026-09
+
+Contexto: brief `docs/specs/frontend-visual-refresh.md` + plano
+`frontend-visual-refresh-plan.md` (PR 6). A rota índice `/`
+(`features/catalog/CatalogOverviewPage.tsx`) deixa de ser um `EmptyState`
+"selecione um dataset" e passa a ser a **tela de overview do domínio** —
+princípio do brief "clicar num item de nível 1 abre uma tela de
+opções/overview". A `DatasetSidebar` continua com a lista de datasets pra
+navegação direta (a IA da sidebar em si não muda neste PR — ver plano
+§4 "carve-out").
+
+Sem endpoint novo: consome `GET /catalog/{project}/datasets` (já existe) +
+`GET /freshness/{project}` (já existe) e cruza por `dataset_id` no cliente.
+
+### Critérios de aceite
+
+| ID | Comportamento | Teste |
+|---|---|---|
+| AC-CAT-OV-01 | `/` renderiza `PageHeader` "Catálogo de Dados" + KPIs (nº de datasets, nº de tabelas somado) + um card por dataset, mesmo sem dataset selecionado na sidebar. | `test_catalog_overview_renders_cards` |
+| AC-CAT-OV-02 | Cada card mostra: ícone, `dataset_id` (link pra `/datasets/:id`), contagem de tabelas/views, tamanho, região e a `SlaDistributionBar` (distribuição das tabelas do dataset por faixa de SLA de freshness). | `test_dataset_overview_card_fields` |
+| AC-CAT-OV-03 | A busca filtra os cards por substring de `dataset_id`. Um link fixo leva a `/search` pra busca por tabela. | `test_catalog_overview_filter_by_dataset` |
+| AC-CAT-OV-04 | Dataset sem dados de freshness correspondentes → card renderiza sem a barra (nunca quebra). | `test_dataset_overview_card_without_freshness` |
+| AC-CAT-OV-05 | Enquanto o backend não expõe `description` de dataset, o card mostra "Sem descrição cadastrada no BigQuery" fixo (ver AC-CAT-DESC-01, PR 7). | `test_dataset_overview_card_description_placeholder` |
+
+### Suposições
+
+- **ASM-CAT-01** (aberta) — "busca cruzada dataset + tabela" do brief:
+  nesta fase a busca da overview filtra só por `dataset_id`; busca por
+  nome de tabela é o link pra `/search` (sem pré-preencher). Pré-preencher
+  `/search` via `?q=`/`state` = follow-up (toca o domínio de busca).
+- **ASM-CAT-02** (confirmada) — o mini-gráfico do card = distribuição de
+  SLA de freshness (Q-003 do brief), **não** um sparkline histórico
+  (não há série temporal barata no `INFORMATION_SCHEMA`).
+
+### Fora do escopo (deste PR / desta fatia)
+
+- Mudar a IA da `DatasetSidebar` (dataset como item que dá drill-down
+  direto continua existindo) — carve-out `feat/nav-overview-screens`.
+- `description` de dataset no card (PR 7, ver abaixo).
+
+---
+
+## `description` de dataset — PR 7 do refresh visual (mudança de backend)
+
+Hoje `DatasetSummary` (`domains/catalog/schemas.py`) **não** tem
+`description`. Mostrar a descrição do dataset nos cards exige:
+
+- **Backend:** `DatasetSummary.description: str | None`, populado de
+  `INFORMATION_SCHEMA.SCHEMATA_OPTIONS` (`option_name = 'description'`) ou
+  `client.get_dataset().description`. Custo de query desprezível (mesma
+  varredura de metadados de "Query 2 — Resumo de datasets"); confirmar
+  `dry run` na implementação.
+- **Frontend:** `DatasetOverviewCard` mostra `dataset.description` quando
+  presente; senão o texto fixo "Sem descrição cadastrada no BigQuery".
+
+### Critério de aceite
+
+| ID | Comportamento | Teste |
+|---|---|---|
+| AC-CAT-DESC-01 | `GET /catalog/{project}/datasets` retorna `description` (string ou `null`) por dataset, lido do BigQuery. | `test_datasets_list_includes_description` |
+| AC-CAT-DESC-02 | Dataset sem descrição no BQ → `description: null` → card mostra o texto fixo. | `test_dataset_without_description_returns_null` |
+
+---
+
 ## Fora do escopo desta spec
 
 - Busca semântica/fuzzy por nome de tabela (`/search` é exata ou substring
