@@ -40,6 +40,12 @@ barras verticais sempre visíveis.
   `PageHeader` sem `back` ganham o voltar automaticamente.
 - Doc-sync: `docs/frontend/patterns.md` §Cabeçalho de rota, `ui-ux-rules.md`.
 
+### R3-catalog-volume — `feat/r3-catalog-volume` (só front-end)
+
+- Catálogo de Dados (`/`): 3º big number **"Volume"** (`formatBytes` do
+  `Σ dataset.total_size_bytes` — campo já existe em `DatasetSummary`, vem de
+  `TABLE_STORAGE` no backend, sem agregação nova). Ícone `HardDrive`.
+
 ## Refresh visual do Hub — rodada 2 (2026-09)
 
 Segunda rodada, sobre as lacunas que a rodada 1 marcou como "especificado,

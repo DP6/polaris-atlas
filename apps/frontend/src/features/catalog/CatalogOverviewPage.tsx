@@ -1,4 +1,4 @@
-import { Database, Search, Table2 } from 'lucide-react'
+import { Database, HardDrive, Search, Table2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { EmptyState } from '@/components/EmptyState'
@@ -12,7 +12,7 @@ import { KpiCards } from '@/features/catalog/KpiCards'
 import { TableSearchPanel } from '@/features/catalog/TableSearchPanel'
 import { useProjectFreshness } from '@/features/freshness/hooks'
 import { useProjectContext } from '@/features/projects/ProjectContext'
-import { formatNumber } from '@/lib/format'
+import { formatBytes, formatNumber } from '@/lib/format'
 import type { FreshnessCounts } from '@/types/freshness'
 
 // Visão geral do Catálogo de Dados — rota índice `/`. Antes era só um
@@ -39,6 +39,7 @@ export function CatalogOverviewPage() {
 
   const datasets = datasetsQuery.data.datasets
   const totalTables = datasets.reduce((sum, dataset) => sum + dataset.total_tables, 0)
+  const totalBytes = datasets.reduce((sum, dataset) => sum + dataset.total_size_bytes, 0)
   const term = query.trim().toLowerCase()
   const visible = term
     ? datasets.filter((dataset) => dataset.dataset_id.toLowerCase().includes(term))
@@ -64,6 +65,7 @@ export function CatalogOverviewPage() {
         items={[
           { label: 'Datasets', value: String(datasets.length), icon: <Database size={14} /> },
           { label: 'Tabelas', value: formatNumber(totalTables), icon: <Table2 size={14} /> },
+          { label: 'Volume', value: formatBytes(totalBytes), icon: <HardDrive size={14} /> },
         ]}
       />
 
