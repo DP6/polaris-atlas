@@ -52,6 +52,25 @@ de retenção em trapézios com rótulo por fora.
   já nascem em `Panel`. `QualityFolderComparisonPage` não entrou: já é
   bloco estruturado (chart em box + tabela sob um `<h3>` real).
 
+### R2-4 — `feat/r2-catalog-table-search` (backend + front-end)
+
+Resolve o bug: na overview do Catálogo só dava pra filtrar dataset por
+nome; a busca global de tabela era só um link pra `/search`.
+
+- **Backend (B5):** 4º modo de busca `not_exact` ("diferente a") —
+  `SearchMode.NOT_EXACT`, branch `table_name != @q` em
+  `repository.search_tables` (mesmo fan-out por região), service pula a
+  busca secundária de prefixo pra esse modo. Query só-metadado ($0,
+  mesma forma de `exact`/`contains`). `catalog.md` + testes (74 catalog,
+  785 unit no total).
+- **Front-end:** novo `features/catalog/TableSearchPanel.tsx` autocontido
+  (state + `useSearchTables` + `SearchMatchesTable`/`SearchAbsentTable`),
+  modo via `ChoiceToggle` de 4 opções, dentro de um `<Panel>`.
+  `CatalogOverviewPage` monta o painel (+ mantém o filtro inline de
+  dataset, agora rotulado "Navegar por dataset"). `SearchPage` vira só
+  `PageHeader` + `<TableSearchPanel>`. `types/catalog.ts` SearchMode +1.
+  ASM-CAT-01 resolvida; AC-CAT-OV-06 novo em `catalog.md`.
+
 ## Refresh visual do Hub — fundação de tokens (2026-09)
 
 Primeira fatia do refresh visual (brief:

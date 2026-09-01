@@ -127,6 +127,9 @@ class SearchMode(str, Enum):
     EXACT = "exact"
     CONTAINS = "contains"
     NOT_CONTAINS = "not_contains"
+    # "diferente a" — tabelas cujo nome != query. Lista tudo menos a exata;
+    # datasets_without_match fica vazio (não há um "ausente" com sentido).
+    NOT_EXACT = "not_exact"
 
 
 class DatasetWithMatch(BaseModel):

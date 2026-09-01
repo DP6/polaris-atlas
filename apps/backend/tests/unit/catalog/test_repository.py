@@ -569,6 +569,27 @@ def test_search_tables_contains_mode_uses_like_wildcard():
     assert param_value == "%events%"
 
 
+def test_search_tables_not_exact_mode_uses_inequality_param():
+    """mode="not_exact" ("diferente a") → `table_name != @q`, param cru
+    (sem `%`), mesma query só-metadado dos outros modos ($0)."""
+    captured = []
+
+    def fake_query(sql, job_config=None):
+        captured.append((sql, job_config.query_parameters[0].value))
+        job = MagicMock()
+        job.result.return_value = []
+        return job
+
+    client = MagicMock()
+    client.query.side_effect = fake_query
+
+    repository.search_tables(client, "proj", ["US"], "events", "not_exact")
+
+    sql, param_value = captured[0]
+    assert "table_name != @q" in sql
+    assert param_value == "events"
+
+
 def test_search_tables_aggregates_regions_and_sorts_by_dataset_then_table():
     def fake_query(sql, job_config=None):
         job = MagicMock()

@@ -232,7 +232,10 @@ def search_tables(
 
     datasets_without_match: list[DatasetWithoutMatch] = []
     prefix = repository.derive_search_prefix(query)
-    if prefix:
+    # A lista secundária "prefix_exists" só faz sentido pra exact/contains
+    # (achar datasets com a mesma série sem a tabela buscada). Em not_exact
+    # o resultado já é "todo mundo menos essa" — sem ausente a explicar.
+    if mode != "not_exact" and prefix:
         matched_dataset_ids = {m["dataset_id"] for m in raw_matches}
         prefix_rows = repository.search_tables_by_prefix(
             client, project_id, regions, prefix, matched_dataset_ids

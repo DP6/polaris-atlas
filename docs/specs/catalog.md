@@ -281,13 +281,19 @@ datasets (`analytics_<id>`) recebendo tabelas `events_YYYYMMDD` diariamente
 
 **Parâmetros:**
 - `q` (query, obrigatório) — termo de busca, mínimo 1 caractere
-- `mode` (query, default `exact`) — `exact`, `contains` ou `not_contains`
+- `mode` (query, default `exact`) — `exact`, `contains`, `not_contains` ou
+  `not_exact`
 
 | Mode | Lógica |
 |---|---|
 | `exact` | `table_name = q`, em todas as regiões do projeto |
 | `contains` | `table_name LIKE '%q%'` |
+| `not_exact` | `table_name != q` — lista toda tabela do projeto cujo nome não é exatamente `q` (fan-out por região igual a `exact`/`contains`). `datasets_without_match` fica **vazio** (não há "ausente" com sentido). Refresh visual rodada 2 — "diferente a". |
 | `not_contains` | Inverte a pergunta: retorna os datasets onde **nenhuma** tabela contém `q` (não lista tabelas individuais) |
+
+Todos os modos são query só-metadado sobre `INFORMATION_SCHEMA.TABLES`
+(`$0` — não varre dado de tabela). `not_exact` tem exatamente a mesma
+forma de `exact`/`contains`, trocando o operador — sem custo novo.
 
 **Response 200** (`mode=exact`, tabela existe em alguns datasets, ausente
 em outros da mesma série):
@@ -529,16 +535,18 @@ Sem endpoint novo: consome `GET /catalog/{project}/datasets` (já existe) +
 |---|---|---|
 | AC-CAT-OV-01 | `/` renderiza `PageHeader` "Catálogo de Dados" + KPIs (nº de datasets, nº de tabelas somado) + um card por dataset, mesmo sem dataset selecionado na sidebar. | `test_catalog_overview_renders_cards` |
 | AC-CAT-OV-02 | Cada card mostra: ícone, `dataset_id` (link pra `/datasets/:id`), contagem de tabelas/views, tamanho, região e a `SlaDistributionBar` (distribuição das tabelas do dataset por faixa de SLA de freshness). | `test_dataset_overview_card_fields` |
-| AC-CAT-OV-03 | A busca filtra os cards por substring de `dataset_id`. Um link fixo leva a `/search` pra busca por tabela. | `test_catalog_overview_filter_by_dataset` |
+| AC-CAT-OV-03 | O filtro "Navegar por dataset" filtra os cards por substring de `dataset_id`. | `test_catalog_overview_filter_by_dataset` |
 | AC-CAT-OV-04 | Dataset sem dados de freshness correspondentes → card renderiza sem a barra (nunca quebra). | `test_dataset_overview_card_without_freshness` |
 | AC-CAT-OV-05 | Card mostra `dataset.description` (`line-clamp-2`); `description` null → texto fixo "Sem descrição cadastrada no BigQuery" (ver AC-CAT-DESC-*). | `test_dataset_overview_card_description` |
+| AC-CAT-OV-06 | A overview tem um bloco **"Buscar tabela no projeto"** (`<TableSearchPanel>`, dentro de um `<Panel>`) — busca global de tabela com modo `Igual a` / `Contém` / `Não contém` / `Diferente de` (`exact`/`contains`/`not_contains`/`not_exact`), resultado em `datasets_with_match` / `datasets_without_match`. O mesmo componente é a rota `/search`. (Refresh visual rodada 2 — resolve o bug "só dá pra buscar dataset na overview".) | `test_catalog_overview_table_search_panel` |
 
 ### Suposições
 
-- **ASM-CAT-01** (aberta) — "busca cruzada dataset + tabela" do brief:
-  nesta fase a busca da overview filtra só por `dataset_id`; busca por
-  nome de tabela é o link pra `/search` (sem pré-preencher). Pré-preencher
-  `/search` via `?q=`/`state` = follow-up (toca o domínio de busca).
+- **ASM-CAT-01** (resolvida — refresh visual rodada 2) — a "busca cruzada
+  dataset + tabela" do brief virou: filtro inline de `dataset_id` +
+  bloco `<TableSearchPanel>` (busca global de tabela com 4 modos) na
+  mesma tela. `/search` continua existindo (linkado da sidebar +
+  histórico), agora só um `PageHeader` + o mesmo `<TableSearchPanel>`.
 - **ASM-CAT-02** (confirmada) — o mini-gráfico do card = distribuição de
   SLA de freshness (Q-003 do brief), **não** um sparkline histórico
   (não há série temporal barata no `INFORMATION_SCHEMA`).

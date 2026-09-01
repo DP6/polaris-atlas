@@ -1,6 +1,5 @@
 import { Database, Search, Table2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { EmptyState } from '@/components/EmptyState'
 import { LoadingState } from '@/components/LoadingState'
@@ -10,10 +9,10 @@ import { Input } from '@/components/ui/input'
 import { DatasetOverviewCard } from '@/features/catalog/DatasetOverviewCard'
 import { useDatasets } from '@/features/catalog/hooks'
 import { KpiCards } from '@/features/catalog/KpiCards'
+import { TableSearchPanel } from '@/features/catalog/TableSearchPanel'
 import { useProjectFreshness } from '@/features/freshness/hooks'
 import { useProjectContext } from '@/features/projects/ProjectContext'
 import { formatNumber } from '@/lib/format'
-import { linkClass } from '@/lib/utils'
 import type { FreshnessCounts } from '@/types/freshness'
 
 // Visão geral do Catálogo de Dados — rota índice `/`. Antes era só um
@@ -68,7 +67,12 @@ export function CatalogOverviewPage() {
         ]}
       />
 
+      <TableSearchPanel />
+
       <div className="flex flex-col gap-1">
+        <span className="text-label text-muted-foreground uppercase tracking-wide">
+          Navegar por dataset
+        </span>
         <div className="relative max-w-md">
           <Search
             size={14}
@@ -77,16 +81,10 @@ export function CatalogOverviewPage() {
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar dataset…"
+            placeholder="Filtrar dataset por nome…"
             className="pl-8"
           />
         </div>
-        <p className="text-label text-muted-foreground">
-          Procurando uma tabela?{' '}
-          <Link to="/search" className={linkClass}>
-            Buscar tabela em todos os datasets
-          </Link>
-        </p>
       </div>
 
       {visible.length === 0 ? (

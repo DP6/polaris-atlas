@@ -76,7 +76,7 @@ export interface TablePartitionsResponse {
   partitions: PartitionRow[]
 }
 
-export type SearchMode = 'exact' | 'contains' | 'not_contains'
+export type SearchMode = 'exact' | 'contains' | 'not_contains' | 'not_exact'
 
 export interface DatasetWithMatch {
   dataset_id: string

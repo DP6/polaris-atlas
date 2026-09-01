@@ -505,6 +505,33 @@ def test_search_tables_skips_prefix_search_when_query_has_no_trailing_digits(mon
     assert calls == []
 
 
+def test_search_tables_not_exact_skips_prefix_search(monkeypatch):
+    """mode="not_exact" flui pelo caminho de match (como contains/exact),
+    mas nunca roda a busca secundária de prefixo — o resultado já é "todo
+    mundo menos essa", não há ausente a explicar."""
+    client = _fake_client()
+    monkeypatch.setattr(service, "discover_regions", lambda project_id, client: ["US"])
+    monkeypatch.setattr(
+        service.repository,
+        "search_tables",
+        lambda client, project_id, regions, query, mode: [
+            {"dataset_id": "RAW", "table_id": "other", "table_type": "TABLE"}
+        ],
+    )
+    monkeypatch.setattr(service, "get_tables_metadata", lambda client, table_refs: {})
+    calls = []
+    monkeypatch.setattr(
+        service.repository, "search_tables_by_prefix", lambda *a, **k: calls.append(1) or []
+    )
+
+    result = service.search_tables(client, "observability-hub-dev", "events_20260812", "not_exact")
+
+    assert result.mode == "not_exact"
+    assert [d.table_id for d in result.datasets_with_match] == ["other"]
+    assert result.datasets_without_match == []
+    assert calls == []
+
+
 def test_search_tables_no_matches_returns_empty_lists(monkeypatch):
     client = _fake_client()
     monkeypatch.setattr(service, "discover_regions", lambda project_id, client: ["US"])

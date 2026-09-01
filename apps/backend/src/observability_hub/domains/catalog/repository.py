@@ -158,16 +158,20 @@ def search_tables(
     mode: str,
     max_workers: int = 8,
 ) -> list[dict]:
-    """Busca table_name = query (mode="exact") ou table_name LIKE '%query%'
-    (mode="contains") em INFORMATION_SCHEMA.TABLES de todas as regiões do
-    projeto, uma query por região em paralelo (mesma técnica de
-    core.bigquery.discover_regions)."""
+    """Busca table_name = query (mode="exact"), != query (mode="not_exact")
+    ou LIKE '%query%' (mode="contains") em INFORMATION_SCHEMA.TABLES de
+    todas as regiões do projeto, uma query por região em paralelo (mesma
+    técnica de core.bigquery.discover_regions). mode="not_contains" nunca
+    chega aqui — é tratado à parte no service."""
     if not regions:
         return []
 
     def _search_region(region: str) -> list[dict]:
         if mode == "exact":
             where = "table_name = @q"
+            params = [bigquery.ScalarQueryParameter("q", "STRING", query)]
+        elif mode == "not_exact":
+            where = "table_name != @q"
             params = [bigquery.ScalarQueryParameter("q", "STRING", query)]
         else:
             where = "table_name LIKE @q"
