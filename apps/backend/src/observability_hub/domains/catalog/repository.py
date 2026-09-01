@@ -82,36 +82,23 @@ def get_datasets_summary(
         return cached[1]
 
     def _query_region(region: str) -> list[dict]:
-        # description do dataset: vive em SCHEMATA_OPTIONS (não em SCHEMATA),
-        # uma linha por opção. option_value vem como literal de string
-        # ("texto"); SAFE.JSON_VALUE desembrulha as aspas/escapes (um literal
-        # de string com aspas duplas é JSON válido) e cai em NULL sem erro
-        # se vier em formato inesperado. Mantém uma query por região — sem
-        # N+1 de client.get_dataset().
         query = f"""
             SELECT
               s.schema_name                                          AS dataset_id,
               s.location,
               s.creation_time,
               s.last_modified_time,
-              o.description,
               COUNTIF(t.table_type = 'BASE TABLE')                   AS total_tables,
               COUNTIF(t.table_type IN ('VIEW','MATERIALIZED VIEW'))  AS total_views,
               COALESCE(SUM(ts.total_logical_bytes), 0)               AS total_size_bytes,
               COALESCE(SUM(ts.total_rows), 0)                        AS total_rows
             FROM `{project_id}.region-{region}.INFORMATION_SCHEMA.SCHEMATA` s
-            LEFT JOIN (
-              SELECT schema_name, SAFE.JSON_VALUE(option_value) AS description
-              FROM `{project_id}.region-{region}.INFORMATION_SCHEMA.SCHEMATA_OPTIONS`
-              WHERE option_name = 'description'
-            ) o
-              ON o.schema_name = s.schema_name
             LEFT JOIN `{project_id}.region-{region}.INFORMATION_SCHEMA.TABLES` t
               ON t.table_schema = s.schema_name
             LEFT JOIN `{project_id}.region-{region}.INFORMATION_SCHEMA.TABLE_STORAGE` ts
               ON ts.table_schema = t.table_schema
              AND ts.table_name   = t.table_name
-            GROUP BY 1, 2, 3, 4, 5
+            GROUP BY 1, 2, 3, 4
             ORDER BY total_size_bytes DESC
         """
         rows = client.query(query).result()
@@ -121,7 +108,15 @@ def get_datasets_summary(
                 "location": row.location,
                 "creation_time": row.creation_time,
                 "last_modified_time": row.last_modified_time,
-                "description": row.description or None,
+                # description do dataset: campo existe no schema (opcional) mas
+                # ainda NÃO é populado. A tentativa de ler de
+                # INFORMATION_SCHEMA.SCHEMATA_OPTIONS + SAFE.JSON_VALUE numa
+                # query só-metadado quebrou /validate em dev (o JOIN
+                # region-qualified com SCHEMATA_OPTIONS não é confiável) —
+                # revertida. Repopular só com um caminho testado contra BQ
+                # real (ver docs/specs/catalog.md, AC-CAT-DESC-*, e o plano
+                # do refresh visual §5). O card já trata `null`.
+                "description": None,
                 "total_tables": row.total_tables,
                 "total_views": row.total_views,
                 "total_size_bytes": row.total_size_bytes,

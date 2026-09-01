@@ -551,28 +551,37 @@ Sem endpoint novo: consome `GET /catalog/{project}/datasets` (já existe) +
 
 ---
 
-## `description` de dataset — PR 7 do refresh visual (implementado)
+## `description` de dataset — PR 7 do refresh visual (parcial — leitura revertida)
 
 `DatasetSummary` (`domains/catalog/schemas.py`) ganhou
-`description: str | None = None`.
+`description: str | None = None` e o frontend já trata o campo. **A
+leitura do valor do BigQuery está pendente.**
 
-- **Backend:** "Query 2 — Resumo de datasets" ganhou um `LEFT JOIN` com
-  `INFORMATION_SCHEMA.SCHEMATA_OPTIONS` (`option_name = 'description'`),
-  `SAFE.JSON_VALUE(option_value)` pra desembrulhar o literal de string.
-  Continua **uma query por região** (subquery, sem N+1 de
-  `client.get_dataset()`), custo de metadado ($0), dentro do cache de 5min
-  de `get_datasets_summary`.
-- **Frontend:** `DatasetOverviewCard` mostra `dataset.description` (com
-  `line-clamp-2`) quando presente; senão o texto fixo "Sem descrição
+- **Frontend (feito):** `DatasetOverviewCard` mostra `dataset.description`
+  (`line-clamp-2`) quando presente; senão o texto fixo "Sem descrição
   cadastrada no BigQuery". `types/catalog.ts::DatasetSummary.description:
   string | null`.
+- **Backend (revertido):** a 1ª tentativa foi um `LEFT JOIN` com
+  `INFORMATION_SCHEMA.SCHEMATA_OPTIONS` + `SAFE.JSON_VALUE(option_value)`
+  dentro da "Query 2 — Resumo de datasets". **Quebrou `GET
+  /projects/{id}/validate` em `dev`** ("Failed to fetch" ao selecionar um
+  projeto) — os testes unitários mockam o BigQuery, então não pegaram: a
+  forma `region-{region}.INFORMATION_SCHEMA.SCHEMATA_OPTIONS` (region-
+  qualified) e/ou `SAFE.JSON_VALUE` não é confiável naquele contexto.
+  `get_datasets_summary` voltou à query original; o dict devolve
+  `description: None` fixo.
+- **Repopular** só com um caminho **testado contra um projeto BQ real**
+  (`tests/integration/`, não só mock): provavelmente `client.get_dataset(
+  ref).description` em paralelo (N chamadas de metadado, $0), ou
+  confirmar a sintaxe de `SCHEMATA_OPTIONS` num dataset real antes.
 
 ### Critério de aceite
 
-| ID | Comportamento | Teste |
-|---|---|---|
-| AC-CAT-DESC-01 | `GET /catalog/{project}/datasets` retorna `description` (string ou `null`) por dataset, lido do BigQuery. | `test_list_datasets_builds_response`, `test_get_datasets_summary_runs_one_query_per_region_and_computes_gb` |
-| AC-CAT-DESC-02 | Dataset sem descrição no BQ → `description: null` → card mostra o texto fixo. | `test_get_datasets_summary_description_none_when_absent`, `test_dataset_summary_matches_spec_example` |
+| ID | Comportamento | Estado | Teste |
+|---|---|---|---|
+| AC-CAT-DESC-01 | `GET /catalog/{project}/datasets` **pode** retornar `description` (string ou `null`) por dataset; o service repassa o que o repository der. | schema/contrato ok; repository devolve `null` | `test_list_datasets_builds_response` |
+| AC-CAT-DESC-02 | `description` null → card mostra o texto fixo. | ok | `test_get_datasets_summary_description_is_none_for_now`, `test_dataset_summary_matches_spec_example` |
+| AC-CAT-DESC-03 | (pendente) repository popula `description` de um projeto BQ real, com teste de integração. | **pendente** | `tests/integration/...` |
 
 ---
 

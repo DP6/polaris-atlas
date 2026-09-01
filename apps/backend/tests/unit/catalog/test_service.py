@@ -165,7 +165,10 @@ def test_list_datasets_builds_response(monkeypatch):
     assert result.total_datasets == 1
     assert result.regions_found == ["US"]
     assert result.datasets[0].dataset_id == "RAW"
-    # AC-CAT-DESC-01: description do dataset flui do repository pro response.
+    # O service repassa `description` do que o repository entregar (contrato
+    # do schema). Hoje o repository sempre devolve None — a leitura real de
+    # SCHEMATA_OPTIONS foi revertida (quebrava /validate). Ver catalog.md
+    # AC-CAT-DESC-*.
     assert result.datasets[0].description == "Camada crua"
 
 
