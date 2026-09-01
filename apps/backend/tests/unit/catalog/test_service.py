@@ -148,6 +148,7 @@ def test_list_datasets_builds_response(monkeypatch):
             "location": "US",
             "creation_time": "2026-06-03T19:40:00Z",
             "last_modified_time": "2026-06-08T18:38:00Z",
+            "description": "Camada crua",
             "total_tables": 3,
             "total_views": 0,
             "total_size_bytes": 2075443,
@@ -164,6 +165,8 @@ def test_list_datasets_builds_response(monkeypatch):
     assert result.total_datasets == 1
     assert result.regions_found == ["US"]
     assert result.datasets[0].dataset_id == "RAW"
+    # AC-CAT-DESC-01: description do dataset flui do repository pro response.
+    assert result.datasets[0].description == "Camada crua"
 
 
 def test_list_tables_resolves_region_and_builds_response(monkeypatch):

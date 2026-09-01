@@ -531,7 +531,7 @@ Sem endpoint novo: consome `GET /catalog/{project}/datasets` (já existe) +
 | AC-CAT-OV-02 | Cada card mostra: ícone, `dataset_id` (link pra `/datasets/:id`), contagem de tabelas/views, tamanho, região e a `SlaDistributionBar` (distribuição das tabelas do dataset por faixa de SLA de freshness). | `test_dataset_overview_card_fields` |
 | AC-CAT-OV-03 | A busca filtra os cards por substring de `dataset_id`. Um link fixo leva a `/search` pra busca por tabela. | `test_catalog_overview_filter_by_dataset` |
 | AC-CAT-OV-04 | Dataset sem dados de freshness correspondentes → card renderiza sem a barra (nunca quebra). | `test_dataset_overview_card_without_freshness` |
-| AC-CAT-OV-05 | Enquanto o backend não expõe `description` de dataset, o card mostra "Sem descrição cadastrada no BigQuery" fixo (ver AC-CAT-DESC-01, PR 7). | `test_dataset_overview_card_description_placeholder` |
+| AC-CAT-OV-05 | Card mostra `dataset.description` (`line-clamp-2`); `description` null → texto fixo "Sem descrição cadastrada no BigQuery" (ver AC-CAT-DESC-*). | `test_dataset_overview_card_description` |
 
 ### Suposições
 
@@ -551,25 +551,28 @@ Sem endpoint novo: consome `GET /catalog/{project}/datasets` (já existe) +
 
 ---
 
-## `description` de dataset — PR 7 do refresh visual (mudança de backend)
+## `description` de dataset — PR 7 do refresh visual (implementado)
 
-Hoje `DatasetSummary` (`domains/catalog/schemas.py`) **não** tem
-`description`. Mostrar a descrição do dataset nos cards exige:
+`DatasetSummary` (`domains/catalog/schemas.py`) ganhou
+`description: str | None = None`.
 
-- **Backend:** `DatasetSummary.description: str | None`, populado de
-  `INFORMATION_SCHEMA.SCHEMATA_OPTIONS` (`option_name = 'description'`) ou
-  `client.get_dataset().description`. Custo de query desprezível (mesma
-  varredura de metadados de "Query 2 — Resumo de datasets"); confirmar
-  `dry run` na implementação.
-- **Frontend:** `DatasetOverviewCard` mostra `dataset.description` quando
-  presente; senão o texto fixo "Sem descrição cadastrada no BigQuery".
+- **Backend:** "Query 2 — Resumo de datasets" ganhou um `LEFT JOIN` com
+  `INFORMATION_SCHEMA.SCHEMATA_OPTIONS` (`option_name = 'description'`),
+  `SAFE.JSON_VALUE(option_value)` pra desembrulhar o literal de string.
+  Continua **uma query por região** (subquery, sem N+1 de
+  `client.get_dataset()`), custo de metadado ($0), dentro do cache de 5min
+  de `get_datasets_summary`.
+- **Frontend:** `DatasetOverviewCard` mostra `dataset.description` (com
+  `line-clamp-2`) quando presente; senão o texto fixo "Sem descrição
+  cadastrada no BigQuery". `types/catalog.ts::DatasetSummary.description:
+  string | null`.
 
 ### Critério de aceite
 
 | ID | Comportamento | Teste |
 |---|---|---|
-| AC-CAT-DESC-01 | `GET /catalog/{project}/datasets` retorna `description` (string ou `null`) por dataset, lido do BigQuery. | `test_datasets_list_includes_description` |
-| AC-CAT-DESC-02 | Dataset sem descrição no BQ → `description: null` → card mostra o texto fixo. | `test_dataset_without_description_returns_null` |
+| AC-CAT-DESC-01 | `GET /catalog/{project}/datasets` retorna `description` (string ou `null`) por dataset, lido do BigQuery. | `test_list_datasets_builds_response`, `test_get_datasets_summary_runs_one_query_per_region_and_computes_gb` |
+| AC-CAT-DESC-02 | Dataset sem descrição no BQ → `description: null` → card mostra o texto fixo. | `test_get_datasets_summary_description_none_when_absent`, `test_dataset_summary_matches_spec_example` |
 
 ---
 

@@ -44,6 +44,10 @@ class DatasetSummary(BaseModel):
     location: str
     creation_time: datetime
     last_modified_time: datetime
+    # description do dataset no BigQuery (SCHEMATA_OPTIONS) — None quando
+    # não há descrição cadastrada. Consumida pelos cards do Catálogo de
+    # Dados (docs/specs/catalog.md, AC-CAT-DESC-01).
+    description: str | None = None
     total_tables: int
     total_views: int
     total_size_bytes: int

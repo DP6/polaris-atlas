@@ -38,9 +38,9 @@ export function DatasetOverviewCard({
         </span>
       </div>
 
-      {/* description do dataset ainda não vem do backend (PR 7 do refresh
-          visual — DatasetSummary não expõe o campo hoje). */}
-      <p className="text-body text-muted-foreground">Sem descrição cadastrada no BigQuery</p>
+      <p className="line-clamp-2 text-body text-muted-foreground">
+        {dataset.description ?? 'Sem descrição cadastrada no BigQuery'}
+      </p>
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-label text-muted-foreground">
         <span className="flex items-center gap-1">

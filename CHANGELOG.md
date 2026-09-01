@@ -79,6 +79,14 @@ Checagem de backend: `description` de dataset **é** mudança de backend
   compartilhada, consome `FreshnessCounts`, sem query nova — Q-003).
   `KpiCards` ganhou `icon`. ACs novos em `catalog.md` (overview +
   `description` como PR 7) e `freshness.md` (componente compartilhado).
+- **`feat/catalog-dataset-description`** (PR 7, **mexe no backend**):
+  `DatasetSummary.description: str | None`. "Query 2 — Resumo de datasets"
+  ganhou `LEFT JOIN INFORMATION_SCHEMA.SCHEMATA_OPTIONS` (`option_name =
+  'description'`) + `SAFE.JSON_VALUE` — uma query por região, metadado
+  ($0), dentro do cache de 5min. Frontend: `DatasetOverviewCard` mostra
+  a descrição real (`line-clamp-2`), fallback pro texto fixo. Sem role
+  IAM nova (mesma permissão de metadado já usada pra SCHEMATA/TABLES).
+  ACs AC-CAT-DESC-01/02 em `catalog.md`. `pytest tests/unit` 783 ok.
 
 ---
 

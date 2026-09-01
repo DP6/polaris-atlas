@@ -41,6 +41,7 @@ def test_get_datasets_summary_runs_one_query_per_region_and_computes_gb(monkeypa
             location="US",
             creation_time="2026-06-03T19:40:00Z",
             last_modified_time="2026-06-08T18:38:00Z",
+            description="Camada crua",
             total_tables=3,
             total_views=0,
             total_size_bytes=2_075_443,
@@ -56,6 +57,29 @@ def test_get_datasets_summary_runs_one_query_per_region_and_computes_gb(monkeypa
     assert len(result) == 1
     assert result[0]["dataset_id"] == "RAW"
     assert result[0]["total_size_gb"] == 0.0021
+    assert result[0]["description"] == "Camada crua"
+
+
+def test_get_datasets_summary_description_none_when_absent(monkeypatch):
+    """SCHEMATA_OPTIONS sem linha 'description' (ou JSON_VALUE falhando) →
+    row.description vem None/"" → dict com description=None (AC-CAT-DESC-02)."""
+    monkeypatch.setattr(repository, "_datasets_summary_cache", {})
+    rows = [
+        _row(
+            dataset_id="RAW",
+            location="US",
+            creation_time="2026-06-03T19:40:00Z",
+            last_modified_time="2026-06-08T18:38:00Z",
+            description=None,
+            total_tables=1,
+            total_views=0,
+            total_size_bytes=10,
+            total_rows=1,
+        )
+    ]
+    result = repository.get_datasets_summary(_client_returning([rows]), "proj", ["US"])
+
+    assert result[0]["description"] is None
 
 
 def test_get_datasets_summary_empty_regions_skips_query(monkeypatch):
@@ -76,6 +100,7 @@ def test_get_datasets_summary_caches_by_project_and_regions(monkeypatch):
             location="US",
             creation_time="2026-06-03T19:40:00Z",
             last_modified_time="2026-06-08T18:38:00Z",
+            description=None,
             total_tables=3,
             total_views=0,
             total_size_bytes=1000,

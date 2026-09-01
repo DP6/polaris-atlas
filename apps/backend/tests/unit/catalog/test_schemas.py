@@ -43,6 +43,9 @@ def test_dataset_summary_matches_spec_example():
     assert model.dataset_id == "RAW"
     assert model.total_size_gb == 0.002
     assert model.creation_time == datetime(2026, 6, 3, 19, 40, tzinfo=UTC)
+    # description é opcional (default None quando ausente no payload).
+    assert model.description is None
+    assert DatasetSummary(**payload, description="Camada crua").description == "Camada crua"
 
 
 def test_datasets_list_response_matches_spec_example():
