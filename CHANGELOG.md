@@ -96,6 +96,16 @@ barras verticais sempre visíveis.
   quando vazia (mostra um aviso).
 - `pnpm lint` + `pnpm build` verdes.
 
+### R3-quality — `feat/r3-quality` (só front-end)
+
+- `OptionCard` ganhou `layout="wide"` (ícone à esquerda, card retangular baixo);
+  `OptionCardGrid` ganhou `columns` (2/3/4 — máximo por linha). `AnalysisChooserPage`
+  (`/analyze/:d/:t`): 7 cards agora `layout="wide"` + `columns={4}`.
+- `/quality` (clique em "Análises de qualidade" na sidebar) virou **redirect →
+  `/quality/folders`** — o card "Analisar uma tabela" saiu do overview; `QualityOverviewPage`
+  deletado. `/quality/tables` segue alcançável pelo botão "Analisar" do `AssetsTable`.
+- Doc-sync: `design-system.md`, `nav-overview-screens.md`. `pnpm lint` + `pnpm build` verdes.
+
 ## Refresh visual do Hub — rodada 2 (2026-09)
 
 Segunda rodada, sobre as lacunas que a rodada 1 marcou como "especificado,

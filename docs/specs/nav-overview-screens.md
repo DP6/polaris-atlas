@@ -23,7 +23,7 @@ Decisão do usuário (rodada 2): "chevron abre a lista, label abre a tela".
 |---|---|---|
 | `/` | `CatalogOverviewPage` (já existia — rodada 1) | cards de dataset + `<TableSearchPanel>` |
 | `/governanca` | `GovernanceOverviewPage` | Freshness & SLA (`/freshness`), Tabelas sem consumidor (`/orphans`) |
-| `/quality` | `QualityOverviewPage` | Analisar uma tabela (`/quality/tables`), Pastas de profiling (`/quality/folders`) |
+| `/quality` | **redirect → `/quality/folders`** (rodada 3 — o overview mostrava um card "Analisar uma tabela" que o usuário pediu pra tirar; sobrou só pastas). `/quality/tables` continua alcançável pelo botão "Analisar" do `AssetsTable`. |
 | `/quality/tables` | `QualityTablesPage` | — (select de dataset → tabela → `/analyze/:d/:t`) |
 | `/storage` | `BucketsPage` (a lista de buckets **é** a overview — sem página nova) | — |
 | `/finops` | `FinOpsOverviewPage` (R2-12) — o scanner de 2 abas moveu pra `/finops/scanner` | big numbers + `ComboChart` de custo + anel de eficiência + Top ofensores + `OptionCardGrid` (Scanner de desperdício, Budget de custo, Configurar budget) |
@@ -36,7 +36,7 @@ presente, o nome vira `NavLink`; o chevron isola o disclosure.
 | ID | Comportamento | Teste |
 |---|---|---|
 | AC-NAV-OV-01 | O cabeçalho de "Governança" / "FinOps" / "Análises de qualidade" / "Catálogo de Dados" / "Cloud Storage" na sidebar tem um `NavLink` (nome) separado do chevron (disclosure). Clicar no nome navega; clicar no chevron só expande/recolhe. | `DatasetSidebar` — visual |
-| AC-NAV-OV-02 | `/governanca` e `/quality` renderizam `PageHeader` + `<OptionCardGrid>` com cards que linkam pras funções do grupo. | `Governance/QualityOverviewPage` — visual |
+| AC-NAV-OV-02 | `/governanca` renderiza `PageHeader` + `<OptionCardGrid>` com cards que linkam pras funções do grupo. (`/quality` virou redirect na rodada 3.) | `GovernanceOverviewPage` — visual |
 | AC-NAV-OV-03 | `/quality/tables` deixa escolher um dataset, lista as tabelas e cada "Analisar" navega pra `/analyze/:datasetId/:tableId` (a tela de escolha de tipo de análise — R2-7). | `QualityTablesPage` — visual |
 
 ## Fora do escopo

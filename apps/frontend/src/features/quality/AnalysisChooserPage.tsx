@@ -27,44 +27,51 @@ export function AnalysisChooserPage() {
         title={`${datasetId}.${tableId}`}
         description="Módulo de qualidade — o que você quer ver ou rodar nesta tabela?"
       />
-      <OptionCardGrid>
+      <OptionCardGrid columns={4}>
         <OptionCard
+          layout="wide"
           icon={<Columns />}
           title="Schema"
           description="Nome, tipo e nullability de cada coluna."
           to={`${base}/schema`}
         />
         <OptionCard
+          layout="wide"
           icon={<BarChart2 />}
           title="Análise de qualidade"
           description="Completude, unicidade (HLL) e duplicatas coluna a coluna, com estimativa de custo."
           to={`${base}/quality`}
         />
         <OptionCard
+          layout="wide"
           icon={<ShieldAlert />}
           title="Fingerprint de PII"
           description="Detecção de coluna com dado pessoal sensível por heurística de nome + amostragem."
           to={`${base}/pii`}
         />
         <OptionCard
+          layout="wide"
           icon={<Table2 />}
           title="Tipos de coluna"
           description="Sugestão de tipo lógico mais barato e candidatos a particionamento."
           to={`${base}/column-types`}
         />
         <OptionCard
+          layout="wide"
           icon={<History />}
           title="Histórico"
           description="Runs de profiling anteriores desta tabela e a evolução da densidade."
           to={`${base}/history`}
         />
         <OptionCard
+          layout="wide"
           icon={<Waypoints />}
           title="Mapa de acesso"
           description="Quem acessou esta tabela e quando (audit log de data access)."
           to={`${base}/access`}
         />
         <OptionCard
+          layout="wide"
           icon={<GitBranch />}
           title="Lineage"
           description="De onde os dados desta tabela vêm e para onde vão — grafo em tela cheia."

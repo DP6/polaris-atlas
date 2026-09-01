@@ -1,4 +1,4 @@
-import { Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppLayout } from '@/app/layout'
 import { AdminPage } from '@/features/admin/AdminPage'
 import { RequireAdmin } from '@/features/admin/RequireAdmin'
@@ -30,7 +30,6 @@ import { PiiAnalysisPage } from '@/features/quality/PiiAnalysisPage'
 import { QualityAnalysisPage } from '@/features/quality/QualityAnalysisPage'
 import { QualityFolderComparisonPage } from '@/features/quality/QualityFolderComparisonPage'
 import { QualityFoldersPage } from '@/features/quality/QualityFoldersPage'
-import { QualityOverviewPage } from '@/features/quality/QualityOverviewPage'
 import { QualityTablesPage } from '@/features/quality/QualityTablesPage'
 import { SchemaAnalysisPage } from '@/features/quality/SchemaAnalysisPage'
 import { BucketBrowserPage } from '@/features/storage/BucketBrowserPage'
@@ -53,7 +52,9 @@ export function AppRoutes() {
           <Route path="freshness/:datasetId" element={<DatasetFreshnessPage />} />
           <Route path="orphans" element={<OrphansPage />} />
           <Route path="lineage/:datasetId/:tableId" element={<LineagePage />} />
-          <Route path="quality" element={<QualityOverviewPage />} />
+          {/* "Análises de qualidade" na sidebar mostra só o caminho das
+              análises salvas (pastas) — rodada 3. */}
+          <Route path="quality" element={<Navigate to="/quality/folders" replace />} />
           <Route path="quality/tables" element={<QualityTablesPage />} />
           <Route path="quality/folders" element={<QualityFoldersPage />} />
           <Route path="quality/folders/:folderId" element={<QualityFolderComparisonPage />} />
