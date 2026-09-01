@@ -69,10 +69,10 @@
      do --primary). */
   --color-primary-2: var(--primary-2);
   /* Raio "quase quadrado" (docs/frontend/design-system.md §Raio — refresh
-     visual 2026-09). --radius = 10px; a escala derivada é achatada de
-     propósito pra que retângulo (card `rounded-xl`, botão/input `rounded-lg`,
-     tabela) caia todo em ~10px. `xl == lg` é intencional. Pill continua
-     9999px. */
+     visual 2026-09, reduzido pra 5px na rodada 3). --radius = 5px; a escala
+     derivada é achatada de propósito pra que retângulo (card `rounded-xl`,
+     botão/input `rounded-lg`, tabela) caia todo em ~5px. `xl == lg` é
+     intencional. Pill continua 9999px. */
   --radius-sm: calc(var(--radius) - 3px);
   --radius-md: calc(var(--radius) - 1px);
   --radius-lg: var(--radius);
@@ -141,8 +141,8 @@
   --border: #dedcda;
   --input: #dedcda;
   --ring: #ffb302;
-  /* Raio "quase quadrado" — 10px (refresh visual 2026-09). */
-  --radius: 0.625rem;
+  /* Raio "quase quadrado" — 5px (rodada 3; era 10px). */
+  --radius: 0.3125rem;
   --status-ok: #34d399;
   --status-warn: #ffb302;
   --status-error: #e53e3e;
@@ -196,8 +196,8 @@
   --border: #3a3a38;
   --input: #3a3a38;
   --ring: #ffb302;
-  /* Raio "quase quadrado" — 10px (refresh visual 2026-09). */
-  --radius: 0.625rem;
+  /* Raio "quase quadrado" — 5px (rodada 3; era 10px). */
+  --radius: 0.3125rem;
   --status-ok: #34d399;
   --status-warn: #ffb302;
   --status-error: #e53e3e;
@@ -288,9 +288,8 @@ summary:focus-visible,
     border-color 0.25s var(--ease-dp6);
 }
 .dp6-hoverable:hover {
-  box-shadow:
-    var(--shadow-glow),
-    0 0 0 1px color-mix(in oklab, var(--color-primary) 35%, transparent);
+  /* Rodada 3: sem o glow grande — só um contorno fino em primary. */
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-primary) 22%, transparent);
 }
 @media (prefers-reduced-motion: no-preference) {
   .dp6-hoverable:hover {
@@ -306,54 +305,10 @@ summary:focus-visible,
   backdrop-filter: blur(12px) saturate(1.1);
 }
 
-/* Glow radial amarelo do PageHeader, atrás do <h1>. Pintado como
-   `background` na própria box (não `::before` vazando) — sem scrollbar
-   horizontal, sem cortar o anel de foco das ações. Elipse suave e
-   deslocada do canto (protótipo `.page-head::before`) — a versão antiga
-   `at 100% 0%` lia como um degradê duro coladinho no canto. */
-.dp6-headline-glow {
-  background: radial-gradient(ellipse 60% 60% at 78% 25%, var(--glow), transparent 70%);
-}
-
-/* Motivo gráfico dp6 — 3 barras diagonais (1 preenchida), acento decorativo
-   no canto direito de cabeçalhos de tela-índice/overview (protótipo
-   `.brand-bars`). Auto-contido: `overflow:hidden` clipa as barras skewed;
-   `-z-10` + `isolate` no PageHeader mantém atrás do conteúdo sem cair
-   atrás do <main>. Opt-in via `showBrandBars` — some quando o header tem
-   ações à direita que colidiriam. */
-.dp6-brand-bars {
-  position: absolute;
-  inset-block: 0;
-  inset-inline-end: 0;
-  width: 220px;
-  z-index: -1;
-  pointer-events: none;
-  opacity: 0.5;
-  overflow: hidden;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 40%);
-  mask-image: linear-gradient(90deg, transparent, #000 40%);
-}
-.dp6-brand-bars i {
-  position: absolute;
-  inset-block: -20%;
-  width: 34px;
-  transform: skewX(-18deg);
-  border: 1.5px solid color-mix(in oklab, var(--foreground) 14%, transparent);
-}
-.dp6-brand-bars i.fill {
-  background: linear-gradient(var(--primary), var(--primary-2));
-  border-color: transparent;
-  box-shadow: 0 0 40px var(--glow);
-}
-.dp6-brand-bars i:nth-child(1) {
-  inset-inline-end: 120px;
-}
-.dp6-brand-bars i:nth-child(2) {
-  inset-inline-end: 60px;
-}
-.dp6-brand-bars i:nth-child(3) {
-  inset-inline-end: 0;
-}
+/* Rodada 3: `.dp6-headline-glow` (wash radial amarelo atrás do <h1>) e
+   `.dp6-brand-bars` (3 barras diagonais decorativas) REMOVIDAS — o
+   usuário pediu menos gradiente grande em telas. O <h1> do PageHeader
+   agora é chapado. */
 
 /* Gradiente do botão primário / barra ativa / preenchimento de gráfico.
    Opt-in via className nos CTAs "herói" (não é override global do
@@ -438,18 +393,15 @@ summary:focus-visible,
     border-color 0.25s var(--ease-dp6);
 }
 .dp6-opt-card:hover {
+  /* Rodada 3: sem glow — contorno em primary + elevação sutil. É a única
+     diferenciação do card (o usuário pediu "só via hover"). */
   border-color: color-mix(in oklab, var(--color-primary) 45%, transparent);
-  box-shadow: var(--shadow-glow);
+  box-shadow: var(--shadow-elevation-1);
 }
 @media (prefers-reduced-motion: no-preference) {
   .dp6-opt-card:hover {
     transform: translateY(-3px);
   }
-}
-.dp6-opt-card-featured {
-  background-image: linear-gradient(160deg, var(--color-primary-2), var(--color-primary));
-  border-color: transparent;
-  color: var(--color-primary-foreground);
 }
 
 /* Hover de linha de tabela — gradiente amarelo sutil + barra lateral com
@@ -461,7 +413,7 @@ summary:focus-visible,
 [data-slot="table-body"] [data-slot="table-row"]:hover {
   background-image: linear-gradient(
     90deg,
-    color-mix(in oklab, var(--color-primary) 9%, transparent),
+    color-mix(in oklab, var(--color-primary) 6%, transparent),
     transparent 60%
   );
 }

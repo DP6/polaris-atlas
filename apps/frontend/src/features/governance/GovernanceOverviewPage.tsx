@@ -11,7 +11,6 @@ export function GovernanceOverviewPage() {
       <PageHeader
         title="Governança"
         description="Freshness com SLA e tabelas sem consumidor conhecido."
-        showBrandBars
       />
       <OptionCardGrid>
         <OptionCard
@@ -19,7 +18,6 @@ export function GovernanceOverviewPage() {
           title="Freshness & SLA"
           description="Quanto tempo desde a última atualização de cada tabela, contra o SLA da faixa."
           to="/freshness"
-          featured
         />
         <OptionCard
           icon={<Unlink />}

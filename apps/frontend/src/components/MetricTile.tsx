@@ -18,9 +18,10 @@ interface MetricTileProps {
 // de BudgetPage/ProfilingDialog (p-3/p-4 e text-lg/xl/2xl divergentes).
 export function MetricTile({ label, value, icon, alert, className }: MetricTileProps) {
   return (
+    // Sem `.dp6-hoverable` — big number não é clicável, não deve ter hover.
     <div
       className={cn(
-        'dp6-hoverable rounded-lg border bg-card p-4',
+        'rounded-lg border bg-card p-4',
         alert ? 'border-status-error' : 'border-border',
         className,
       )}

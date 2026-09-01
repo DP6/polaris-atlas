@@ -88,7 +88,6 @@ export function FinOpsOverviewPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        showBrandBars
         title="FinOps — Visão geral"
         description="Gasto do mês, projeção, eficiência de custo e as funções do domínio."
         actions={
@@ -292,7 +291,7 @@ function BigNumber({
   return (
     <div
       className={cn(
-        'dp6-hoverable rounded-lg border bg-card p-4',
+        'rounded-lg border bg-card p-4',
         alert ? 'border-status-error' : 'border-border',
       )}
     >

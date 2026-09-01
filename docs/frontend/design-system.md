@@ -120,21 +120,23 @@ Escala **semântica** (tokens em `@theme inline`, cada um com
 
 ## Raio, elevação, espaçamento
 
-- **Raio de componente — "quase quadrado", `--radius = 10px`** (refresh
-  visual 2026-09). Todo **retângulo** (card, painel, tabela, input, botão)
-  cai em ~10px; **pill** (`--radius-pill = 9999px`: badge, toggle, avatar)
-  continua totalmente redondo. Não re-hardcodar `rounded-[Npx]`.
+- **Raio de componente — "quase quadrado", `--radius = 5px`** (rodada 3;
+  era 10px na rodada 2). Todo **retângulo** (card, painel, tabela, input,
+  botão) cai em ~5px; **pill** (`--radius-pill = 9999px`: badge, toggle,
+  avatar) continua totalmente redondo. Não re-hardcodar `rounded-[Npx]`.
   - A escala derivada `--radius-sm…--radius-4xl` foi **achatada de
-    propósito**: `--radius-xl == --radius-lg == --radius` (10px). Motivo:
+    propósito**: `--radius-xl == --radius-lg == --radius` (5px). Motivo:
     card usa `rounded-xl`, botão/input usam `rounded-lg` — os dois
-    precisam bater em 10px. `sm`/`md` ficam 1–3px menores (chip pequeno,
-    botão `xs`/`sm`); `2xl`+ crescem em passos fixos (`+4/+10/+16px`) pro
-    dialog e afins.
+    precisam bater em 5px. `sm`/`md` ficam 1–3px menores (chip pequeno,
+    botão `xs`/`sm` → `sm` = `calc(5px - 3px)` = 2px); `2xl`+ crescem em
+    passos fixos (`+4/+10/+16px`) pro dialog e afins.
   - `--radius-control` = `--radius` (mantido como apelido semântico).
 - **Elevação:** `--shadow-elevation-1` (popover/menu), `--shadow-elevation-2`
-  (dialog). **Glow amarelo** (`--shadow-glow` = `0 18px 40px -20px
-  var(--glow)`) no **hover** de card/painel/linha e no botão primário — ver
-  §Vida. Fora disso, profundidade continua vindo de **borda**.
+  (dialog). Fora disso, profundidade continua vindo de **borda**. O
+  `--shadow-glow` (`0 18px 40px -20px var(--glow)`) foi **aposentado do
+  hover** na rodada 3 (o usuário pediu menos glow grande) — hoje só
+  `--glow` cru sobrevive em acentos contidos (botão primário
+  `.dp6-gradient-primary`, barra ativa da sidebar, aresta de lineage).
 - **Espaçamento** (escala 4/8/12/16/24/32):
 
   | Entre o quê | classe |
@@ -164,22 +166,22 @@ grain, scanlines, "sweep", parallax de cursor). Ver
 | Token | O que é |
 |---|---|
 | `--primary-2` / `--color-primary-2` | Amarelo dp6 mais claro (`#ffca45`). **Só** topo de gradiente (botão primário, barra ativa, preenchimento de gráfico). Nunca texto. |
-| `--glow` | `rgba(255,179,2, .30)` no dark / `.22` no claro — o rgba tintado do glow. |
-| `--shadow-glow` | Sombra pronta: `0 18px 40px -20px var(--glow)`. Classe `shadow-glow`. |
+| `--glow` | `rgba(255,179,2, .30)` no dark / `.22` no claro — o rgba tintado do glow. Rodada 3: só sobrevive em acentos contidos (`.dp6-gradient-primary`, `.dp6-nav-active`, `.dp6-lineage`). |
+| `--shadow-glow` | Sombra `0 18px 40px -20px var(--glow)`. **Aposentado na rodada 3** (o hover de card/tile/opt-card não usa mais glow grande) — token permanece definido mas sem consumidor. |
 | `--ease-dp6` / `ease-dp6` | `cubic-bezier(.16,1,.3,1)` — curva única dos hovers/entradas do refresh. |
 
 **Utilitárias plain-CSS** (em `index.css`, fora de `@layer`):
 
 | Classe | Uso |
 |---|---|
-| `.dp6-hoverable` | Hover "com vida": glow + contorno fino em `--primary` (via `box-shadow`, funciona com `border` **ou** `ring`) + `translateY(-2px)` (só com `prefers-reduced-motion: no-preference`). Em card/painel/linha de tabela clicável/item de menu que hoje só trocam a borda. Já embutida no `MetricTile`. |
+| `.dp6-hoverable` | Hover discreto (rodada 3, sem glow grande): só um contorno fino em `--primary` (`box-shadow: 0 0 0 1px …primary 22%`) + `translateY(-2px)` (só com `prefers-reduced-motion: no-preference`). Em card/painel/linha clicável — **não** no `MetricTile` (big number não é clicável). |
 | `.dp6-glass` | Superfície semitransparente + `backdrop-filter: blur`. **Opt-in**, raro (o app é denso e quase não tem o que desfocar atrás); na dúvida `bg-card` sólido. |
-| `.dp6-headline-glow` | Glow radial amarelo **contido no próprio box** (pintado como `background`, sem `::before` vazando) — usado pelo `PageHeader` atrás do `<h1>`. Elipse suave e deslocada do canto (`at 78% 25%`); a versão `at 100% 0%` lia como um degradê duro no canto (rodada 2). |
-| `.dp6-brand-bars` | Motivo decorativo: 3 barras diagonais `skewX(-18deg)` (a última preenchida de amarelo + glow) no canto direito de um cabeçalho. Auto-contido (`overflow:hidden` + `mask` + `z-index:-1`). Renderizado pelo `<BrandBars>` quando `PageHeader` recebe `showBrandBars` — opt-in em telas-índice/overview **sem ações à direita** que colidiriam. |
+| ~~`.dp6-headline-glow`~~ | **Removida na rodada 3.** O `<h1>` do `PageHeader` agora é chapado (o usuário pediu menos gradiente grande em telas). |
+| ~~`.dp6-brand-bars`~~ | **Removida na rodada 3** junto com o componente `<BrandBars>` e o prop `showBrandBars` do `PageHeader`. |
 | `.dp6-gradient-primary` | Gradiente + inset ring + glow do botão "herói". **Opt-in via `className`** num `<Button variant="default">` específico (a primitiva `ui/button` é read-only, não dá pra override global). |
 | `.dp6-nav-active` | Item de nav **ativo** da sidebar: barra de acento `3px` à esquerda com glow (`::before`) + fundo em gradiente `--primary/14 → transparent`. Substitui o bloco amarelo chapado. Par com `rounded-lg` + `text-foreground` + ícone `text-primary` no `NavLink`. Ver `frontend-visual-refresh-plan.md` §1 (Q-001). |
 | `.dp6-lineage` (escopo) | Arestas do grafo de lineage: `.react-flow__edge-path` amarelo + `.dp6-edge-hot`/`.dp6-edge-dim` no hover de aresta. O `.animated` do @xyflow anima; reduced-motion congela. |
-| `.dp6-opt-card` | Card de escolha (protótipo `.opt-card`): hover lift `translateY(-3px)` (gated em `no-preference`) + glow. `.dp6-opt-card-featured` = fundo amarelo (1 card em destaque por grade). Renderizado pelo `<OptionCard>`. |
+| `.dp6-opt-card` | Card de escolha (protótipo `.opt-card`): hover lift `translateY(-3px)` (gated em `no-preference`) + `border-color` em `--primary` + `--shadow-elevation-1` (rodada 3: sem glow). `.dp6-opt-card-featured` **removida** — nenhum card usa amarelo de fundo; diferenciação só no hover. Renderizado pelo `<OptionCard>`. |
 | `.dp6-nav-item` | Item de nav em **hover**: dica de glow (anel `inset` fino em `--primary`) — mais contido que `.dp6-hoverable` (numa lista vertical densa o glow cheio vira ruído). |
 
 Além das classes, uma **regra global** (não utilitária, mesmo padrão da
@@ -225,13 +227,12 @@ primitivos — compõem primitivos de `ui/`.
 | `EmptyState` / `EmptyStateRow` | Estado vazio: ícone + título + descrição/ação. `EmptyStateRow` (com `colSpan`) para dentro de `<TableBody>`. | — |
 | `StatusBadge` | Badge de estado: **ícone + rótulo**, nunca só cor (WCAG 1.4.1). `status="ok\|warn\|error\|info\|running\|neutral"`. | Badge sem semântica de estado (use `Badge` de `ui/`) |
 | `CacheStalenessBadge` | Indicador "Cache atualizado há Xh" nas telas servidas por cache pré-computado (lineage, órfãs, mapa de acesso). `cacheUpdatedAt = null` → não renderiza (veio ao vivo). | Fora dessas telas |
-| `MetricTile` / `MetricGrid` | Tile de KPI: valor `text-title` bold, rótulo `text-label uppercase`. `icon` (lucide, num "chip" acima do rótulo — mapeamento por KPI no brief). `alert` → borda `--status-error`. Hover "com vida" (`.dp6-hoverable`) embutido. `MetricGrid` = grid `auto-fill`. | Um número solto no meio de texto |
+| `MetricTile` / `MetricGrid` | Tile de KPI: valor `text-title` bold, rótulo `text-label uppercase`. `icon` (lucide, num "chip" acima do rótulo — mapeamento por KPI no brief). `alert` → borda `--status-error`. **Sem hover** (rodada 3: big number não é clicável). `MetricGrid` = grid `auto-fill`. | Um número solto no meio de texto |
 | `ChartTooltip` + `useChartTooltip` | Tooltip flutuante que segue o cursor, compartilhado por gráfico/mini-gráfico (crosshair de linha, hover de barra). Portal pro `<body>`, `pointer-events-none`. `useChartTooltip()` → `{ state, show, move, hide }`; `<ChartTooltip state={…} />` uma vez por tela. | Tooltip ancorado num elemento fixo (use `ui/tooltip`) |
 | `SlaDistributionBar` | Barra empilhada da distribuição das tabelas de um dataset por faixa de SLA de freshness. Consome `FreshnessCounts` (sem query nova). `role="img"` + `title` com a decomposição. Usada nos cards do Catálogo de Dados e no Freshness. Ver `docs/specs/freshness.md`. | Mostrar contagem exata por faixa (isso é tabela, ver `DatasetFreshnessTable`) |
-| `BrandBars` | Motivo decorativo de 3 barras diagonais (`.dp6-brand-bars`), `aria-hidden`. Só via `PageHeader` `showBrandBars`. | Fora do `PageHeader` |
-| `Panel` | "Bloco" (protótipo `.panel`): container 10px com `border` + `bg-card` + borda-gradiente (`.dp6-panel`). Props `title`/`subtitle`/`actions`/`as`/`filterRow` (filtros DENTRO do painel)/`hoverable`/`glass`. Corpo não clipa scroll horizontal. Padrão pra toda tabela de domínio que hoje fica solta na página. | Um `<Table>` que já está dentro de outro container com título |
+| `Panel` | "Bloco" (protótipo `.panel`): container 5px com `border` + `bg-card` + borda-gradiente (`.dp6-panel`). Props `title`/`subtitle`/`actions`/`as`/`filterRow` (filtros DENTRO do painel)/`hoverable`/`glass`. Corpo não clipa scroll horizontal. Padrão pra toda tabela de domínio que hoje fica solta na página. | Um `<Table>` que já está dentro de outro container com título |
 | `ComboChart` | Coluna + linha(s) recharts num `bloco`, eixo Y duplo (coluna esq., linha dir.). Props `bar`/`lines`/`refLine`. Extraído do `<ComposedChart>` de BudgetPage. | Uma série só (use `LineChart`/`BarChart` direto) |
-| `OptionCard` + `OptionCardGrid` | Card de escolha: ícone-chip + título + descrição + `meta`. Props `to`/`onClick`/`featured`/`soon`. Telas de overview de grupo + chooser de tipo de análise. | Lista densa (use `<Table>`) |
+| `OptionCard` + `OptionCardGrid` | Card de escolha: ícone-chip + título + descrição + `meta`. Props `to`/`onClick`/`soon`. Todos com a mesma cor de base (`bg-card`) — diferenciação só no hover. Telas de overview de grupo + chooser de tipo de análise. | Lista densa (use `<Table>`) |
 | `HBarList` | Lista de barras horizontais + `ChartTooltip` no hover (contagem exata). Item = `{label,value,displayValue,tooltip,variant:'key'|'cat'}`. Gráfico de cardinalidade por coluna da análise de qualidade. | Tabela de dados (use `<Table>`) |
 | `CompositeScoreRing` | Anel de score composto (SVG à mão, cap arredondado). `score` central (`--foreground`, nunca `--primary`), `segments` (1–2 anéis + legenda texto+valor), `compact` (34px pra coluna de tabela). | Barra de progresso simples (use `Progress`/`CompletenessBar`) |
 | `Funnel` | Funil de retenção em `<polygon>` afunilando; rótulo+valor+% numa coluna ao lado (nunca por dentro). `role="img"` + `aria-label`. | Comparação de categorias não afuniladas (use `BarChart`) |

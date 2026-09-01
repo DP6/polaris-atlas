@@ -5,6 +5,32 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Refresh visual do Hub — rodada 3 (ajustes de UI, 2026-09)
+
+Terceira leva de ajustes finos após validação visual do usuário em `dev`. Sem
+funcionalidade nova. Plano em `~/.claude/plans/gere-um-plano-altera-es-unified-wilkes.md`
+(11 branches R3-*, empilhadas sobre a ponta da rodada 2). Decisões travadas: voltar global
+por histórico no `PageHeader`; período do Budget = preset 7/15/30 dias (teto do cache);
+scanner de desperdício vira overview de 2 cards → sub-rotas; distribuição de freshness = 3
+barras verticais sempre visíveis.
+
+### R3-tokens — `feat/r3-tokens` (só front-end)
+
+- **Raio 10px → 5px:** `--radius` de `0.625rem` → `0.3125rem` em `:root` e `.dark`
+  (`index.css`). Escala derivada (`--radius-sm…4xl`) segue via `calc()`.
+- **Menos gradiente grande:** `.dp6-headline-glow` (wash amarelo atrás de todo `<h1>`) e
+  `.dp6-brand-bars` (+ componente `BrandBars` + prop `showBrandBars` do `PageHeader` + 4
+  call sites) **removidos**. `.dp6-hoverable:hover` e `.dp6-opt-card:hover` perderam o
+  `--shadow-glow` (agora contorno fino / `--shadow-elevation-1`). Hover de linha de tabela
+  de `primary 9%` → `6%`. `--glow` cru só sobrevive em `.dp6-gradient-primary` /
+  `.dp6-nav-active` / `.dp6-lineage`.
+- **Cards com cor de base única:** `OptionCard` perdeu o prop `featured` + `.dp6-opt-card-featured`
+  (fundo amarelo) — removido dos 3 call sites (Governança, AnalysisChooser, QualityOverview).
+- **Big number sem hover:** `MetricTile` e o `BigNumber` da FinOps overview perderam
+  `.dp6-hoverable` (não são clicáveis).
+- Doc-sync: `docs/frontend/design-system.md` (§Raio, §Vida, tabela de componentes),
+  `docs/frontend/ui-ux-rules.md` (§Identidade). `pnpm lint` + `pnpm build` verdes.
+
 ## Refresh visual do Hub — rodada 2 (2026-09)
 
 Segunda rodada, sobre as lacunas que a rodada 1 marcou como "especificado,

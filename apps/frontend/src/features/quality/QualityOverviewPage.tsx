@@ -9,7 +9,6 @@ export function QualityOverviewPage() {
       <PageHeader
         title="Análises de qualidade"
         description="Escolha uma tabela pra rodar schema, profiling, PII, tipos de coluna, histórico ou mapa de acesso — ou compare runs salvas em pastas."
-        showBrandBars
       />
       <OptionCardGrid>
         <OptionCard
@@ -17,7 +16,6 @@ export function QualityOverviewPage() {
           title="Analisar uma tabela"
           description="Lista de tabelas do projeto — escolha uma pra abrir o módulo de qualidade em tela cheia."
           to="/quality/tables"
-          featured
         />
         <OptionCard
           icon={<FolderKanban />}

@@ -26,7 +26,6 @@ export function AnalysisChooserPage() {
         back={{ to: from, label: 'Voltar' }}
         title={`${datasetId}.${tableId}`}
         description="Módulo de qualidade — o que você quer ver ou rodar nesta tabela?"
-        showBrandBars
       />
       <OptionCardGrid>
         <OptionCard
@@ -40,7 +39,6 @@ export function AnalysisChooserPage() {
           title="Análise de qualidade"
           description="Completude, unicidade (HLL) e duplicatas coluna a coluna, com estimativa de custo."
           to={`${base}/quality`}
-          featured
         />
         <OptionCard
           icon={<ShieldAlert />}
