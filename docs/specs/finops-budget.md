@@ -314,3 +314,28 @@ tinha com o texto da query inline na célula).
 - **Combinar duas dimensões de `group_by` na mesma resposta** (ex:
   usuário × dia) — só uma dimensão por chamada; cruzar dimensões fica
   pra uma iteração futura se houver demanda concreta.
+
+
+---
+
+## Refresh visual - pendente (2026-09)
+
+Pedidos do brief `frontend-visual-refresh.md` (sec. FinOps). Feature de dataviz
+nova; branch propria depois do review. Ver
+`frontend-visual-refresh-plan.md` sec.5. Escopo de budget **travado**: so
+cadastro simples (dataset **e** tabela), sem compartilhamento entre
+usuarios (ASM-005 do brief).
+
+| ID | Comportamento | Teste |
+|---|---|---|
+| AC-FIN-RV-01 | Grafico de custo = combo **coluna (diario) + linha (acumulado)**, com projecao tracejada e linha de budget. | `test_finops_cost_combo_chart` |
+| AC-FIN-RV-02 | Filtros do grafico: dataset, tabela, granularidade (mes/dia), tipo de custo (query / storage / ambos). | `test_finops_cost_chart_filters` |
+| AC-FIN-RV-03 | **Dois scores distintos**: (a) "Eficiencia de custo" geral do projeto (anel composto - ja prototipado); (b) "Score por tabela" individual - coluna "Score" ordenavel (anel compacto + numero) no scanner de desperdicio / Top ofensores **e** anel grande + decomposicao no drill-down da linha (Q-002). | `test_finops_two_distinct_scores` |
+| AC-FIN-RV-04 | Cadastro de budget com granularidade por **dataset e por tabela**. So cadastro simples - sem convite/aceite/compartilhamento. | `test_budget_granularity_dataset_and_table` |
+| AC-FIN-RV-05 | "Top ofensores" com mini-grafico de tendencia de 7 dias por linha. | `test_finops_top_offenders_trend` |
+
+Suposicao **ASM-FIN-RV-01** (aberta): AC-FIN-RV-02/03 podem exigir
+agregacao nova no backend (custo por dataset x dia x tipo; insumos do score
+por tabela). Confirmar na implementacao o que e derivavel do que ja existe
+vs. endpoint/campo novo - com estimativa de custo (dry run) de qualquer
+query BQ nova, regra do CLAUDE.md.

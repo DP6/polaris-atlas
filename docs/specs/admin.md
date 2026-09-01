@@ -976,3 +976,22 @@ apps/frontend/src/
 - **Notificação por e-mail** ao aprovar/negar uma solicitação — só
   reflete dentro do Hub (badge de pendentes some da visão do admin; o
   solicitante percebe na próxima vez que tentar acessar o projeto).
+
+
+---
+
+## Refresh visual - pendente (2026-09)
+
+Ver brief `frontend-visual-refresh.md` (sec. Administracao) e
+`frontend-visual-refresh-plan.md` sec.5.
+
+| ID | Comportamento | Teste |
+|---|---|---|
+| AC-ADM-RV-01 | "Acessos ao Hub" = combo **linha + coluna** (diario x acumulado) com **controle na propria tela** pra o usuario escolher qual metrica e linha e qual e coluna - sem mapeamento fixo no design (ASM-004 do brief). | `test_admin_access_combo_swap_control` |
+| AC-ADM-RV-02 | Seletor de granularidade **dia / mes** no grafico de acessos. | `test_admin_access_granularity_toggle` |
+| AC-ADM-RV-03 | **Filtro de periodo (de / ate)** no grafico de acessos - novo, alem da granularidade. | `test_admin_access_date_range_filter` |
+| AC-ADM-RV-04 | Funil de retencao como **trapezios geometricos** afunilando, com os rotulos **FORA** do trapezio (ao lado), nunca centralizados por dentro - nota tecnica do brief: rotulo dentro colide com o valor nos estagios estreitos (ex.: 38%). | `test_retention_funnel_trapezoids_labels_outside` |
+
+Suposicao **ASM-ADM-RV-01** (aberta): AC-ADM-RV-03 (filtro de/ate) pode
+exigir parametro novo no endpoint de analytics de acessos - hoje e
+janela fixa (`LOOKBACK_DAYS`). Confirmar na implementacao.

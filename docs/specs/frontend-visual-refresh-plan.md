@@ -162,24 +162,66 @@ branches são empilhadas, o deploy em `dev` a qualquer momento reflete a
 
 ## 5. Estado de execução
 
-Atualizado a cada branch concluída e empurrada pra `dev`.
+Sessão autônoma (usuário ausente até o review). Todas as branches são
+**empilhadas** (cada uma parte da anterior) e estão em `origin`; a ordem da
+tabela é a ordem de review/merge. `dev` reflete a ponta da pilha.
+Verificação local por branch: `pnpm lint` + `pnpm build` (frontend) e
+`uv run pytest tests/unit` + `ruff` (quando toca backend). **Validação
+visual é do usuário, em `dev`.** Nada foi mergeado em `main`.
 
-| PR | Status | Commit(s) / nota |
-|----|--------|------------------|
-| 1 | _em andamento_ | branch criada de `origin/docs/frontend-harness` + merge `origin/main` (#51) + brief + este plano |
-| 2–13 | pendente | — |
+### Feito e no ar (`dev`)
+
+| # | Branch | Escopo entregue | Verificação |
+|---|--------|-----------------|-------------|
+| 1 | `docs/frontend-refresh-plan` | harness (`docs/frontend/**`) + `docs/design-references/**` + brief + este plano | docs |
+| 2 | `feat/fe-refresh-foundation` | `index.css`: `--radius` 10px + escala achatada; tokens `--primary-2`/`--glow`/`--shadow-glow`/`--ease-dp6`; utilitárias `.dp6-hoverable`/`.dp6-glass`/`.dp6-headline-glow`/`.dp6-gradient-primary`. `MetricTile` (prop `icon` + hover). `PageHeader` (glow). `ChartTooltip` + `useChartTooltip` novos. Harness §Vida + `ui-ux-rules.md` §Identidade/§Movimento + `CHANGELOG`. | lint+build |
+| 3 | `feat/fe-refresh-rename-catalogo` | "Catálogo" → "Catálogo de Dados" (sidebar, breadcrumb Admin, `<h1>`, `docs/site`) | lint+build |
+| 4 | `feat/fe-refresh-sidebar` | item ativo Q-001 (`.dp6-nav-active`), hover glow (`.dp6-nav-item`), ícone `Boxes` nos datasets, ícone do serviço em `--primary`, mais respiro | lint+build |
+| 5 | `feat/fe-refresh-tables` | hover de linha global (`[data-slot=table-body] tr:hover` → gradiente + barra `inset 3px`) — vale pras ~30 tabelas | lint+build |
+| 6 | `feat/catalogo-de-dados-overview` | rota `/` vira overview do domínio (`CatalogOverviewPage` + `DatasetOverviewCard` + `SlaDistributionBar` compartilhada + `KpiCards.icon`). ACs `AC-CAT-OV-*` em `catalog.md`; `SlaDistributionBar` em `freshness.md` | lint+build |
+| 7 | `feat/catalog-dataset-description` | **backend** — `DatasetSummary.description` via `SCHEMATA_OPTIONS` + `SAFE.JSON_VALUE` (1 query/região, $0, cache 5min). Frontend: descrição no card. ACs `AC-CAT-DESC-*` | `pytest` 783 ✓, ruff ✓, lint+build |
+| 8 | `feat/fe-refresh-freshness` | `SlaRow` + `DatasetFreshnessTable` usam a `SlaDistributionBar` (coluna "Distribuição" + barra agregada). Cosmético | lint+build |
+| 9 | `feat/fe-refresh-kpi-icons` | ícone no chip de cada KPI (mapeamento do brief) em `CatalogDatasetPage`, `BudgetPage`, `ProfilingDialog`, `LoginAnalyticsSection`, `AccessRequestAnalyticsSection` | lint+build |
+| 10 | `feat/fe-refresh-primary-cta` | `.dp6-gradient-primary` nos CTAs herói (`DatasetScopeGate`, `ProfilingDialog`, `ColumnTypeSuggestionsTab`, `FinOpsPage`) | lint+build |
+| 11 | `docs/fe-refresh-deferred-specs` | esta atualização de §5 + ACs/notas de "implementação pendente" nas specs de lineage/quality/finops/storage/admin | docs |
+
+### Especificado, implementação PENDENTE (precisa de iteração visual em `dev` com o usuário)
+
+Os pedidos do brief que são **feature de dataviz nova**, não polish — grandes
+demais pra fechar às cegas numa sessão autônoma sem ver o resultado. Cada um
+tem ACs escritos na spec do domínio (seção "Refresh visual — pendente");
+viram branch própria depois do review, com o usuário validando em `dev` a
+cada iteração.
+
+| Domínio | O que falta | Spec |
+|---|---|---|
+| Lineage | arestas "vivas" (animadas), layout maior, hover nas arestas, painéis impacto-a-montante (com contagem) / fontes / consumidores, indicador "cache há X · profundidade Y hops" | `lineage.md` §"Refresh visual — pendente" |
+| Análises de qualidade | sair do dialog pequeno → submódulo em tela cheia; tela de escolha de tipo de análise (cards Schema/Qualidade/PII/Tipos/Histórico/Acesso); cardinalidade em barra horizontal + `ChartTooltip` (substitui os gauges) | `profiling.md` + `quality.md` §"Refresh visual — pendente" |
+| FinOps | combo bar+linha (acumulado × diário) filtrável (dataset/tabela/mês-dia/tipo); Top ofensores com tendência; **dois scores** (eficiência geral em anel; score por tabela — Q-002); budget por dataset **e** por tabela | `finops-budget.md` + `finops-waste-scanner.md` §"Refresh visual — pendente" |
+| Buckets (Storage) | cards de bucket com mini-sparkline + lifecycle tag + storage class + tamanho/objetos/região; scanner agrupado por recomendação + mini-gráfico por linha | `storage.md` §"Refresh visual — pendente" |
+| Administração | combo linha+coluna com **controle de troca** de métrica (ASM-004); granularidade dia/mês + **filtro de período de/até** (novo); funil de retenção em **trapézios** com rótulos FORA do trapézio | `admin.md` §"Refresh visual — pendente" |
+
+### Carve-out (spec + branch próprios, fora deste refresh)
+
+- IA "todo item de nível 1 abre overview" na `DatasetSidebar` (a sidebar
+  hoje dá drill-down direto no dataset) — `feat/nav-overview-screens`.
+- Compartilhamento de budget entre usuários — já fora de escopo no brief.
 
 ---
 
-## 6. Riscos / o que pode não caber nesta sessão
+## 6. Riscos / notas de execução
 
-- PRs 9–13 (lineage, quality, finops, storage, admin) são telas ricas de
-  dataviz — arestas animadas, funil geométrico, combo charts, barras
-  horizontais com tooltip compartilhado, mini-sparklines. Implementar +
-  verificar `pnpm lint`/`pnpm build` em todas numa sessão pode não caber.
-  Onde não couber, a branch fica com o esqueleto + a spec com os ACs
-  escritos, e o estado real é anotado em §5 — o usuário decide no review
-  se mergeia o que tem ou pede a continuação.
-- Não há como rodar o app localmente aqui (deploy é em Cloud Run no push);
-  a verificação local é `pnpm lint` + `pnpm build` + leitura de diff. A
-  validação visual real é do usuário, em `dev`, no review final.
+- **Sem app rodando localmente** (deploy é Cloud Run no push). Verificação
+  local = `pnpm lint` + `pnpm build` + `pytest`/`ruff` + leitura de diff.
+  A validação visual (glow calibrado? raio ok nos dois temas? contraste do
+  item ativo? tilt sutil o suficiente?) é do usuário, em `dev`, no review.
+- **Pilha de branches:** cada PR tem base `main` mas contém os commits das
+  anteriores até elas mergearem. Revisar na ordem da tabela §5, ou revisar
+  a ponta (`docs/fe-refresh-deferred-specs`) que tem o diff acumulado
+  inteiro. Merge na ordem.
+- **Efeitos de fundo do protótipo não adotados** (constelação, aurora,
+  grain, scanline, sweep, parallax) — ASM-006. Se o usuário quiser algum,
+  é decisão explícita no review.
+- **`--radius-xl == --radius-lg`** quebra a monotonicidade da escala shadcn
+  de propósito (card `rounded-xl` e botão `rounded-lg` precisam bater em
+  10px). Documentado em `design-system.md` §Raio.
