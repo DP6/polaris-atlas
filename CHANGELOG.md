@@ -87,6 +87,20 @@ nome; a busca global de tabela era só um link pra `/search`.
   `lookback_days` como antes. `admin.md` + teste. pytest 786 ok.
   ACs AC-ADM-RV-01..04 marcados ✅, ASM-ADM-RV-01 resolvida.
 
+### R2-6 — `feat/r2-nav-overview-screens` (só front-end)
+
+- Carve-out do brief "nível 1 abre overview". Novos `components/OptionCard.tsx`
+  (`OptionCard` + `OptionCardGrid`) + `.dp6-opt-card`/`.dp6-opt-card-featured`.
+- Páginas `GovernanceOverviewPage` (`/governanca`), `QualityOverviewPage`
+  (`/quality`), `QualityTablesPage` (`/quality/tables` — select de dataset
+  → tabela → `/analyze/:d/:t`). Rotas no `router.tsx`.
+- `DatasetSidebar`: `SidebarSection`/`SidebarServiceGroup` ganharam prop
+  `to` — nome vira `NavLink` (Governança→/governanca, FinOps→/finops,
+  Análises de qualidade→/quality, Catálogo de Dados→/, Cloud Storage→/storage),
+  chevron isola o disclosure.
+- `docs/specs/nav-overview-screens.md` novo (AC-NAV-OV-01..03).
+  `design-system.md` + `ui-ux-rules.md` no mesmo PR.
+
 ## Refresh visual do Hub — fundação de tokens (2026-09)
 
 Primeira fatia do refresh visual (brief:

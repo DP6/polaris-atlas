@@ -75,23 +75,53 @@ function formatAssetCounts(totalTables: number, totalViews: number): string {
 function SidebarServiceGroup({
   icon,
   label,
+  to,
   open,
   onOpenChange,
   children,
 }: {
   icon: ReactNode
   label: string
+  // Quando presente, o nome/ícone vira um NavLink pra tela de overview do
+  // serviço; o chevron continua sendo só o disclosure do drill-down.
+  to?: string
   open: boolean
   onOpenChange: (open: boolean) => void
   children: ReactNode
 }) {
+  const rowClass =
+    'dp6-nav-item mb-2 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-bold text-foreground hover:bg-muted'
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
-      <CollapsibleTrigger className="dp6-nav-item mb-2 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-bold text-foreground hover:bg-muted">
-        <span className="text-primary">{icon}</span>
-        <span className="flex-1 text-left">{label}</span>
-        <ChevronDown size={14} className={cn('transition-transform', !open && '-rotate-90')} />
-      </CollapsibleTrigger>
+      {to ? (
+        <div className={cn(rowClass, 'p-0')}>
+          <NavLink
+            to={to}
+            end
+            className={({ isActive }) =>
+              cn(
+                'flex flex-1 items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-muted',
+                isActive && 'dp6-nav-active text-foreground',
+              )
+            }
+          >
+            <span className="text-primary">{icon}</span>
+            <span className="flex-1 text-left">{label}</span>
+          </NavLink>
+          <CollapsibleTrigger
+            aria-label={open ? `Recolher ${label}` : `Expandir ${label}`}
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+          >
+            <ChevronDown size={14} className={cn('transition-transform', !open && '-rotate-90')} />
+          </CollapsibleTrigger>
+        </div>
+      ) : (
+        <CollapsibleTrigger className={rowClass}>
+          <span className="text-primary">{icon}</span>
+          <span className="flex-1 text-left">{label}</span>
+          <ChevronDown size={14} className={cn('transition-transform', !open && '-rotate-90')} />
+        </CollapsibleTrigger>
+      )}
       <CollapsibleContent className="flex flex-col gap-4 border-border border-l pl-2">
         {children}
       </CollapsibleContent>
@@ -148,23 +178,52 @@ function QuantityPicker({
 // (`open` vem de fora, sempre iniciado em `false` no componente pai).
 function SidebarSection({
   label,
+  to,
   open,
   onOpenChange,
   children,
 }: {
   label: string
+  // Quando presente, o nome vira um NavLink pra tela de overview do grupo;
+  // o chevron continua sendo só o disclosure do drill-down (decisão do
+  // usuário — refresh visual rodada 2).
+  to?: string
   open: boolean
   onOpenChange: (open: boolean) => void
   children: ReactNode
 }) {
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
-      <CollapsibleTrigger
-        className={cn(SECTION_LABEL_CLASS, 'mb-2 flex w-full items-center justify-between')}
-      >
-        {label}
-        <ChevronDown size={14} className={cn('transition-transform', !open && '-rotate-90')} />
-      </CollapsibleTrigger>
+      {to ? (
+        <div className="mb-2 flex items-center gap-1">
+          <NavLink
+            to={to}
+            end
+            className={({ isActive }) =>
+              cn(
+                SECTION_LABEL_CLASS,
+                'dp6-nav-item flex flex-1 rounded-lg py-1',
+                isActive && 'dp6-nav-active text-foreground',
+              )
+            }
+          >
+            {label}
+          </NavLink>
+          <CollapsibleTrigger
+            aria-label={open ? `Recolher ${label}` : `Expandir ${label}`}
+            className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+          >
+            <ChevronDown size={14} className={cn('transition-transform', !open && '-rotate-90')} />
+          </CollapsibleTrigger>
+        </div>
+      ) : (
+        <CollapsibleTrigger
+          className={cn(SECTION_LABEL_CLASS, 'mb-2 flex w-full items-center justify-between')}
+        >
+          {label}
+          <ChevronDown size={14} className={cn('transition-transform', !open && '-rotate-90')} />
+        </CollapsibleTrigger>
+      )}
       <CollapsibleContent>{children}</CollapsibleContent>
     </Collapsible>
   )
@@ -216,7 +275,12 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
         open={bigQueryOpen}
         onOpenChange={setBigQueryOpen}
       >
-        <SidebarSection label="Governança" open={governanceOpen} onOpenChange={setGovernanceOpen}>
+        <SidebarSection
+          label="Governança"
+          to="/governanca"
+          open={governanceOpen}
+          onOpenChange={setGovernanceOpen}
+        >
           <nav className="flex flex-col gap-0.5">
             <NavLink to="/freshness" className={NAV_LINK_CLASS}>
               <Clock size={16} />
@@ -229,7 +293,7 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
           </nav>
         </SidebarSection>
 
-        <SidebarSection label="FinOps" open={finopsOpen} onOpenChange={setFinopsOpen}>
+        <SidebarSection label="FinOps" to="/finops" open={finopsOpen} onOpenChange={setFinopsOpen}>
           <nav className="flex flex-col gap-0.5">
             <NavLink to="/finops" end className={NAV_LINK_CLASS}>
               <PiggyBank size={16} />
@@ -242,7 +306,12 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
           </nav>
         </SidebarSection>
 
-        <SidebarSection label="Catálogo de Dados" open={catalogOpen} onOpenChange={setCatalogOpen}>
+        <SidebarSection
+          label="Catálogo de Dados"
+          to="/"
+          open={catalogOpen}
+          onOpenChange={setCatalogOpen}
+        >
           <NavLink to="/search" className={NAV_LINK_CLASS}>
             <Search size={16} />
             Buscar tabelas
@@ -423,6 +492,7 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
 
         <SidebarSection
           label="Análises de qualidade"
+          to="/quality"
           open={dqAnalysesOpen}
           onOpenChange={setDqAnalysesOpen}
         >
@@ -459,6 +529,7 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
       <SidebarServiceGroup
         icon={<HardDrive size={16} />}
         label="Cloud Storage"
+        to="/storage"
         open={cloudStorageOpen}
         onOpenChange={setCloudStorageOpen}
       >

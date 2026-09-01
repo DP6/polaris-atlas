@@ -35,6 +35,7 @@ protótipo** — não ilimitado.
 | **Denso, estilo Metabase.** Máximo de informação na viewport sem scroll desnecessário; padding de card `p-4`, célula de tabela `p-2`. | É uma ferramenta de análise de dados, não um site de marketing. As referências externas em [`references.md`](references.md) são *arejadas* — não copiar a densidade delas. |
 | **Conteúdo dentro de `max-w-[1400px] mx-auto`.** | Já aplicado em `apps/frontend/src/app/layout.tsx`. Linha de texto/tabela não deve esticar de ponta a ponta em monitor largo. |
 | **Uma SPA só, com sidebar.** Não criar página/rota isolada por domínio fora do shell (`AppLayout` + `Topbar` + `DatasetSidebar`). | Navegação previsível; o contexto de projeto/dataset é compartilhado. |
+| **Cabeçalho de grupo da sidebar = nome (`NavLink` pra `/{grupo}`) + chevron (disclosure) separados.** Clicar no nome abre a tela de overview do grupo; o chevron só expande/recolhe a lista inline. | Decisão do usuário (rodada 2): drill-down e overview são dois caminhos, não um. Ver `docs/specs/nav-overview-screens.md`. |
 | **Grupos da `DatasetSidebar` começam recolhidos e o estado não é persistido.** | Decisão de produto confirmada (2026-08-30) — "sidebar menos carregada no primeiro acesso". Não inverter sem reconfirmar. (O recolhedor da sidebar **inteira**, `useSidebarCollapsed`, é outra coisa e é persistido — ver [`behaviors.md`](behaviors.md).) |
 | **Espaçamento pela escala 4/8/12/16/24/32** (`gap-2`/`gap-4`/`gap-8`), não valores ad-hoc. | Ritmo visual consistente entre telas feitas por sessões diferentes. |
 

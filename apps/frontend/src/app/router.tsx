@@ -12,10 +12,13 @@ import { BudgetPage } from '@/features/finops/BudgetPage'
 import { FinOpsPage } from '@/features/finops/FinOpsPage'
 import { DatasetFreshnessPage } from '@/features/freshness/DatasetFreshnessPage'
 import { FreshnessPage } from '@/features/freshness/FreshnessPage'
+import { GovernanceOverviewPage } from '@/features/governance/GovernanceOverviewPage'
 import { OrphansPage } from '@/features/lineage/OrphansPage'
 import { NotFoundPage } from '@/features/misc/NotFoundPage'
 import { QualityFolderComparisonPage } from '@/features/quality/QualityFolderComparisonPage'
 import { QualityFoldersPage } from '@/features/quality/QualityFoldersPage'
+import { QualityOverviewPage } from '@/features/quality/QualityOverviewPage'
+import { QualityTablesPage } from '@/features/quality/QualityTablesPage'
 import { BucketBrowserPage } from '@/features/storage/BucketBrowserPage'
 import { BucketsPage } from '@/features/storage/BucketsPage'
 import { WastePage } from '@/features/storage/WastePage'
@@ -29,9 +32,12 @@ export function AppRoutes() {
         <Route path="/" element={<AppLayout />}>
           <Route index element={<CatalogOverviewPage />} />
           <Route path="datasets/:datasetId" element={<CatalogDatasetPage />} />
+          <Route path="governanca" element={<GovernanceOverviewPage />} />
           <Route path="freshness" element={<FreshnessPage />} />
           <Route path="freshness/:datasetId" element={<DatasetFreshnessPage />} />
           <Route path="orphans" element={<OrphansPage />} />
+          <Route path="quality" element={<QualityOverviewPage />} />
+          <Route path="quality/tables" element={<QualityTablesPage />} />
           <Route path="quality/folders" element={<QualityFoldersPage />} />
           <Route path="quality/folders/:folderId" element={<QualityFolderComparisonPage />} />
           <Route path="finops" element={<FinOpsPage />} />

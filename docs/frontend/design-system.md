@@ -178,6 +178,7 @@ grain, scanlines, "sweep", parallax de cursor). Ver
 | `.dp6-brand-bars` | Motivo decorativo: 3 barras diagonais `skewX(-18deg)` (a última preenchida de amarelo + glow) no canto direito de um cabeçalho. Auto-contido (`overflow:hidden` + `mask` + `z-index:-1`). Renderizado pelo `<BrandBars>` quando `PageHeader` recebe `showBrandBars` — opt-in em telas-índice/overview **sem ações à direita** que colidiriam. |
 | `.dp6-gradient-primary` | Gradiente + inset ring + glow do botão "herói". **Opt-in via `className`** num `<Button variant="default">` específico (a primitiva `ui/button` é read-only, não dá pra override global). |
 | `.dp6-nav-active` | Item de nav **ativo** da sidebar: barra de acento `3px` à esquerda com glow (`::before`) + fundo em gradiente `--primary/14 → transparent`. Substitui o bloco amarelo chapado. Par com `rounded-lg` + `text-foreground` + ícone `text-primary` no `NavLink`. Ver `frontend-visual-refresh-plan.md` §1 (Q-001). |
+| `.dp6-opt-card` | Card de escolha (protótipo `.opt-card`): hover lift `translateY(-3px)` (gated em `no-preference`) + glow. `.dp6-opt-card-featured` = fundo amarelo (1 card em destaque por grade). Renderizado pelo `<OptionCard>`. |
 | `.dp6-nav-item` | Item de nav em **hover**: dica de glow (anel `inset` fino em `--primary`) — mais contido que `.dp6-hoverable` (numa lista vertical densa o glow cheio vira ruído). |
 
 Além das classes, uma **regra global** (não utilitária, mesmo padrão da
@@ -229,6 +230,7 @@ primitivos — compõem primitivos de `ui/`.
 | `BrandBars` | Motivo decorativo de 3 barras diagonais (`.dp6-brand-bars`), `aria-hidden`. Só via `PageHeader` `showBrandBars`. | Fora do `PageHeader` |
 | `Panel` | "Bloco" (protótipo `.panel`): container 10px com `border` + `bg-card` + borda-gradiente (`.dp6-panel`). Props `title`/`subtitle`/`actions`/`as`/`filterRow` (filtros DENTRO do painel)/`hoverable`/`glass`. Corpo não clipa scroll horizontal. Padrão pra toda tabela de domínio que hoje fica solta na página. | Um `<Table>` que já está dentro de outro container com título |
 | `ComboChart` | Coluna + linha(s) recharts num `bloco`, eixo Y duplo (coluna esq., linha dir.). Props `bar`/`lines`/`refLine`. Extraído do `<ComposedChart>` de BudgetPage. | Uma série só (use `LineChart`/`BarChart` direto) |
+| `OptionCard` + `OptionCardGrid` | Card de escolha: ícone-chip + título + descrição + `meta`. Props `to`/`onClick`/`featured`/`soon`. Telas de overview de grupo + chooser de tipo de análise. | Lista densa (use `<Table>`) |
 | `Funnel` | Funil de retenção em `<polygon>` afunilando; rótulo+valor+% numa coluna ao lado (nunca por dentro). `role="img"` + `aria-label`. | Comparação de categorias não afuniladas (use `BarChart`) |
 | `ChoiceToggle` | Grupo "escolher um" em pills (`role="group"` + `aria-pressed`, `aria-label` obrigatório). `size="sm\|md"`. | Mais de ~5 opções, ou multi-seleção (use `Select`/checkboxes) |
 | `DateField` | `<input type="date">` com `<Label htmlFor>` associada e altura `h-8` consistente com os filtros. | Input de data sem rótulo visível |
