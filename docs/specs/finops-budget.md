@@ -279,37 +279,42 @@ custo de **query** e de **storage** por período, filtrável.
 | Série | Fonte | Custo BQ |
 |---|---|---|
 | `query_cost_usd` | Mesmo cache de audit log de `get_budget` (`get_scan_events_cached`, 31 dias) — nenhum scan novo. `total_billed_bytes` do evento somado no dia do `timestamp`, `× settings.bigquery_price_usd_per_tib`. Fan-out **não** aplicado: cada evento conta **uma vez** por período (evita inflar o total); com filtro de dataset/tabela, o evento entra se **qualquer** tabela real referenciada casar. | $0 (cache) |
-| `storage_cost_usd` | `INFORMATION_SCHEMA.TABLE_STORAGE_USAGE_TIMELINE_BY_PROJECT` (fan-out por região, agregado no SQL — `SUM(COALESCE(total_logical_usage_bytes, total_physical_usage_bytes, 0))` por `usage_date`). Custo do dia = `bytes_GB × tarifa active / dias_do_mês` — usa a tarifa `active` (ignora o desconto long-term → linha de storage é um teto suave) e assume cobrança lógica/on-demand (mesma premissa de "É uma estimativa" acima). | Ver "Dry-run" abaixo |
+| `storage_cost_usd` | `INFORMATION_SCHEMA.TABLE_STORAGE` — **snapshot atual**, `SUM(COALESCE(total_logical_bytes, 0))` por região (fan-out, minúscula). Vira uma **linha plana**: cada dia da janela recebe `bytes_GB × tarifa active / dias_do_mês`. Tarifa `active` (ignora desconto long-term → teto suave), cobrança lógica/on-demand (mesma premissa de "É uma estimativa"). **Não** usa a família `TABLE_STORAGE_USAGE_TIMELINE_*` (histórica) — ver "Por que snapshot, não timeline". | $0 (metadado) |
 
 ### `storage_available` e degradação
 
-`get_storage_cost_timeline` devolve `(None, motivo)` se **nenhuma** região
+`get_current_storage_bytes` devolve `(None, motivo)` se **nenhuma** região
 respondeu — `motivo` é a **1ª linha do erro real do BigQuery** (403 / 404
 / 400 …), propagada pro `warning` da resposta (`"… Motivo do BigQuery:
-<motivo>."`) pra não ficar adivinhando entre permissão / view / schema. O
-service marca `storage_available=false`, `storage_cost_usd` fica `0` em
-todos os pontos, `query_cost_usd` continua válido. Uma região que falha
-sozinha é ignorada (as outras contam). **Nunca vira 500** — lição do
-incidente da rodada 1 (SQL nova quebrando `/validate` → 500 sem header de
-CORS → "Failed to fetch"): qualquer `GoogleAPICallError`/`ValueError` da
-query é engolido por região.
+<motivo>."`). O service marca `storage_available=false`, `storage_cost_usd`
+fica `0` em todos os pontos, `query_cost_usd` continua válido. Uma região
+que falha sozinha é ignorada. **Nunca vira 500** — lição do incidente da
+rodada 1 (SQL nova quebrando `/validate` → 500 sem header de CORS →
+"Failed to fetch"): qualquer `GoogleAPICallError`/`ValueError` é engolido
+por região. Qualificador de região em **minúscula** (`region-us`).
 
-O qualificador de região vai em **minúscula** (`region-us`, não
-`region-US`) — essa view é mais estrita quanto a caixa do que
-`INFORMATION_SCHEMA.TABLES` (que aceita as duas). Ajuste de R2-11.5 depois
-que o dev mostrou `storage_available=false` (ver ASM-002).
+### Por que snapshot, não timeline (R2-11.5)
+
+A primeira versão (R2-10) usou `TABLE_STORAGE_USAGE_TIMELINE_BY_PROJECT`
+pra ter storage *histórico* por dia. Em dev a chamada do Hub caiu em
+`400 Unrecognized name: total_logical_usage_bytes` — o schema de coluna
+dessa família de views não bate com o que a doc sugere e varia entre
+versões. Trocado por `TABLE_STORAGE` (snapshot atual, coluna
+`total_logical_bytes` **estável e documentada**) desenhando uma linha
+plana: numa janela de ≤ 31 dias o volume de storage praticamente não
+muda, então o histórico agregava pouco valor pro gráfico de "custo do
+mês". Se um dia quisermos a curva real de crescimento de storage, é uma
+iteração à parte com a timeline confirmada por schema.
 
 ### Dry-run (regra do CLAUDE.md)
 
-A query nova toca **só** `INFORMATION_SCHEMA.TABLE_STORAGE_USAGE_TIMELINE_BY_PROJECT`,
-uma view de metadado — o BigQuery **não cobra** query sobre
-`INFORMATION_SCHEMA` (mesma base $0 já assumida em
-`repository.list_all_table_refs` / `get_date_like_columns`, que rodam
-`region-X.INFORMATION_SCHEMA.*`). Um `dry_run` retornaria
-`total_bytes_processed = 0`. Isso **precisa ser confirmado em dev** após o
-deploy da branch `feat/r2-finops-cost-series` (o deploy é a verificação —
-não há credencial de GCP no ambiente de desenvolvimento local pra rodar o
-dry-run antes). Se por algum motivo a view cobrar, a degradação acima
+A query toca **só** `INFORMATION_SCHEMA.TABLE_STORAGE`, uma view de
+metadado — o BigQuery **não cobra** query sobre `INFORMATION_SCHEMA`
+(mesma base $0 de `repository.list_all_table_refs` /
+`get_date_like_columns`). O teste manual `SELECT * … TABLE_STORAGE_USAGE_TIMELINE…`
+do usuário já provou que essa família de views responde no projeto (a SA
+tem a permissão de metadado); o erro era só o nome da coluna. Se por
+algum motivo a view cobrar, a degradação acima
 ainda protege o endpoint; ajustar aqui se o dry-run em dev mostrar bytes.
 
 ---
@@ -509,7 +514,7 @@ tinha com o texto da query inline na célula).
 | ID | Suposição | Status |
 |---|---|---|
 | ASM-001 | `budget` usa o mesmo cache de `partition-candidates` (não um scan com janela month-to-date variável): o recorte pro mês corrente já era feito por `event.timestamp < month_start` no service, não pela janela do scan. Desde a v1.4 a janela do cache é **31 dias** (evicção do Job incremental), então o mês corrente inteiro cabe — o efeito colateral da v1.3 (o `_BUDGET_RETENTION_CAVEAT` disparar sempre no dia 31) foi revertido. | confirmada |
-| ASM-002 | **cost-series:** `INFORMATION_SCHEMA.TABLE_STORAGE_USAGE_TIMELINE_BY_PROJECT` é uma view de metadado que o BigQuery **não cobra** (query $0). **Parcialmente confirmada (2026-09):** a view existe e responde no `observability-hub-dev` (teste manual `SELECT * … LIMIT 10` OK), mas a chamada do Hub caiu em `storage_available=false` em todas as regiões. R2-11.5: qualificador de região passou a minúscula (`region-us`) e o motivo real do BigQuery agora sobe no `warning`. **Ainda aberto:** confirmar pelo `warning`/Cloud Logging se o que resta é permissão (a SA de runtime precisa de `bigquery.tables.list` no projeto pra essa família de views — se sim, entra em `docs/onboarding-cliente.md`) ou schema de coluna. | aberta |
+| ASM-002 | **cost-series / storage:** as views `INFORMATION_SCHEMA.TABLE_STORAGE*` são metadado que o BigQuery **não cobra** ($0). **Resolvida (2026-09, R2-11.5):** o `storage_available=false` em dev era `400 Unrecognized name: total_logical_usage_bytes` — schema de coluna da família `TABLE_STORAGE_USAGE_TIMELINE_*` não bate com a doc. Trocado pra `TABLE_STORAGE` (snapshot, coluna estável `total_logical_bytes`, linha plana). Permissão **não** era o problema (o teste manual do usuário responde). Sem role nova em `docs/onboarding-cliente.md`. | confirmada |
 | ASM-003 | **cost-series:** custo de storage por dia usa a tarifa `active` e bytes lógicos (`total_logical_usage_bytes`, com fallback pra `total_physical_usage_bytes`), dividido pelos dias do mês — a linha de storage é um teto suave (ignora desconto long-term) e assume cobrança lógica/on-demand, mesma premissa do resto do domínio. Suficiente pra um gráfico direcional; não é fatura. | confirmada |
 
 ---

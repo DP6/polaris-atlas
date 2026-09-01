@@ -3190,14 +3190,17 @@ Ajustes de validação visual do usuário na visão geral de FinOps:
 - **Tooltip da fórmula do score** na página `/finops` (`ScoreExplainer` no
   `actions` do painel "Eficiência de custo") — os 3 fatores, pesos, e que
   o score do projeto é média ponderada por tamanho.
-- **Storage timeline em dev caía em `storage_available=false`.** A view
-  existe e responde (`SELECT * … LIMIT 10` manual OK). Correções:
-  qualificador de região agora **minúsculo** (`region-us`, não
-  `region-US` — essa view é mais estrita que `INFORMATION_SCHEMA.TABLES`);
-  `get_storage_cost_timeline` retorna `(dias, motivo)` e o **motivo real
-  do BigQuery** (403/404/400…) sobe no `warning` da resposta em vez das 3
-  hipóteses genéricas. Se o motivo for permissão, a role
-  `bigquery.tables.list` no projeto entra em `docs/onboarding-cliente.md`
-  (ASM-002 na spec).
+- **Storage line em dev caía em `storage_available=false`.** O motivo real
+  (agora propagado no `warning` — `get_*` retorna `(valor, motivo)` e o
+  service repassa a 1ª linha do erro do BigQuery) foi
+  `400 Unrecognized name: total_logical_usage_bytes`: o schema de coluna
+  da família `TABLE_STORAGE_USAGE_TIMELINE_*` não bate com a doc.
+  **Trocado pra `INFORMATION_SCHEMA.TABLE_STORAGE`** (snapshot atual,
+  coluna estável `total_logical_bytes`) → linha **plana** no nível de
+  storage de hoje (numa janela ≤ 31d o volume quase não varia). Região em
+  minúscula (`region-us`). `get_storage_cost_timeline` +
+  `StorageTimelineDay` removidos; `get_current_storage_bytes` novo.
+  Permissão não era o problema — sem role nova no onboarding. ASM-002
+  resolvida.
 - `uv run pytest tests/unit` = 823 ok; `pnpm lint`/`build` verdes.
-- `docs/specs/finops-budget.md` (score §, degradação §, ASM-002).
+- `docs/specs/finops-budget.md` (score §, storage §, ASM-002).

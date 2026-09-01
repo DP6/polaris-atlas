@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -367,107 +367,92 @@ def test_list_all_table_refs_no_filter_when_datasets_not_provided():
     assert called_kwargs["job_config"] is None
 
 
-# --- get_storage_cost_timeline -------------------------------------------------
+# --- get_current_storage_bytes -----------------------------------------------
 
 
-def _timeline_row(usage_date, logical_bytes):
-    return SimpleNamespace(usage_date=usage_date, logical_bytes=logical_bytes)
+def _bytes_row(logical_bytes):
+    return SimpleNamespace(logical_bytes=logical_bytes)
 
 
-def test_get_storage_cost_timeline_returns_none_for_no_regions():
-    days, reason = repository.get_storage_cost_timeline(MagicMock(), "proj", [], date(2026, 8, 1))
-    assert days is None
+def test_get_current_storage_bytes_returns_reason_for_no_regions():
+    total, reason = repository.get_current_storage_bytes(MagicMock(), "proj", [])
+    assert total is None
     assert reason is not None
 
 
-def test_get_storage_cost_timeline_uses_lowercase_region_qualifier():
+def test_get_current_storage_bytes_uses_lowercase_region_and_table_storage_view():
     client = MagicMock()
     result = MagicMock()
-    result.result.return_value = []
+    result.result.return_value = [_bytes_row(10)]
     client.query.return_value = result
 
-    repository.get_storage_cost_timeline(client, "proj", ["US"], date(2026, 8, 1))
+    repository.get_current_storage_bytes(client, "proj", ["US"])
 
     called_sql = client.query.call_args[0][0]
-    assert "region-us." in called_sql
-    assert "region-US." not in called_sql
+    assert "region-us.INFORMATION_SCHEMA.TABLE_STORAGE`" in called_sql
+    assert "region-US" not in called_sql
+    assert "total_logical_bytes" in called_sql
 
 
-def test_get_storage_cost_timeline_merges_regions_and_sums_same_day():
+def test_get_current_storage_bytes_sums_across_regions():
     client = MagicMock()
-    d = date(2026, 8, 10)
 
     def _query(sql, job_config=None):
         result = MagicMock()
-        if "region-us." in sql:
-            result.result.return_value = [_timeline_row(d, 100)]
-        else:
-            result.result.return_value = [_timeline_row(d, 25)]
+        result.result.return_value = [_bytes_row(100 if "region-us." in sql else 25)]
         return result
 
     client.query.side_effect = _query
 
-    days, reason = repository.get_storage_cost_timeline(
-        client, "proj", ["US", "EU"], date(2026, 8, 1)
-    )
+    total, reason = repository.get_current_storage_bytes(client, "proj", ["US", "EU"])
 
-    assert days == [repository.StorageTimelineDay(usage_date=d, logical_bytes=125)]
+    assert total == 125
     assert reason is None
 
 
-def test_get_storage_cost_timeline_returns_reason_when_all_regions_fail():
+def test_get_current_storage_bytes_returns_reason_when_all_regions_fail():
     client = MagicMock()
-    client.query.side_effect = GoogleAPICallError("403 Access Denied: table storage")
+    client.query.side_effect = GoogleAPICallError("400 Unrecognized name: foo")
 
-    days, reason = repository.get_storage_cost_timeline(
-        client, "proj", ["US", "EU"], date(2026, 8, 1)
-    )
+    total, reason = repository.get_current_storage_bytes(client, "proj", ["US", "EU"])
 
-    assert days is None
-    assert "Access Denied" in reason
+    assert total is None
+    assert "Unrecognized name" in reason
 
 
-def test_get_storage_cost_timeline_tolerates_one_failing_region():
+def test_get_current_storage_bytes_tolerates_one_failing_region():
     client = MagicMock()
-    d = date(2026, 8, 10)
 
     def _query(sql, job_config=None):
         if "region-eu." in sql:
             raise GoogleAPICallError("boom")
         result = MagicMock()
-        result.result.return_value = [_timeline_row(d, 7)]
+        result.result.return_value = [_bytes_row(7)]
         return result
 
     client.query.side_effect = _query
 
-    days, reason = repository.get_storage_cost_timeline(
-        client, "proj", ["US", "EU"], date(2026, 8, 1)
-    )
+    total, reason = repository.get_current_storage_bytes(client, "proj", ["US", "EU"])
 
-    assert days == [repository.StorageTimelineDay(usage_date=d, logical_bytes=7)]
+    assert total == 7
     assert reason is None
 
 
-def test_get_storage_cost_timeline_passes_dataset_and_table_filters_as_params():
+def test_get_current_storage_bytes_passes_dataset_and_table_filters_as_params():
     client = MagicMock()
     result = MagicMock()
-    result.result.return_value = []
+    result.result.return_value = [_bytes_row(0)]
     client.query.return_value = result
 
-    repository.get_storage_cost_timeline(
-        client,
-        "proj",
-        ["US"],
-        date(2026, 8, 1),
-        datasets=["RAW"],
-        tables=["RAW.events"],
+    repository.get_current_storage_bytes(
+        client, "proj", ["US"], datasets=["RAW"], tables=["RAW.events"]
     )
 
     called_sql, called_kwargs = client.query.call_args
     assert "table_schema IN UNNEST(@datasets)" in called_sql[0]
     assert "CONCAT(table_schema, '.', table_name) IN UNNEST(@tables)" in called_sql[0]
     param_names = {p.name for p in called_kwargs["job_config"].query_parameters}
-    assert param_names == {"since", "datasets", "tables"}
+    assert param_names == {"datasets", "tables"}
 
 
 # --- get_date_like_columns -------------------------------------------------------

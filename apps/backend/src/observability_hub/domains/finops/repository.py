@@ -20,7 +20,7 @@ import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import datetime
 
 from google.api_core.exceptions import Forbidden, GoogleAPICallError
 from google.cloud import bigquery, firestore, storage
@@ -61,16 +61,6 @@ class ScanEvent:
     job_id: str = ""
     principal_email: str = ""
     query_text: str | None = None
-
-
-@dataclass(frozen=True)
-class StorageTimelineDay:
-    """Um dia da timeline de storage do BigQuery, já agregado sobre as
-    tabelas que passaram no filtro de dataset/tabela (a agregação é feita
-    no SQL — a resposta traz no máximo ~um punhado de linhas por região)."""
-
-    usage_date: date
-    logical_bytes: int
 
 
 def _parse_table_ref(ref: dict | None) -> TableRefTuple | None:
@@ -310,9 +300,6 @@ def list_all_table_refs(
     return [ref for region_refs in results for ref in region_refs]
 
 
-_STORAGE_TIMELINE_VIEW = "INFORMATION_SCHEMA.TABLE_STORAGE_USAGE_TIMELINE_BY_PROJECT"
-
-
 def _short_error(exc: BaseException) -> str:
     """Primeira linha da mensagem da exceção, sem stack — o suficiente pra
     distinguir 403 (permissão) de 404 (view/região) de 400 (coluna) no
@@ -321,85 +308,74 @@ def _short_error(exc: BaseException) -> str:
     return text[:180]
 
 
-def get_storage_cost_timeline(
+def get_current_storage_bytes(
     client: bigquery.Client,
     project_id: str,
     regions: list[str],
-    since: date,
     datasets: list[str] | None = None,
     tables: list[str] | None = None,
     max_workers: int = 8,
-) -> tuple[list[StorageTimelineDay] | None, str | None]:
-    """Bytes lógicos de storage por dia, somados sobre as tabelas do
-    projeto (opcionalmente filtradas por dataset ou por `dataset.table`),
-    lidos de `INFORMATION_SCHEMA.TABLE_STORAGE_USAGE_TIMELINE_BY_PROJECT`
-    — uma view de metadado (custo de query $0, mesma base de
-    list_all_table_refs / get_date_like_columns). Fan-out por região,
-    agregação no SQL (retorna ~90 linhas por região no máximo). O
-    qualificador de região vai em minúscula (`region-us`) — essa view é
-    mais estrita que INFORMATION_SCHEMA.TABLES quanto a caixa.
+) -> tuple[int | None, str | None]:
+    """Total de bytes lógicos de storage AGORA, somado sobre as tabelas do
+    projeto (opcionalmente filtradas por dataset ou `dataset.table`), de
+    `INFORMATION_SCHEMA.TABLE_STORAGE` — view de metadado ($0, mesma base
+    de list_all_table_refs). Fan-out por região; qualificador em minúscula
+    (`region-us`).
 
-    Retorna `(dias, None)` se ao menos uma região respondeu; `(None,
-    motivo)` se **nenhuma** respondeu — o `motivo` é a 1ª linha do erro
-    do BigQuery (403/404/400…), propagado pro warning da resposta pra
-    não ficar adivinhando entre permissão / view / schema. Nunca 500;
-    uma região que falha sozinha é ignorada."""
+    Usa o snapshot atual, não a timeline histórica: a família
+    `TABLE_STORAGE_USAGE_TIMELINE_*` tem schema de coluna instável entre
+    versões (o Hub bateu em `400 Unrecognized name` em dev) e, numa janela
+    de ~30 dias, o storage praticamente não varia — uma linha plana no
+    nível atual é suficiente pro gráfico de custo do mês. `total_logical_bytes`
+    é coluna estável e documentada de `TABLE_STORAGE`.
+
+    Retorna `(bytes, None)` se ao menos uma região respondeu; `(None,
+    motivo)` se **nenhuma** respondeu — `motivo` é a 1ª linha do erro do
+    BigQuery (403/404/400…), propagado pro warning. Nunca 500; região que
+    falha sozinha é ignorada."""
     if not regions:
         return None, "nenhuma região com dataset no projeto"
 
-    filters = ["usage_date >= @since"]
-    params: list[bigquery.ScalarQueryParameter | bigquery.ArrayQueryParameter] = [
-        bigquery.ScalarQueryParameter("since", "DATE", since)
-    ]
+    filters: list[str] = []
+    params: list[bigquery.ArrayQueryParameter] = []
     if datasets:
         filters.append("table_schema IN UNNEST(@datasets)")
         params.append(bigquery.ArrayQueryParameter("datasets", "STRING", datasets))
     if tables:
         filters.append("CONCAT(table_schema, '.', table_name) IN UNNEST(@tables)")
         params.append(bigquery.ArrayQueryParameter("tables", "STRING", tables))
-    where = " AND ".join(filters)
+    where = f"WHERE {' AND '.join(filters)}" if filters else ""
 
-    def _query_region(region: str) -> tuple[list[StorageTimelineDay] | None, str | None]:
+    def _query_region(region: str) -> tuple[int | None, str | None]:
         sql = f"""
-            SELECT usage_date,
-                   SUM(COALESCE(total_logical_usage_bytes, total_physical_usage_bytes, 0))
-                       AS logical_bytes
-            FROM `{project_id}.region-{region.lower()}.{_STORAGE_TIMELINE_VIEW}`
-            WHERE {where}
-            GROUP BY usage_date
+            SELECT SUM(COALESCE(total_logical_bytes, 0)) AS logical_bytes
+            FROM `{project_id}.region-{region.lower()}.INFORMATION_SCHEMA.TABLE_STORAGE`
+            {where}
         """
         try:
-            rows = client.query(
-                sql, job_config=bigquery.QueryJobConfig(query_parameters=params)
-            ).result()
+            rows = list(
+                client.query(
+                    sql, job_config=bigquery.QueryJobConfig(query_parameters=params)
+                ).result()
+            )
         except (GoogleAPICallError, ValueError) as exc:
             reason = _short_error(exc)
             logger.warning(
-                "Timeline de storage indisponível em region-%s de %s: %s",
+                "Storage snapshot indisponível em region-%s de %s: %s",
                 region.lower(),
                 project_id,
                 reason,
             )
             return None, reason
-        days = [
-            StorageTimelineDay(usage_date=row.usage_date, logical_bytes=int(row.logical_bytes or 0))
-            for row in rows
-        ]
-        return days, None
+        return (int(rows[0].logical_bytes or 0) if rows else 0), None
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         per_region = list(pool.map(_query_region, regions))
 
-    if all(days is None for days, _reason in per_region):
-        reasons = sorted({reason for _days, reason in per_region if reason})
+    if all(byte_total is None for byte_total, _reason in per_region):
+        reasons = sorted({reason for _b, reason in per_region if reason})
         return None, "; ".join(reasons) or "erro desconhecido"
-    merged: dict[date, int] = {}
-    for days, _reason in per_region:
-        for day in days or []:
-            merged[day.usage_date] = merged.get(day.usage_date, 0) + day.logical_bytes
-    return [
-        StorageTimelineDay(usage_date=d, logical_bytes=b) for d, b in sorted(merged.items())
-    ], None
+    return sum(byte_total for byte_total, _r in per_region if byte_total is not None), None
 
 
 def get_date_like_columns(

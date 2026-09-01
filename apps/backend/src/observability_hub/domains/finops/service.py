@@ -386,16 +386,13 @@ def get_budget(
 
 # Janela máxima da série — o cache de audit log guarda 31 dias
 # (finops-waste-scanner.md v1.4), então o eixo de "custo de query" não
-# pode ir além disso. A timeline de storage cobre mais, mas o gráfico
-# combina os dois, então a janela efetiva é a do cache.
+# pode ir além disso.
 _COST_SERIES_MAX_LOOKBACK_DAYS = 31
 
-_STORAGE_TIMELINE_UNAVAILABLE_WARNING = (
-    "A linha de custo de storage não pôde ser montada: a view "
-    "INFORMATION_SCHEMA.TABLE_STORAGE_USAGE_TIMELINE_BY_PROJECT não "
-    "respondeu no projeto '{project_id}' (permissão de metadado ausente, "
-    "view indisponível na região, ou schema diferente do esperado). A "
-    "linha de custo de query continua válida."
+_STORAGE_UNAVAILABLE_WARNING = (
+    "A linha de custo de storage não pôde ser montada: "
+    "INFORMATION_SCHEMA.TABLE_STORAGE não respondeu no projeto "
+    "'{project_id}'. A linha de custo de query continua válida."
 )
 
 
@@ -447,8 +444,9 @@ def get_cost_series(
     """Série temporal de custo (query + storage) pro gráfico combo da
     visão geral de FinOps (AC-FIN-RV-02). Custo de query vem do mesmo
     cache de audit log de get_budget (nenhum scan novo); custo de storage
-    vem da timeline de INFORMATION_SCHEMA (metadado, $0), que degrada pra
-    `storage_available=False` se indisponível — nunca 500."""
+    é uma linha plana no nível atual, de INFORMATION_SCHEMA.TABLE_STORAGE
+    (metadado, $0), que degrada pra `storage_available=False` se
+    indisponível — nunca 500."""
     lookback_days = max(1, min(lookback_days, _COST_SERIES_MAX_LOOKBACK_DAYS))
     now = datetime.now(UTC)
     start_date = (now - timedelta(days=lookback_days - 1)).date()
@@ -489,7 +487,9 @@ def get_cost_series(
             cost = _estimate_query_cost_usd(event.total_billed_bytes)
             query_cost_by_period[key] = query_cost_by_period.get(key, 0.0) + cost
 
-    # --- custo de storage, da timeline de INFORMATION_SCHEMA ---------------
+    # --- custo de storage: linha plana no nível ATUAL --------------------
+    # (não a timeline histórica — schema de coluna instável; em ~30 dias o
+    # storage quase não varia, ver repository.get_current_storage_bytes.)
     storage_cost_by_period: dict[str, float] = {}
     storage_available = True
     if want_storage:
@@ -497,28 +497,23 @@ def get_cost_series(
         # outros endpoints de finops (scan_partition_candidates) — se a SA
         # não alcança o projeto, é 404/403, não série vazia silenciosa.
         regions = discover_regions(project_id, client=client)
-        timeline, timeline_reason = repository.get_storage_cost_timeline(
-            client,
-            project_id,
-            regions,
-            start_date,
-            datasets=datasets,
-            tables=tables,
+        current_bytes, storage_reason = repository.get_current_storage_bytes(
+            client, project_id, regions, datasets=datasets, tables=tables
         )
-        if timeline is None:
+        if current_bytes is None:
             storage_available = False
-            storage_warning = _STORAGE_TIMELINE_UNAVAILABLE_WARNING.format(project_id=project_id)
-            if timeline_reason:
-                storage_warning = f"{storage_warning} Motivo do BigQuery: {timeline_reason}."
+            storage_warning = _STORAGE_UNAVAILABLE_WARNING.format(project_id=project_id)
+            if storage_reason:
+                storage_warning = f"{storage_warning} Motivo do BigQuery: {storage_reason}."
             warning = f"{warning} {storage_warning}".strip() if warning else storage_warning
         else:
-            for day in timeline:
-                if day.usage_date < start_date:
-                    continue
-                key = _period_key(day.usage_date, granularity)
+            cursor = start_date
+            while cursor <= end_date:
+                key = _period_key(cursor, granularity)
                 storage_cost_by_period[key] = storage_cost_by_period.get(
                     key, 0.0
-                ) + _storage_cost_for_day(day.logical_bytes, day.usage_date)
+                ) + _storage_cost_for_day(current_bytes, cursor)
+                cursor += timedelta(days=1)
     else:
         storage_available = False
 

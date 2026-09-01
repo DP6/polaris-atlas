@@ -7,7 +7,7 @@ import pytest
 
 from observability_hub.core.exceptions import InvalidSamplePercentError
 from observability_hub.domains.finops import service, sql_builder
-from observability_hub.domains.finops.repository import ScanEvent, StorageTimelineDay
+from observability_hub.domains.finops.repository import ScanEvent
 from observability_hub.domains.finops.schemas import (
     BudgetGroupBy,
     ColumnTypeScanRequest,
@@ -649,21 +649,19 @@ def test_get_budget_injects_user_budget_target_from_firestore(monkeypatch):
 # --- get_cost_series ---------------------------------------------------------
 
 
-def _stub_cost_series(monkeypatch, events, timeline):
-    """events -> cache de audit log; timeline -> lista de StorageTimelineDay
-    (ou [] com dados; None => indisponível, o stub devolve o motivo)."""
+def _stub_cost_series(monkeypatch, events, current_bytes):
+    """events -> cache de audit log; current_bytes -> total de storage AGORA
+    (int) ou None => indisponível (o stub devolve um motivo do BigQuery)."""
     monkeypatch.setattr(
         service.repository, "get_scan_events_cached", lambda *a, **kw: (events, None)
     )
     monkeypatch.setattr(service, "discover_regions", lambda project_id, client: ["US"])
-    timeline_result = (timeline, None) if timeline is not None else (None, "403 Access Denied")
-    monkeypatch.setattr(
-        service.repository, "get_storage_cost_timeline", lambda *a, **kw: timeline_result
-    )
+    result = (current_bytes, None) if current_bytes is not None else (None, "400 Unrecognized name")
+    monkeypatch.setattr(service.repository, "get_current_storage_bytes", lambda *a, **kw: result)
 
 
-def _cost_series(monkeypatch, events=None, timeline=None, **kwargs):
-    _stub_cost_series(monkeypatch, events or [], timeline)
+def _cost_series(monkeypatch, events=None, current_bytes=0, **kwargs):
+    _stub_cost_series(monkeypatch, events or [], current_bytes)
     return service.get_cost_series(
         MagicMock(), MagicMock(), MagicMock(), MagicMock(), "proj", **kwargs
     )
@@ -674,7 +672,7 @@ def test_get_cost_series_buckets_query_cost_on_the_event_day(monkeypatch):
     result = _cost_series(
         monkeypatch,
         events=[_event([("proj", "RAW", "a")], today, total_billed_bytes=10**12)],
-        timeline=[],
+        current_bytes=0,
     )
 
     day_key = today.date().isoformat()
@@ -684,7 +682,7 @@ def test_get_cost_series_buckets_query_cost_on_the_event_day(monkeypatch):
 
 
 def test_get_cost_series_contiguous_daily_periods_no_gaps(monkeypatch):
-    result = _cost_series(monkeypatch, events=[], timeline=[], lookback_days=10)
+    result = _cost_series(monkeypatch, events=[], current_bytes=0, lookback_days=10)
 
     assert len(result.points) == 10
     days = [p.period for p in result.points]
@@ -692,35 +690,33 @@ def test_get_cost_series_contiguous_daily_periods_no_gaps(monkeypatch):
 
 
 def test_get_cost_series_storage_unavailable_sets_flag_and_surfaces_reason(monkeypatch):
-    result = _cost_series(monkeypatch, events=[], timeline=None)
+    result = _cost_series(monkeypatch, events=[], current_bytes=None)
 
     assert result.storage_available is False
     assert result.warning is not None
     assert "storage" in result.warning.lower()
     # o motivo real do BigQuery entra no warning (403/404/400…), não fica
-    # só a lista genérica de 3 hipóteses
-    assert "403 Access Denied" in result.warning
+    # só a hipótese genérica
+    assert "400 Unrecognized name" in result.warning
 
 
-def test_get_cost_series_adds_storage_cost_when_timeline_present(monkeypatch):
-    today = _now().date()
-    result = _cost_series(
-        monkeypatch,
-        events=[],
-        timeline=[StorageTimelineDay(usage_date=today, logical_bytes=5 * 1024**4)],
-    )
+def test_get_cost_series_flat_storage_line_from_current_bytes(monkeypatch):
+    result = _cost_series(monkeypatch, events=[], current_bytes=5 * 1024**4, lookback_days=10)
 
-    by_key = {p.period: p for p in result.points}
     assert result.storage_available is True
-    assert by_key[today.isoformat()].storage_cost_usd > 0
+    storage_values = [p.storage_cost_usd for p in result.points]
+    assert all(v > 0 for v in storage_values)
+    # linha ~plana: mesmo nível de storage todo dia; a única variação é o
+    # divisor "dias do mês" quando a janela cruza a virada de mês.
+    assert max(storage_values) / min(storage_values) < 1.1
 
 
 def test_get_cost_series_cost_type_query_skips_storage(monkeypatch):
-    calls = {"timeline": 0, "regions": 0}
+    calls = {"storage": 0, "regions": 0}
 
-    def _count_timeline(*a, **kw):
-        calls["timeline"] += 1
-        return []
+    def _count_storage(*a, **kw):
+        calls["storage"] += 1
+        return 0, None
 
     def _count_regions(*a, **kw):
         calls["regions"] += 1
@@ -728,7 +724,7 @@ def test_get_cost_series_cost_type_query_skips_storage(monkeypatch):
 
     monkeypatch.setattr(service.repository, "get_scan_events_cached", lambda *a, **kw: ([], None))
     monkeypatch.setattr(service, "discover_regions", _count_regions)
-    monkeypatch.setattr(service.repository, "get_storage_cost_timeline", _count_timeline)
+    monkeypatch.setattr(service.repository, "get_current_storage_bytes", _count_storage)
 
     result = service.get_cost_series(
         MagicMock(),
@@ -739,7 +735,7 @@ def test_get_cost_series_cost_type_query_skips_storage(monkeypatch):
         cost_type=CostType.QUERY,
     )
 
-    assert calls == {"timeline": 0, "regions": 0}
+    assert calls == {"storage": 0, "regions": 0}
     assert result.storage_available is False
 
 
@@ -747,7 +743,7 @@ def test_get_cost_series_month_granularity_uses_year_month_keys(monkeypatch):
     result = _cost_series(
         monkeypatch,
         events=[],
-        timeline=[],
+        current_bytes=0,
         granularity=CostSeriesGranularity.MONTH,
         lookback_days=31,
     )
@@ -760,7 +756,7 @@ def test_get_cost_series_dataset_filter_excludes_nonmatching_query_events(monkey
     result = _cost_series(
         monkeypatch,
         events=[_event([("proj", "OTHER", "x")], today, total_billed_bytes=10**12)],
-        timeline=[],
+        current_bytes=0,
         datasets=["RAW"],
     )
 
