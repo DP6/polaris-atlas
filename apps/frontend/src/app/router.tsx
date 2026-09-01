@@ -13,6 +13,7 @@ import { FinOpsPage } from '@/features/finops/FinOpsPage'
 import { DatasetFreshnessPage } from '@/features/freshness/DatasetFreshnessPage'
 import { FreshnessPage } from '@/features/freshness/FreshnessPage'
 import { GovernanceOverviewPage } from '@/features/governance/GovernanceOverviewPage'
+import { LineagePage } from '@/features/lineage/LineagePage'
 import { OrphansPage } from '@/features/lineage/OrphansPage'
 import { NotFoundPage } from '@/features/misc/NotFoundPage'
 import { AccessAnalysisPage } from '@/features/quality/AccessAnalysisPage'
@@ -44,6 +45,7 @@ export function AppRoutes() {
           <Route path="freshness" element={<FreshnessPage />} />
           <Route path="freshness/:datasetId" element={<DatasetFreshnessPage />} />
           <Route path="orphans" element={<OrphansPage />} />
+          <Route path="lineage/:datasetId/:tableId" element={<LineagePage />} />
           <Route path="quality" element={<QualityOverviewPage />} />
           <Route path="quality/tables" element={<QualityTablesPage />} />
           <Route path="quality/folders" element={<QualityFoldersPage />} />

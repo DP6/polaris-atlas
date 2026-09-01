@@ -16,6 +16,9 @@ export interface LineageNode {
   dataset_id: string | null
   table_id: string | null
   bucket_name: string | null
+  // TABLE / VIEW / MATERIALIZED_VIEW / EXTERNAL — só nos nós de tabela do
+  // projeto raiz (best-effort). null em nós cross-project / bucket.
+  table_type: string | null
   hop_distance: number
   is_root: boolean
   access_denied: boolean

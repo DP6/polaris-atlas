@@ -3040,3 +3040,19 @@ implementação**
 - `AssetsTable` "Analisar" → `navigate('/analyze/:d/:t', { state:{ from } })`.
 - `docs/specs/quality.md` novo (AC-QUAL-RV-01..04). `profiling.md` §pendente
   marcada feita. `design-system.md` (HBarList, CompositeScoreRing).
+
+### R2-8 — `feat/r2-lineage-fullscreen` (backend + front-end)
+
+- `LineagePage` (`/lineage/:datasetId/:tableId`) — lifta o grafo pra tela
+  cheia. `LineageTab.tsx` deletado (órfão pós-R2-7).
+- `LineageGraph`: arestas `animated` (@xyflow) recoloridas amarelo + glow
+  via `.dp6-lineage` no index.css; `onEdgeMouseEnter` destaca a aresta +
+  os 2 nós ligados, atenua o resto; `nodesep`/`ranksep` maiores, altura 540.
+- 3 `<Panel>`: Impacto de mudança de schema (tabelas a jusante + views que
+  quebrariam), Fontes, Consumidores. Indicador cache + "profundidade
+  limitada a N hops".
+- **Backend (B6):** `LineageNode.table_type` — best-effort de
+  `INFORMATION_SCHEMA.TABLES` (só-metadado, $0) só pros nós do projeto
+  raiz, engolindo exceção. **"Jobs agendados" fica "—"** (exige integrar
+  Scheduled Queries / Data Transfer — fora desta rodada). pytest 786 ok.
+- `lineage.md` §pendente marcada feita. design-system.md.

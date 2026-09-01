@@ -5,6 +5,7 @@ docs/specs/lineage.md) e a lista de órfãs de um projeto. api/v1 só chama
 estas funções — CLAUDE.md proíbe lógica de negócio em api/.
 """
 
+import logging
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -12,6 +13,8 @@ from google.cloud import bigquery, firestore, storage
 from google.cloud import logging as cloud_logging
 
 from observability_hub.core.bigquery import discover_regions, get_tables_metadata
+
+logger = logging.getLogger(__name__)
 from observability_hub.core.exceptions import (
     EventCacheNotReadyError,
     LoggingAccessDeniedError,
@@ -329,6 +332,22 @@ def get_table_lineage(
 
     nodes = sorted(merged_nodes.values(), key=lambda n: (n.hop_distance, n.id))
     edges = sorted(merged_edges.values(), key=lambda e: (e.source, e.target))
+
+    # Enriquece os nós de tabela do PROJETO RAIZ com table_type (só-metadado,
+    # $0) — usado pelo painel "Impacto a montante" pra contar views que
+    # quebrariam. Best-effort: qualquer falha deixa table_type=None e o
+    # frontend mostra "—".
+    root_table_nodes = [
+        n for n in nodes if n.type == "table" and n.project_id == project_id and n.table_id
+    ]
+    if root_table_nodes:
+        try:
+            regions = discover_regions(project_id, client=client)
+            type_map = repository.get_table_types(client, project_id, regions)
+            for node in root_table_nodes:
+                node.table_type = type_map.get((node.dataset_id, node.table_id))
+        except Exception:
+            logger.warning("lineage: falha ao buscar table_type dos nós", exc_info=True)
 
     return LineageGraphResponse(
         root=TableRef(project_id=project_id, dataset_id=dataset_id, table_id=table_id),

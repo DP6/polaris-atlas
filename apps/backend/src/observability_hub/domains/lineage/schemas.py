@@ -21,6 +21,12 @@ class LineageNode(BaseModel):
     dataset_id: str | None = None
     table_id: str | None = None
     bucket_name: str | None = None
+    # TABLE / VIEW / MATERIALIZED_VIEW / EXTERNAL — só preenchido para nós
+    # `type="table"` do PROJETO RAIZ (best-effort via INFORMATION_SCHEMA;
+    # None em nós cross-project ou se a consulta de metadado falhar).
+    # Usado pelo painel "Impacto a montante" pra contar views que
+    # quebrariam (refresh visual rodada 2, AC-LIN-RV-04 / B6).
+    table_type: str | None = None
     hop_distance: int
     is_root: bool
     access_denied: bool = False

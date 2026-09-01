@@ -11,13 +11,15 @@ import {
 import '@xyflow/react/dist/style.css'
 import dagre from 'dagre'
 import { HardDrive, Lock } from 'lucide-react'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import type { LineageGraphResponse, LineageNode } from '@/types/lineage'
 
 interface LineageGraphProps {
   data: LineageGraphResponse
+  // Altura do container em px (tela cheia usa >= 520).
+  height?: number
 }
 
 interface TableNodeData extends Record<string, unknown> {
@@ -102,6 +104,9 @@ function buildElements(data: LineageGraphResponse): {
     id: `${e.source}->${e.target}`,
     source: e.source,
     target: e.target,
+    // Linhas "vivas" — o CSS de `.animated` do @xyflow anima o
+    // stroke-dashoffset; o reset de prefers-reduced-motion congela.
+    animated: true,
   }))
 
   return { nodes, edges }
@@ -109,7 +114,8 @@ function buildElements(data: LineageGraphResponse): {
 
 function layout(nodes: GraphNode[], edges: Edge[]): GraphNode[] {
   const graph = new dagre.graphlib.Graph()
-  graph.setGraph({ rankdir: 'LR', nodesep: 40, ranksep: 80 })
+  // Mais respiro que a versão do dialog (nodesep 40 / ranksep 80).
+  graph.setGraph({ rankdir: 'LR', nodesep: 56, ranksep: 120 })
   graph.setDefaultEdgeLabel(() => ({}))
 
   for (const node of nodes) {
@@ -184,14 +190,41 @@ function LineageBucketNode({ data }: NodeProps<Node<BucketNodeData>>) {
 
 const nodeTypes = { tableNode: LineageTableNode, bucketNode: LineageBucketNode }
 
-export function LineageGraph({ data }: LineageGraphProps) {
-  const { nodes, edges } = useMemo(() => {
+export function LineageGraph({ data, height = 480 }: LineageGraphProps) {
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null)
+
+  const { nodes: baseNodes, edges: baseEdges } = useMemo(() => {
     const { nodes: rawNodes, edges: rawEdges } = buildElements(data)
     return { nodes: layout(rawNodes, rawEdges), edges: rawEdges }
   }, [data])
 
+  // Ao passar o mouse numa aresta: destaca ela + os dois nós que ela liga,
+  // atenua o resto (AC-LIN-RV-02).
+  const { nodes, edges } = useMemo(() => {
+    if (!hoveredEdgeId) return { nodes: baseNodes, edges: baseEdges }
+    const hot = baseEdges.find((e) => e.id === hoveredEdgeId)
+    const connected = new Set(hot ? [hot.source, hot.target] : [])
+    return {
+      nodes: baseNodes.map((n) => ({
+        ...n,
+        style: {
+          ...n.style,
+          opacity: connected.has(n.id) ? 1 : 0.25,
+          transition: 'opacity .2s',
+        },
+      })),
+      edges: baseEdges.map((e) => ({
+        ...e,
+        className: e.id === hoveredEdgeId ? 'dp6-edge-hot' : 'dp6-edge-dim',
+      })),
+    }
+  }, [baseNodes, baseEdges, hoveredEdgeId])
+
   return (
-    <div className="h-[480px] overflow-hidden rounded-lg border border-border bg-card">
+    <div
+      style={{ height }}
+      className="dp6-lineage overflow-hidden rounded-lg border border-border bg-card"
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -200,6 +233,8 @@ export function LineageGraph({ data }: LineageGraphProps) {
         nodesConnectable={false}
         edgesReconnectable={false}
         elementsSelectable={false}
+        onEdgeMouseEnter={(_, edge) => setHoveredEdgeId(edge.id)}
+        onEdgeMouseLeave={() => setHoveredEdgeId(null)}
         proOptions={{ hideAttribution: true }}
       >
         <Background />

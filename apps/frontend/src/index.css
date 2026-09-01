@@ -469,6 +469,27 @@ summary:focus-visible,
   box-shadow: inset 3px 0 0 var(--color-primary);
 }
 
+/* Lineage — arestas "vivas" (refresh visual rodada 2, AC-LIN-RV-01/02).
+   O @xyflow já anima `stroke-dashoffset` nas arestas `animated`; aqui só
+   trocamos a cor pro amarelo dp6 + glow e definimos o estado de hover
+   (destaca a aresta, atenua as outras). O reset de prefers-reduced-motion
+   no fim deste arquivo congela a animação — a aresta continua tracejada,
+   só não flui. Escopo `.dp6-lineage` pra não vazar pra outros ReactFlow. */
+.dp6-lineage .react-flow__edge-path {
+  stroke: color-mix(in oklab, var(--color-primary) 55%, transparent);
+}
+.dp6-lineage .react-flow__edge.animated .react-flow__edge-path {
+  stroke-dasharray: 4 8;
+}
+.dp6-lineage .react-flow__edge.dp6-edge-hot .react-flow__edge-path {
+  stroke: var(--color-primary);
+  stroke-width: 3;
+  filter: drop-shadow(0 0 6px var(--glow));
+}
+.dp6-lineage .react-flow__edge.dp6-edge-dim {
+  opacity: 0.2;
+}
+
 /* Scrollbar sutil, coerente com a densidade "estilo Metabase". */
 * {
   scrollbar-width: thin;
