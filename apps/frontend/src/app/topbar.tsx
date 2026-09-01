@@ -83,6 +83,7 @@ export function Topbar({ onToggleSidebar, sidebarCollapsed }: TopbarProps) {
               render={
                 <Link
                   to="/admin"
+                  aria-label="Administração"
                   className="relative text-muted-foreground hover:text-foreground"
                 />
               }

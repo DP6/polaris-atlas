@@ -151,7 +151,7 @@ export function ProfilingDialog({
       <Dialog open={Boolean(tableId)} onOpenChange={onOpenChange}>
         <DialogContent className="flex max-h-[90vh] w-[90vw]! max-w-[1000px]! flex-col overflow-hidden">
           <DialogHeader className="shrink-0">
-            <p className="text-xs font-semibold tracking-wide text-primary uppercase">
+            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
               Módulo de qualidade
             </p>
             <DialogTitle className="text-lg">

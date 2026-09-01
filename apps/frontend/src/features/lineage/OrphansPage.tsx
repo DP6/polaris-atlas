@@ -24,7 +24,7 @@ import { useOrphans } from '@/features/lineage/hooks'
 import { useProjectContext } from '@/features/projects/ProjectContext'
 import { useTableFilterSort } from '@/hooks/useTableFilterSort'
 import { formatBytes, formatUsd } from '@/lib/format'
-import { cn } from '@/lib/utils'
+import { cn, linkClass } from '@/lib/utils'
 import type { OrphanTable } from '@/types/lineage'
 
 const DATASET_FILTER_ALL = 'all'
@@ -249,7 +249,7 @@ export function OrphansPage() {
           {visibleOrphans.map((orphan) => (
             <TableRow key={`${data.project_id}.${orphan.dataset_id}.${orphan.table_id}`}>
               <TableCell>
-                <Link to={`/datasets/${orphan.dataset_id}`} className="hover:text-primary">
+                <Link to={`/datasets/${orphan.dataset_id}`} className={linkClass}>
                   {data.project_id}.{orphan.dataset_id}
                 </Link>
               </TableCell>

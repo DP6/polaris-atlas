@@ -38,7 +38,7 @@ import { useProjectContext } from '@/features/projects/ProjectContext'
 import { useTableFilterSort } from '@/hooks/useTableFilterSort'
 import { formatBytes, formatNumber, formatUsd } from '@/lib/format'
 import { ApiError } from '@/lib/http-client'
-import { cn } from '@/lib/utils'
+import { cn, linkClass } from '@/lib/utils'
 import type { ColumnTypeCandidate, ColumnTypeSuggestion, PartitionCandidate } from '@/types/finops'
 
 const PARTITION_TAB = 'partition'
@@ -155,7 +155,7 @@ function PartitionCandidatesTab({ projectId }: { projectId: string | undefined }
   return (
     <div className="mt-4 flex flex-col gap-4">
       <Collapsible open={scopeOpen} onOpenChange={setScopeOpen}>
-        <CollapsibleTrigger className="flex items-center gap-1.5 text-sm font-medium hover:text-primary">
+        <CollapsibleTrigger className="flex items-center gap-1.5 text-sm font-medium hover:text-foreground">
           <ChevronDown
             size={14}
             className={cn('transition-transform', !scopeOpen && '-rotate-90')}
@@ -310,7 +310,7 @@ function PartitionCandidatesTab({ projectId }: { projectId: string | undefined }
               {visibleCandidates.map((candidate) => (
                 <TableRow key={`${data.project_id}.${candidate.dataset_id}.${candidate.table_id}`}>
                   <TableCell>
-                    <Link to={`/datasets/${candidate.dataset_id}`} className="hover:text-primary">
+                    <Link to={`/datasets/${candidate.dataset_id}`} className={linkClass}>
                       {data.project_id}.{candidate.dataset_id}
                     </Link>
                     .{candidate.table_id}
@@ -438,7 +438,7 @@ function ColumnTypesTab({ projectId }: { projectId: string | undefined }) {
       </p>
 
       <Collapsible open={scopeOpen} onOpenChange={setScopeOpen}>
-        <CollapsibleTrigger className="flex items-center gap-1.5 text-sm font-medium hover:text-primary">
+        <CollapsibleTrigger className="flex items-center gap-1.5 text-sm font-medium hover:text-foreground">
           <ChevronDown
             size={14}
             className={cn('transition-transform', !scopeOpen && '-rotate-90')}
@@ -573,7 +573,7 @@ function ColumnTypesTab({ projectId }: { projectId: string | undefined }) {
               {visibleCandidates.map((candidate) => (
                 <TableRow key={`${projectId}.${candidate.dataset_id}.${candidate.table_id}`}>
                   <TableCell>
-                    <Link to={`/datasets/${candidate.dataset_id}`} className="hover:text-primary">
+                    <Link to={`/datasets/${candidate.dataset_id}`} className={linkClass}>
                       {projectId}.{candidate.dataset_id}
                     </Link>
                     .{candidate.table_id}

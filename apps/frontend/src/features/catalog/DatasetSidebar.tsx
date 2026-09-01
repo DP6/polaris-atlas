@@ -138,7 +138,7 @@ function QuantityPicker({
 }
 
 // Subseção dentro de um serviço (Governança, FinOps, Catálogo,
-// Favoritos, Análises de DQ, Recentes) — todas recolhidas por padrão
+// Favoritos, Análises de qualidade, Recentes) — todas recolhidas por padrão
 // (`open` vem de fora, sempre iniciado em `false` no componente pai).
 function SidebarSection({
   label,
@@ -285,7 +285,9 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
                       )
                     }
                   >
-                    <span className="truncate">{dataset.dataset_id}</span>
+                    <span className="truncate" title={dataset.dataset_id}>
+                      {dataset.dataset_id}
+                    </span>
                     <span className="shrink-0 text-xs opacity-70">
                       [{formatAssetCounts(dataset.total_tables, dataset.total_views)}]
                     </span>
@@ -303,7 +305,7 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
                     aria-label={
                       isDatasetFavorite ? 'Remover dataset dos favoritos' : 'Favoritar dataset'
                     }
-                    className="inline-flex size-6 shrink-0 items-center justify-center text-muted-foreground hover:text-primary"
+                    className="inline-flex size-6 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground"
                   >
                     <Star
                       size={13}
@@ -347,7 +349,10 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
                         className="flex items-center gap-2 text-sm text-foreground"
                       >
                         <Star size={12} className="shrink-0 fill-primary text-primary" />
-                        <span className="truncate">
+                        <span
+                          className="truncate"
+                          title={`${favorite.dataset_id}.${favorite.table_id}`}
+                        >
                           {favorite.dataset_id}.{favorite.table_id}
                         </span>
                       </Link>
@@ -384,7 +389,9 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
                         className="flex items-center gap-2 text-sm text-foreground"
                       >
                         <Star size={12} className="shrink-0 fill-primary text-primary" />
-                        <span className="truncate">{favorite.dataset_id}</span>
+                        <span className="truncate" title={favorite.dataset_id}>
+                          {favorite.dataset_id}
+                        </span>
                       </Link>
                       <FavoriteNickname
                         nickname={favorite.nickname}
@@ -406,7 +413,7 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
         </SidebarSection>
 
         <SidebarSection
-          label="Análises de DQ"
+          label="Análises de qualidade"
           open={dqAnalysesOpen}
           onOpenChange={setDqAnalysesOpen}
         >
@@ -430,7 +437,7 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
                   className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
                 >
                   <History size={12} className="shrink-0 text-muted-foreground" />
-                  <span className="truncate">
+                  <span className="truncate" title={`${view.dataset_id}.${view.table_id}`}>
                     {view.dataset_id}.{view.table_id}
                   </span>
                 </Link>

@@ -129,7 +129,7 @@ function DatasetScopeRow({
           disabled={tablesQuery.isLoading}
           onCheckedChange={toggleDataset}
         />
-        <button type="button" onClick={toggleDataset} className="text-sm hover:text-primary">
+        <button type="button" onClick={toggleDataset} className="text-sm hover:text-foreground">
           {dataset.dataset_id}
         </button>
         <span className="text-xs text-muted-foreground">

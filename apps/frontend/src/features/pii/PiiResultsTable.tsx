@@ -1,3 +1,4 @@
+import { StatusBadge } from '@/components/StatusBadge'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -24,9 +25,11 @@ const CONFIDENCE_LABELS: Record<'high' | 'medium', string> = {
   medium: 'Média',
 }
 
-const CONFIDENCE_COLOR: Record<'high' | 'medium', string> = {
-  high: 'text-status-error-foreground',
-  medium: 'text-status-warn-foreground',
+// Confiança como <StatusBadge> (ícone + rótulo) — não só cor
+// (WCAG 1.4.1, ver docs/frontend/accessibility.md).
+const CONFIDENCE_STATUS: Record<'high' | 'medium', 'error' | 'warn'> = {
+  high: 'error',
+  medium: 'warn',
 }
 
 export function PiiResultsTable({ columns }: { columns: PiiColumnResult[] }) {
@@ -80,9 +83,9 @@ export function PiiResultsTable({ columns }: { columns: PiiColumnResult[] }) {
             </TableCell>
             <TableCell className="text-xs">
               {column.confidence ? (
-                <span className={cn('font-medium', CONFIDENCE_COLOR[column.confidence])}>
+                <StatusBadge status={CONFIDENCE_STATUS[column.confidence]}>
                   {CONFIDENCE_LABELS[column.confidence]}
-                </span>
+                </StatusBadge>
               ) : (
                 <span className="text-muted-foreground">—</span>
               )}

@@ -2,23 +2,20 @@ import { Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { SortableTableHead } from '@/components/SortableTableHead'
+import { StatusBadge } from '@/components/StatusBadge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
-import { SLA_LABELS, SLA_ORDER, SLA_SHORT_LABELS, SLA_TEXT_COLOR } from '@/features/freshness/sla'
-import { cn } from '@/lib/utils'
+import {
+  SLA_FILL_COLOR,
+  SLA_LABELS,
+  SLA_ORDER,
+  SLA_SEVERITY,
+  SLA_SHORT_LABELS,
+  SLA_TEXT_COLOR,
+} from '@/features/freshness/sla'
+import { cn, linkClass } from '@/lib/utils'
 import type { DatasetFreshnessSummary, SLAStatus } from '@/types/freshness'
-
-// Ponto colorido de cada pill de filtro — mesma cor do texto do status
-// na tabela (SLA_TEXT_COLOR), só trocando text- por bg- (mesmo padrão
-// de TableFreshnessTable.tsx).
-const SLA_DOT_COLOR: Record<SLAStatus, string> = SLA_ORDER.reduce(
-  (acc, status) => {
-    acc[status] = SLA_TEXT_COLOR[status].replace('text-', 'bg-')
-    return acc
-  },
-  {} as Record<SLAStatus, string>,
-)
 
 type SortKey = 'dataset_id' | 'location' | 'total_tables' | 'worst_status' | SLAStatus
 type SortDirection = 'asc' | 'desc'
@@ -110,7 +107,7 @@ export function DatasetFreshnessTable({ datasets }: { datasets: DatasetFreshness
                   : 'border-border text-muted-foreground hover:bg-muted',
               )}
             >
-              <span className={cn('size-2 rounded-full', SLA_DOT_COLOR[status])} />
+              <span className={cn('size-2 rounded-full', SLA_FILL_COLOR[status])} />
               {SLA_SHORT_LABELS[status]}
             </button>
           ))}
@@ -176,7 +173,7 @@ export function DatasetFreshnessTable({ datasets }: { datasets: DatasetFreshness
           {visibleDatasets.map((dataset) => (
             <TableRow key={dataset.dataset_id}>
               <TableCell className="font-medium">
-                <Link to={`/freshness/${dataset.dataset_id}`} className="hover:text-primary">
+                <Link to={`/freshness/${dataset.dataset_id}`} className={linkClass}>
                   {dataset.dataset_id}
                 </Link>
               </TableCell>
@@ -196,9 +193,9 @@ export function DatasetFreshnessTable({ datasets }: { datasets: DatasetFreshness
               })}
               <TableCell>
                 {dataset.worst_status ? (
-                  <span className={cn('font-medium', SLA_TEXT_COLOR[dataset.worst_status])}>
+                  <StatusBadge status={SLA_SEVERITY[dataset.worst_status]}>
                     {SLA_LABELS[dataset.worst_status]}
-                  </span>
+                  </StatusBadge>
                 ) : (
                   <span className="text-muted-foreground">—</span>
                 )}

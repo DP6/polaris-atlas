@@ -90,7 +90,7 @@ export function AdminUsersTab() {
                   <TableCell className="font-medium">{user.email}</TableCell>
                   <TableCell>
                     {user.is_admin ? (
-                      <Badge>Admin</Badge>
+                      <Badge variant="secondary">Admin</Badge>
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
