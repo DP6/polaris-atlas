@@ -429,7 +429,17 @@ apps/backend/src/observability_hub/
 
 ---
 
-## Refresh visual - pendente (2026-09)
+## Refresh visual - pendente (2026-09) — FEITO (R2-7)
+
+Implementado na rodada 2 (R2-7). O `ProfilingDialog` foi **deletado**;
+o fluxo virou a subárvore de rotas `/analyze/:datasetId/:tableId/*` —
+ver **`docs/specs/quality.md`** (AC-QUAL-RV-01..04). A aba "Análise de
+qualidade" virou `QualityAnalysisPanel` + `QualityAnalysisPage`, com
+`CompositeScoreRing` (Quality Score) e `HBarList` (cardinalidade por
+coluna, barra horizontal + `ChartTooltip`).
+
+### ACs originais
+
 
 Pedidos do brief `frontend-visual-refresh.md` (sec. "Analises de qualidade") -
 o modulo sai do dialog pequeno e vira submodulo em tela cheia. Feature de

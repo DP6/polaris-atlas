@@ -15,10 +15,18 @@ import { FreshnessPage } from '@/features/freshness/FreshnessPage'
 import { GovernanceOverviewPage } from '@/features/governance/GovernanceOverviewPage'
 import { OrphansPage } from '@/features/lineage/OrphansPage'
 import { NotFoundPage } from '@/features/misc/NotFoundPage'
+import { AccessAnalysisPage } from '@/features/quality/AccessAnalysisPage'
+import { AnalysisChooserPage } from '@/features/quality/AnalysisChooserPage'
+import { AnalysisLayout } from '@/features/quality/AnalysisLayout'
+import { ColumnTypesAnalysisPage } from '@/features/quality/ColumnTypesAnalysisPage'
+import { HistoryAnalysisPage } from '@/features/quality/HistoryAnalysisPage'
+import { PiiAnalysisPage } from '@/features/quality/PiiAnalysisPage'
+import { QualityAnalysisPage } from '@/features/quality/QualityAnalysisPage'
 import { QualityFolderComparisonPage } from '@/features/quality/QualityFolderComparisonPage'
 import { QualityFoldersPage } from '@/features/quality/QualityFoldersPage'
 import { QualityOverviewPage } from '@/features/quality/QualityOverviewPage'
 import { QualityTablesPage } from '@/features/quality/QualityTablesPage'
+import { SchemaAnalysisPage } from '@/features/quality/SchemaAnalysisPage'
 import { BucketBrowserPage } from '@/features/storage/BucketBrowserPage'
 import { BucketsPage } from '@/features/storage/BucketsPage'
 import { WastePage } from '@/features/storage/WastePage'
@@ -40,6 +48,15 @@ export function AppRoutes() {
           <Route path="quality/tables" element={<QualityTablesPage />} />
           <Route path="quality/folders" element={<QualityFoldersPage />} />
           <Route path="quality/folders/:folderId" element={<QualityFolderComparisonPage />} />
+          <Route path="analyze/:datasetId/:tableId" element={<AnalysisLayout />}>
+            <Route index element={<AnalysisChooserPage />} />
+            <Route path="schema" element={<SchemaAnalysisPage />} />
+            <Route path="quality" element={<QualityAnalysisPage />} />
+            <Route path="pii" element={<PiiAnalysisPage />} />
+            <Route path="column-types" element={<ColumnTypesAnalysisPage />} />
+            <Route path="history" element={<HistoryAnalysisPage />} />
+            <Route path="access" element={<AccessAnalysisPage />} />
+          </Route>
           <Route path="finops" element={<FinOpsPage />} />
           <Route path="finops/budget" element={<BudgetPage />} />
           <Route path="search" element={<SearchPage />} />

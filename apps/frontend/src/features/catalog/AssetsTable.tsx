@@ -1,5 +1,6 @@
 import { Layers, Search, Sparkles, Star } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Panel } from '@/components/Panel'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { Badge } from '@/components/ui/badge'
@@ -24,7 +25,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { PartitionsDialog } from '@/features/catalog/PartitionsDialog'
 import { isFavoriteTable, useFavorites, useToggleFavorite } from '@/features/favorites/hooks'
 import { useRecordTableView } from '@/features/history/hooks'
-import { ProfilingDialog } from '@/features/quality/ProfilingDialog'
 import { formatBytes, formatDate, formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { TableSummary, TableType } from '@/types/catalog'
@@ -69,7 +69,6 @@ function compare(a: TableSummary, b: TableSummary, key: SortKey): number {
 }
 
 export function AssetsTable({ projectId, datasetId, tables, highlightTableId }: AssetsTableProps) {
-  const [profilingTarget, setProfilingTarget] = useState<string | null>(null)
   const [partitionsTarget, setPartitionsTarget] = useState<string | null>(null)
   const [nameFilter, setNameFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState<TableType | typeof TYPE_FILTER_ALL>(TYPE_FILTER_ALL)
@@ -78,6 +77,8 @@ export function AssetsTable({ projectId, datasetId, tables, highlightTableId }: 
   const favoritesQuery = useFavorites()
   const toggleFavorite = useToggleFavorite()
   const recordTableView = useRecordTableView()
+  const navigate = useNavigate()
+  const location = useLocation()
 
   function toggleSort(key: SortKey) {
     if (key === sortKey) {
@@ -268,7 +269,9 @@ export function AssetsTable({ projectId, datasetId, tables, highlightTableId }: 
                         variant="outline"
                         onClick={() => {
                           recordTableView.mutate({ projectId, datasetId, tableId: table.table_id })
-                          setProfilingTarget(table.table_id)
+                          navigate(`/analyze/${datasetId}/${table.table_id}`, {
+                            state: { from: location.pathname },
+                          })
                         }}
                       >
                         <Sparkles size={14} />
@@ -318,13 +321,6 @@ export function AssetsTable({ projectId, datasetId, tables, highlightTableId }: 
           </TableBody>
         </Table>
       </Panel>
-
-      <ProfilingDialog
-        projectId={projectId}
-        datasetId={datasetId}
-        tableId={profilingTarget}
-        onOpenChange={(open) => !open && setProfilingTarget(null)}
-      />
 
       <PartitionsDialog
         projectId={projectId}

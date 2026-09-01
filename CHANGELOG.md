@@ -3022,3 +3022,21 @@ implementação**
 | — | Admin ACL v1.0–v1.3 (controle de acesso usuário×projeto, projetos públicos, solicitação de acesso, painel "Uso do Hub") | ✅ Concluída |
 | — | Documentação para cliente (2 playbooks operacionais + 2 manuais voltados a cliente final) | ✅ Concluída |
 | Fase 5 | Storage (Cloud Storage): catálogo, scanner de desperdício (config + uso real), extensão do lineage | ✅ Concluída — validada em dev, mergeada em `main` e deployada em prod (PR #25) |
+
+
+### R2-7 — `feat/r2-analysis-routes` (só front-end)
+
+- **`ProfilingDialog.tsx` deletado.** O fluxo de análise virou a subárvore
+  `/analyze/:datasetId/:tableId/*`: `AnalysisLayout` (provê contexto +
+  `<Outlet/>`), `AnalysisChooserPage` (7 cards `OptionCard`, todos ativos),
+  e 6 páginas de módulo liftando cada corpo de aba (`SchemaTable`,
+  `PiiTab`, `ColumnTypeSuggestionsTab`, `HistoryTab`, `AccessTab`; Lineage
+  → `/lineage/:d/:t` da R2-8).
+- `QualityAnalysisPanel` extraído da antiga aba "Análise de qualidade" +
+  novos `components/HBarList.tsx` (cardinalidade em barra horizontal +
+  `ChartTooltip` — 1º consumidor real dele) e `components/CompositeScoreRing.tsx`
+  (anel de score, SVG à mão). `QualityAnalysisPage` monta os dois +
+  `ColumnResultsTable`.
+- `AssetsTable` "Analisar" → `navigate('/analyze/:d/:t', { state:{ from } })`.
+- `docs/specs/quality.md` novo (AC-QUAL-RV-01..04). `profiling.md` §pendente
+  marcada feita. `design-system.md` (HBarList, CompositeScoreRing).
