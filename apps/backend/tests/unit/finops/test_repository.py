@@ -375,7 +375,22 @@ def _timeline_row(usage_date, logical_bytes):
 
 
 def test_get_storage_cost_timeline_returns_none_for_no_regions():
-    assert repository.get_storage_cost_timeline(MagicMock(), "proj", [], date(2026, 8, 1)) is None
+    days, reason = repository.get_storage_cost_timeline(MagicMock(), "proj", [], date(2026, 8, 1))
+    assert days is None
+    assert reason is not None
+
+
+def test_get_storage_cost_timeline_uses_lowercase_region_qualifier():
+    client = MagicMock()
+    result = MagicMock()
+    result.result.return_value = []
+    client.query.return_value = result
+
+    repository.get_storage_cost_timeline(client, "proj", ["US"], date(2026, 8, 1))
+
+    called_sql = client.query.call_args[0][0]
+    assert "region-us." in called_sql
+    assert "region-US." not in called_sql
 
 
 def test_get_storage_cost_timeline_merges_regions_and_sums_same_day():
@@ -384,7 +399,7 @@ def test_get_storage_cost_timeline_merges_regions_and_sums_same_day():
 
     def _query(sql, job_config=None):
         result = MagicMock()
-        if "region-US" in sql:
+        if "region-us." in sql:
             result.result.return_value = [_timeline_row(d, 100)]
         else:
             result.result.return_value = [_timeline_row(d, 25)]
@@ -392,18 +407,24 @@ def test_get_storage_cost_timeline_merges_regions_and_sums_same_day():
 
     client.query.side_effect = _query
 
-    out = repository.get_storage_cost_timeline(client, "proj", ["US", "EU"], date(2026, 8, 1))
+    days, reason = repository.get_storage_cost_timeline(
+        client, "proj", ["US", "EU"], date(2026, 8, 1)
+    )
 
-    assert out == [repository.StorageTimelineDay(usage_date=d, logical_bytes=125)]
+    assert days == [repository.StorageTimelineDay(usage_date=d, logical_bytes=125)]
+    assert reason is None
 
 
-def test_get_storage_cost_timeline_returns_none_when_all_regions_fail():
+def test_get_storage_cost_timeline_returns_reason_when_all_regions_fail():
     client = MagicMock()
-    client.query.side_effect = GoogleAPICallError("no such view")
+    client.query.side_effect = GoogleAPICallError("403 Access Denied: table storage")
 
-    out = repository.get_storage_cost_timeline(client, "proj", ["US", "EU"], date(2026, 8, 1))
+    days, reason = repository.get_storage_cost_timeline(
+        client, "proj", ["US", "EU"], date(2026, 8, 1)
+    )
 
-    assert out is None
+    assert days is None
+    assert "Access Denied" in reason
 
 
 def test_get_storage_cost_timeline_tolerates_one_failing_region():
@@ -411,7 +432,7 @@ def test_get_storage_cost_timeline_tolerates_one_failing_region():
     d = date(2026, 8, 10)
 
     def _query(sql, job_config=None):
-        if "region-EU" in sql:
+        if "region-eu." in sql:
             raise GoogleAPICallError("boom")
         result = MagicMock()
         result.result.return_value = [_timeline_row(d, 7)]
@@ -419,9 +440,12 @@ def test_get_storage_cost_timeline_tolerates_one_failing_region():
 
     client.query.side_effect = _query
 
-    out = repository.get_storage_cost_timeline(client, "proj", ["US", "EU"], date(2026, 8, 1))
+    days, reason = repository.get_storage_cost_timeline(
+        client, "proj", ["US", "EU"], date(2026, 8, 1)
+    )
 
-    assert out == [repository.StorageTimelineDay(usage_date=d, logical_bytes=7)]
+    assert days == [repository.StorageTimelineDay(usage_date=d, logical_bytes=7)]
+    assert reason is None
 
 
 def test_get_storage_cost_timeline_passes_dataset_and_table_filters_as_params():

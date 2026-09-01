@@ -497,7 +497,7 @@ def get_cost_series(
         # outros endpoints de finops (scan_partition_candidates) — se a SA
         # não alcança o projeto, é 404/403, não série vazia silenciosa.
         regions = discover_regions(project_id, client=client)
-        timeline = repository.get_storage_cost_timeline(
+        timeline, timeline_reason = repository.get_storage_cost_timeline(
             client,
             project_id,
             regions,
@@ -508,6 +508,8 @@ def get_cost_series(
         if timeline is None:
             storage_available = False
             storage_warning = _STORAGE_TIMELINE_UNAVAILABLE_WARNING.format(project_id=project_id)
+            if timeline_reason:
+                storage_warning = f"{storage_warning} Motivo do BigQuery: {timeline_reason}."
             warning = f"{warning} {storage_warning}".strip() if warning else storage_warning
         else:
             for day in timeline:
@@ -563,6 +565,11 @@ _SCORE_UNUSED_ZERO_AT_GB = 100.0
 # scan_efficiency: escanear a tabela N vezes o próprio tamanho em 30d.
 # Meia nota quando N == este valor.
 _SCORE_SCAN_RATIO_HALF_LIFE = 10.0
+# scan_efficiency é neutro (1.0) pra tabelas abaixo deste tamanho — mesma
+# linha de "não vale a pena otimizar" do candidato a particionamento
+# (_MIN_TABLE_SIZE_BYTES_FOR_PARTITION_CANDIDATE): re-scan de tabela
+# pequena custa centavos, não é sinal de desperdício.
+_SCORE_SCAN_MIN_SIZE_BYTES = _MIN_TABLE_SIZE_BYTES_FOR_PARTITION_CANDIDATE
 
 
 def _clamp01(value: float) -> float:
@@ -605,9 +612,14 @@ def _table_efficiency_score(
 
     # 3. Eficiência de scan: quantas vezes o próprio tamanho foi escaneado
     #    em 30d — re-scan repetido de tabela inteira (sem pruning/cache).
-    if size_bytes <= 0 or billed_bytes_30d <= 0:
+    #    Tabela pequena (< 1 GB) não entra nessa conta.
+    if size_bytes < _SCORE_SCAN_MIN_SIZE_BYTES or billed_bytes_30d <= 0:
         scan_value = 1.0
-        scan_detail = "Sem scans onerosos em 30d"
+        scan_detail = (
+            "Tabela pequena (< 1 GB) — re-scan não é material"
+            if 0 < size_bytes < _SCORE_SCAN_MIN_SIZE_BYTES
+            else "Sem scans onerosos em 30d"
+        )
     else:
         ratio = billed_bytes_30d / size_bytes
         scan_value = _clamp01(1 / (1 + ratio / _SCORE_SCAN_RATIO_HALF_LIFE))

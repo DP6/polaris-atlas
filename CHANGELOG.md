@@ -3178,3 +3178,26 @@ implementação**
   build` verdes. `vite build` mantém o aviso pré-existente de chunk > 500
   kB (xyflow/recharts no bundle principal) — R2-7b (lazy) fica como
   follow-up opcional, não regressão desta branch.
+
+### R2-11.5 — `fix/finops-score-and-storage-timeline` (backend + front-end)
+
+Ajustes de validação visual do usuário na visão geral de FinOps:
+
+- **`scan_efficiency` ignora tabelas < 1 GB** (`_SCORE_SCAN_MIN_SIZE_BYTES`
+  = `_MIN_TABLE_SIZE_BYTES_FOR_PARTITION_CANDIDATE`) — re-scan de tabela
+  pequena custa centavos, não é sinal de desperdício; o fator fica neutro
+  (1.0) com detalhe "Tabela pequena (< 1 GB)".
+- **Tooltip da fórmula do score** na página `/finops` (`ScoreExplainer` no
+  `actions` do painel "Eficiência de custo") — os 3 fatores, pesos, e que
+  o score do projeto é média ponderada por tamanho.
+- **Storage timeline em dev caía em `storage_available=false`.** A view
+  existe e responde (`SELECT * … LIMIT 10` manual OK). Correções:
+  qualificador de região agora **minúsculo** (`region-us`, não
+  `region-US` — essa view é mais estrita que `INFORMATION_SCHEMA.TABLES`);
+  `get_storage_cost_timeline` retorna `(dias, motivo)` e o **motivo real
+  do BigQuery** (403/404/400…) sobe no `warning` da resposta em vez das 3
+  hipóteses genéricas. Se o motivo for permissão, a role
+  `bigquery.tables.list` no projeto entra em `docs/onboarding-cliente.md`
+  (ASM-002 na spec).
+- `uv run pytest tests/unit` = 823 ok; `pnpm lint`/`build` verdes.
+- `docs/specs/finops-budget.md` (score §, degradação §, ASM-002).

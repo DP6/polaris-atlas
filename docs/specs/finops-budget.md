@@ -283,15 +283,21 @@ custo de **query** e de **storage** por período, filtrável.
 
 ### `storage_available` e degradação
 
-`get_storage_cost_timeline` devolve `None` se **nenhuma** região respondeu
-(permissão de metadado ausente, view indisponível na região, schema
-diferente do esperado) — o service marca `storage_available=false`,
-`storage_cost_usd` fica `0` em todos os pontos, `query_cost_usd` continua
-válido, e um `warning` explica. Uma região que falha sozinha é ignorada
-(as outras contam). **Nunca vira 500** — lição do incidente da rodada 1
-(SQL nova quebrando `/validate` → 500 sem header de CORS → "Failed to
-fetch"): qualquer `GoogleAPICallError`/`ValueError` da query é engolido
-por região.
+`get_storage_cost_timeline` devolve `(None, motivo)` se **nenhuma** região
+respondeu — `motivo` é a **1ª linha do erro real do BigQuery** (403 / 404
+/ 400 …), propagada pro `warning` da resposta (`"… Motivo do BigQuery:
+<motivo>."`) pra não ficar adivinhando entre permissão / view / schema. O
+service marca `storage_available=false`, `storage_cost_usd` fica `0` em
+todos os pontos, `query_cost_usd` continua válido. Uma região que falha
+sozinha é ignorada (as outras contam). **Nunca vira 500** — lição do
+incidente da rodada 1 (SQL nova quebrando `/validate` → 500 sem header de
+CORS → "Failed to fetch"): qualquer `GoogleAPICallError`/`ValueError` da
+query é engolido por região.
+
+O qualificador de região vai em **minúscula** (`region-us`, não
+`region-US`) — essa view é mais estrita quanto a caixa do que
+`INFORMATION_SCHEMA.TABLES` (que aceita as duas). Ajuste de R2-11.5 depois
+que o dev mostrou `storage_available=false` (ver ASM-002).
 
 ### Dry-run (regra do CLAUDE.md)
 
@@ -356,7 +362,7 @@ campo alimentado por um job que cruza domínios, não por import.
 |---|---|---|
 | `partitioning` | 0.45 | `1.0` se particionada, ou sem candidata a partição, ou sem custo de scan observado. Senão `clamp(1 − economia_otimista_particionamento / custo_scan_30d, 0, 1)` — `0` = quase todo o custo dá pra economizar particionando. Reaproveita `scan_partition_candidates`. |
 | `utilization` | 0.30 | `1.0` se escaneada ≥ 1× em 30d. Senão `clamp(1 − size_gb / 100, 0, 1)` — tabela ≥ 100 GB nunca consultada em 30d → `0` (storage pago sem retorno). |
-| `scan_efficiency` | 0.25 | `1 / (1 + (bytes_escaneados_30d / size_bytes) / 10)` — escanear a tabela inteira 10× em 30d → `0.5`; premia pruning / cache / filtros. `1.0` se sem scan oneroso. |
+| `scan_efficiency` | 0.25 | `1 / (1 + (bytes_escaneados_30d / size_bytes) / 10)` — escanear a tabela inteira 10× em 30d → `0.5`; premia pruning / cache / filtros. `1.0` se sem scan oneroso **ou se a tabela tem menos de 1 GB** (`_SCORE_SCAN_MIN_SIZE_BYTES` = mesma linha do candidato a partição — re-scan de tabela pequena custa centavos, não é sinal de desperdício). |
 
 **Score do projeto** = média dos scores por tabela **ponderada por
 `size_bytes`** (as grandes dominam o custo); fallback pra média simples se
@@ -503,7 +509,7 @@ tinha com o texto da query inline na célula).
 | ID | Suposição | Status |
 |---|---|---|
 | ASM-001 | `budget` usa o mesmo cache de `partition-candidates` (não um scan com janela month-to-date variável): o recorte pro mês corrente já era feito por `event.timestamp < month_start` no service, não pela janela do scan. Desde a v1.4 a janela do cache é **31 dias** (evicção do Job incremental), então o mês corrente inteiro cabe — o efeito colateral da v1.3 (o `_BUDGET_RETENTION_CAVEAT` disparar sempre no dia 31) foi revertido. | confirmada |
-| ASM-002 | **cost-series:** `INFORMATION_SCHEMA.TABLE_STORAGE_USAGE_TIMELINE_BY_PROJECT` é uma view de metadado que o BigQuery **não cobra** (query $0), mesma base de `list_all_table_refs`/`get_date_like_columns`. Precisa ser confirmada por `dry_run` em dev depois do deploy de `feat/r2-finops-cost-series` — não há credencial de GCP no ambiente local pra rodar antes. Se cobrar, a degradação `storage_available=false` já protege; ajustar a fonte da série de storage. | aberta |
+| ASM-002 | **cost-series:** `INFORMATION_SCHEMA.TABLE_STORAGE_USAGE_TIMELINE_BY_PROJECT` é uma view de metadado que o BigQuery **não cobra** (query $0). **Parcialmente confirmada (2026-09):** a view existe e responde no `observability-hub-dev` (teste manual `SELECT * … LIMIT 10` OK), mas a chamada do Hub caiu em `storage_available=false` em todas as regiões. R2-11.5: qualificador de região passou a minúscula (`region-us`) e o motivo real do BigQuery agora sobe no `warning`. **Ainda aberto:** confirmar pelo `warning`/Cloud Logging se o que resta é permissão (a SA de runtime precisa de `bigquery.tables.list` no projeto pra essa família de views — se sim, entra em `docs/onboarding-cliente.md`) ou schema de coluna. | aberta |
 | ASM-003 | **cost-series:** custo de storage por dia usa a tarifa `active` e bytes lógicos (`total_logical_usage_bytes`, com fallback pra `total_physical_usage_bytes`), dividido pelos dias do mês — a linha de storage é um teto suave (ignora desconto long-term) e assume cobrança lógica/on-demand, mesma premissa do resto do domínio. Suficiente pra um gráfico direcional; não é fatura. | confirmada |
 
 ---

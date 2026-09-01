@@ -650,14 +650,16 @@ def test_get_budget_injects_user_budget_target_from_firestore(monkeypatch):
 
 
 def _stub_cost_series(monkeypatch, events, timeline):
-    """events -> cache de audit log; timeline -> retorno de
-    repository.get_storage_cost_timeline (lista de StorageTimelineDay, [] ou
-    None p/ indisponível)."""
+    """events -> cache de audit log; timeline -> lista de StorageTimelineDay
+    (ou [] com dados; None => indisponível, o stub devolve o motivo)."""
     monkeypatch.setattr(
         service.repository, "get_scan_events_cached", lambda *a, **kw: (events, None)
     )
     monkeypatch.setattr(service, "discover_regions", lambda project_id, client: ["US"])
-    monkeypatch.setattr(service.repository, "get_storage_cost_timeline", lambda *a, **kw: timeline)
+    timeline_result = (timeline, None) if timeline is not None else (None, "403 Access Denied")
+    monkeypatch.setattr(
+        service.repository, "get_storage_cost_timeline", lambda *a, **kw: timeline_result
+    )
 
 
 def _cost_series(monkeypatch, events=None, timeline=None, **kwargs):
@@ -689,12 +691,15 @@ def test_get_cost_series_contiguous_daily_periods_no_gaps(monkeypatch):
     assert days == sorted(days)
 
 
-def test_get_cost_series_storage_unavailable_sets_flag_and_warning(monkeypatch):
+def test_get_cost_series_storage_unavailable_sets_flag_and_surfaces_reason(monkeypatch):
     result = _cost_series(monkeypatch, events=[], timeline=None)
 
     assert result.storage_available is False
     assert result.warning is not None
     assert "storage" in result.warning.lower()
+    # o motivo real do BigQuery entra no warning (403/404/400…), não fica
+    # só a lista genérica de 3 hipóteses
+    assert "403 Access Denied" in result.warning
 
 
 def test_get_cost_series_adds_storage_cost_when_timeline_present(monkeypatch):
@@ -777,6 +782,23 @@ def test_table_efficiency_score_perfect_for_partitioned_used_lightly_scanned():
     assert score == 100
     assert {f.name for f in factors} == {"partitioning", "utilization", "scan_efficiency"}
     assert abs(sum(f.weight for f in factors) - 1.0) < 1e-9
+
+
+def test_table_efficiency_score_ignores_scan_ratio_for_small_tables():
+    # 100 MB escaneada 500x em 30d: ratio altíssimo, mas custo é de
+    # centavos — scan_efficiency deve ficar neutro (1.0), não penalizar.
+    score, factors = service._table_efficiency_score(
+        size_bytes=100 * 1024**2,
+        is_partitioned=True,
+        billed_bytes_30d=500 * 100 * 1024**2,
+        partition_savings_usd=0.0,
+        observed_cost_usd_30d=0.0,
+    )
+
+    scan = next(f for f in factors if f.name == "scan_efficiency")
+    assert scan.value == 1.0
+    assert "pequena" in scan.detail.lower()
+    assert score == 100
 
 
 def test_table_efficiency_score_penalizes_large_never_scanned_table():

@@ -313,6 +313,14 @@ def list_all_table_refs(
 _STORAGE_TIMELINE_VIEW = "INFORMATION_SCHEMA.TABLE_STORAGE_USAGE_TIMELINE_BY_PROJECT"
 
 
+def _short_error(exc: BaseException) -> str:
+    """Primeira linha da mensagem da exceção, sem stack — o suficiente pra
+    distinguir 403 (permissão) de 404 (view/região) de 400 (coluna) no
+    warning que sobe pra UI."""
+    text = str(exc).strip().splitlines()[0] if str(exc).strip() else exc.__class__.__name__
+    return text[:180]
+
+
 def get_storage_cost_timeline(
     client: bigquery.Client,
     project_id: str,
@@ -321,20 +329,23 @@ def get_storage_cost_timeline(
     datasets: list[str] | None = None,
     tables: list[str] | None = None,
     max_workers: int = 8,
-) -> list[StorageTimelineDay] | None:
+) -> tuple[list[StorageTimelineDay] | None, str | None]:
     """Bytes lógicos de storage por dia, somados sobre as tabelas do
     projeto (opcionalmente filtradas por dataset ou por `dataset.table`),
     lidos de `INFORMATION_SCHEMA.TABLE_STORAGE_USAGE_TIMELINE_BY_PROJECT`
     — uma view de metadado (custo de query $0, mesma base de
     list_all_table_refs / get_date_like_columns). Fan-out por região,
-    agregação no SQL (retorna ~90 linhas por região no máximo).
+    agregação no SQL (retorna ~90 linhas por região no máximo). O
+    qualificador de região vai em minúscula (`region-us`) — essa view é
+    mais estrita que INFORMATION_SCHEMA.TABLES quanto a caixa.
 
-    Retorna `None` se **nenhuma** região respondeu (permissão ausente,
-    view indisponível, schema diferente do esperado) — o service degrada
-    pra `storage_available=False` sem nunca virar 500. Uma região que
-    falha sozinha é ignorada (as demais ainda contam)."""
+    Retorna `(dias, None)` se ao menos uma região respondeu; `(None,
+    motivo)` se **nenhuma** respondeu — o `motivo` é a 1ª linha do erro
+    do BigQuery (403/404/400…), propagado pro warning da resposta pra
+    não ficar adivinhando entre permissão / view / schema. Nunca 500;
+    uma região que falha sozinha é ignorada."""
     if not regions:
-        return None
+        return None, "nenhuma região com dataset no projeto"
 
     filters = ["usage_date >= @since"]
     params: list[bigquery.ScalarQueryParameter | bigquery.ArrayQueryParameter] = [
@@ -348,12 +359,12 @@ def get_storage_cost_timeline(
         params.append(bigquery.ArrayQueryParameter("tables", "STRING", tables))
     where = " AND ".join(filters)
 
-    def _query_region(region: str) -> list[StorageTimelineDay] | None:
+    def _query_region(region: str) -> tuple[list[StorageTimelineDay] | None, str | None]:
         sql = f"""
             SELECT usage_date,
                    SUM(COALESCE(total_logical_usage_bytes, total_physical_usage_bytes, 0))
                        AS logical_bytes
-            FROM `{project_id}.region-{region}.{_STORAGE_TIMELINE_VIEW}`
+            FROM `{project_id}.region-{region.lower()}.{_STORAGE_TIMELINE_VIEW}`
             WHERE {where}
             GROUP BY usage_date
         """
@@ -362,25 +373,33 @@ def get_storage_cost_timeline(
                 sql, job_config=bigquery.QueryJobConfig(query_parameters=params)
             ).result()
         except (GoogleAPICallError, ValueError) as exc:
+            reason = _short_error(exc)
             logger.warning(
-                "Timeline de storage indisponível em region-%s de %s: %s", region, project_id, exc
+                "Timeline de storage indisponível em region-%s de %s: %s",
+                region.lower(),
+                project_id,
+                reason,
             )
-            return None
-        return [
+            return None, reason
+        days = [
             StorageTimelineDay(usage_date=row.usage_date, logical_bytes=int(row.logical_bytes or 0))
             for row in rows
         ]
+        return days, None
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         per_region = list(pool.map(_query_region, regions))
 
-    if all(result is None for result in per_region):
-        return None
+    if all(days is None for days, _reason in per_region):
+        reasons = sorted({reason for _days, reason in per_region if reason})
+        return None, "; ".join(reasons) or "erro desconhecido"
     merged: dict[date, int] = {}
-    for result in per_region:
-        for day in result or []:
+    for days, _reason in per_region:
+        for day in days or []:
             merged[day.usage_date] = merged.get(day.usage_date, 0) + day.logical_bytes
-    return [StorageTimelineDay(usage_date=d, logical_bytes=b) for d, b in sorted(merged.items())]
+    return [
+        StorageTimelineDay(usage_date=d, logical_bytes=b) for d, b in sorted(merged.items())
+    ], None
 
 
 def get_date_like_columns(

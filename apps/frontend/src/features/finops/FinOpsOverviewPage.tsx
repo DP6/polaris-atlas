@@ -1,4 +1,4 @@
-import { ChevronDown, DollarSign, Gauge, Search, Target, TrendingUp } from 'lucide-react'
+import { ChevronDown, DollarSign, Gauge, Info, Search, Target, TrendingUp } from 'lucide-react'
 import { Fragment, type ReactNode, useMemo, useState } from 'react'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { CacheStalenessBadge } from '@/components/CacheStalenessBadge'
@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { WarningCallout } from '@/components/WarningCallout'
 import { BudgetConfigDialog } from '@/features/finops/BudgetConfigDialog'
 import { useBudget, useCostSeries, useTableScores } from '@/features/finops/hooks'
@@ -190,7 +191,7 @@ export function FinOpsOverviewPage() {
       </Panel>
 
       <div className="grid gap-4 lg:grid-cols-[auto_1fr] [&>*]:min-w-0">
-        <Panel title="Eficiência de custo" as="h3">
+        <Panel title="Eficiência de custo" as="h3" actions={<ScoreExplainer />}>
           <CompositeScoreRing
             score={scores?.project_efficiency_score ?? 100}
             caption="do projeto"
@@ -229,6 +230,51 @@ export function FinOpsOverviewPage() {
 
       <BudgetConfigDialog projectId={projectId} open={configOpen} onOpenChange={setConfigOpen} />
     </div>
+  )
+}
+
+// Tooltip com a fórmula completa do score — o mesmo cálculo que alimenta
+// o anel do projeto e a coluna "Score" da tabela de Top ofensores.
+function ScoreExplainer() {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            aria-label="Como o score de eficiência é calculado"
+            className="text-muted-foreground hover:text-foreground [&_svg]:size-4"
+          />
+        }
+      >
+        <Info />
+      </TooltipTrigger>
+      <TooltipContent className="max-w-sm flex-col items-start gap-1.5 whitespace-normal text-left leading-relaxed">
+        <p className="font-semibold">Score de eficiência de custo (0–100, maior = melhor)</p>
+        <p>Média de 3 fatores, cada um com seu peso:</p>
+        <ul className="flex list-disc flex-col gap-1 pl-4">
+          <li>
+            <b>Particionamento (45%)</b> — quanto do custo de scan dos últimos 30 dias dá pra
+            economizar particionando a tabela. 100 se já é particionada ou não tem coluna de data
+            candidata.
+          </li>
+          <li>
+            <b>Utilização (30%)</b> — 100 se foi consultada nos últimos 30 dias; se nunca foi, cai
+            com o tamanho (storage pago sem uso) e zera a partir de 100 GB.
+          </li>
+          <li>
+            <b>Eficiência de scan (25%)</b> — penaliza re-scan da tabela inteira (sem
+            filtro/pruning/cache): escanear 10× o próprio tamanho em 30d dá meia nota. Tabelas
+            menores que 1 GB não entram nessa conta.
+          </li>
+        </ul>
+        <p>
+          O score do projeto é a média dos scores das tabelas <b>ponderada por tamanho</b> (as
+          grandes pesam mais).
+        </p>
+        <p className="text-background/70">Fórmula provisória — em calibração.</p>
+      </TooltipContent>
+    </Tooltip>
   )
 }
 
