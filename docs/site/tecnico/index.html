@@ -31,6 +31,8 @@
     font-family: var(--font-sans);
   }
 
+  svg { display: block; }
+
   .page { display: flex; flex-direction: column; min-height: 100vh; }
 
   /* --- Barra de 4 abas do site (igual em todas as páginas) */
@@ -90,7 +92,7 @@
   }
 
   .toc {
-    width: 280px;
+    width: 288px;
     flex: 0 0 auto;
     position: sticky;
     top: 44px;
@@ -102,13 +104,18 @@
   }
 
   .toc-group-label {
-    padding: 16px 16px 4px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 18px 16px 4px;
     font-size: 0.7rem;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--color-text-muted);
   }
+
+  .toc-group-label svg { width: 13px; height: 13px; flex: 0 0 auto; }
 
   .toc a {
     display: block;
@@ -152,7 +159,9 @@
   }
 
   section.doc-section > .domain-tag {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     font-size: 0.7rem;
     font-weight: 700;
     letter-spacing: 0.08em;
@@ -160,9 +169,11 @@
     color: var(--color-text-inverse);
     background: var(--color-primary);
     border-radius: 999px;
-    padding: 2px 10px;
+    padding: 3px 11px 3px 9px;
     margin-bottom: 10px;
   }
+
+  section.doc-section > .domain-tag svg { width: 13px; height: 13px; }
 
   section.doc-section h2 {
     font-size: 1.5rem;
@@ -182,7 +193,12 @@
     font-size: 1.0625rem;
     margin: 32px 0 6px;
     scroll-margin-top: 60px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
+
+  h3.feature-title svg { width: 15px; height: 15px; color: var(--color-primary); flex: 0 0 auto; }
 
   .content p { line-height: 1.6; margin: 0 0 12px; }
   .content ul { line-height: 1.6; margin: 0 0 12px; padding-left: 20px; }
@@ -198,9 +214,9 @@
 
   figure img {
     max-width: 100%;
-    border-radius: 8px;
+    border-radius: 10px;
     border: 1px solid var(--color-border);
-    box-shadow: 0 16px 40px rgba(29, 29, 27, 0.14);
+    box-shadow: 0 18px 44px rgba(29, 29, 27, 0.16);
     cursor: zoom-in;
     display: block;
   }
@@ -298,7 +314,7 @@
   .menu-toggle {
     position: fixed;
     top: 52px;
-    left: 280px;
+    left: 288px;
     transform: translateX(-50%);
     z-index: 25;
     width: 26px;
@@ -351,23 +367,37 @@
     <div class="layout">
       <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Ocultar menu">‹</button>
       <nav class="toc" id="toc">
-        <div class="toc-group-label">Início</div>
+        <div class="toc-group-label">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          Início
+        </div>
         <a href="#introducao">Visão geral e arquitetura</a>
         <a href="#login">Login e acesso</a>
 
-        <div class="toc-group-label">BigQuery</div>
-        <a href="#catalogo">Catálogo</a>
+        <div class="toc-group-label">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>
+          BigQuery
+        </div>
+        <a href="#catalogo">Catálogo de Dados</a>
+        <a href="#analise">Análise de uma tabela</a>
         <a href="#lineage">Lineage e tabelas órfãs</a>
         <a href="#pii">Fingerprinting de PII</a>
         <a href="#acesso-mapa">Mapa de acesso</a>
         <a href="#qualidade">Qualidade de dados e schema drift</a>
         <a href="#freshness">Freshness com SLA</a>
         <a href="#finops">FinOps</a>
+        <a href="#favoritos-recentes">Favoritos e Recentes</a>
 
-        <div class="toc-group-label">Cloud Storage</div>
+        <div class="toc-group-label">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" x2="6.01" y1="16" y2="16"/><line x1="10" x2="10.01" y1="16" y2="16"/></svg>
+          Cloud Storage
+        </div>
         <a href="#storage">Catálogo e scanner de buckets</a>
 
-        <div class="toc-group-label">Acesso e administração</div>
+        <div class="toc-group-label">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Acesso e administração
+        </div>
         <a href="#solicitar-acesso">Solicitar acesso a um projeto</a>
         <a href="#admin">Administração</a>
         <a href="#cache-audit-log">Cache de audit log</a>
@@ -384,6 +414,7 @@
         </p>
 
         <section class="doc-section" id="introducao">
+          <span class="domain-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Início</span>
           <h2>Visão geral e arquitetura</h2>
           <p>
             O Observability Hub observa projetos GCP de fora — a service account
@@ -412,12 +443,21 @@
             dado real quando declarado, ou audit log via Cloud Logging) — o Hub
             não replica nem armazena os dados observados, com a única exceção do
             <strong>cache de audit log de jobs</strong>, que alimenta lineage,
-            mapa de acesso, FinOps e o scanner de Storage (ver
+            mapa de acesso, tabelas órfãs, FinOps e o scanner de Storage (ver
             <a href="#cache-audit-log">Cache de audit log</a>).
           </p>
+          <div class="callout">
+            <strong>Navegação</strong>
+            A sidebar agrupa as telas por domínio (BigQuery, Cloud Storage) e por
+            atalho (Favoritos, Recentes, Análises de qualidade). Toda tela de
+            nível interno tem um <strong>"Voltar"</strong> no canto superior
+            esquerdo, e toda overview de grupo (Governança, FinOps, Cloud
+            Storage) abre como uma grade de cards que leva às sub-telas.
+          </div>
         </section>
 
         <section class="doc-section" id="login">
+          <span class="domain-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/></svg>Início</span>
           <h2>Login e acesso</h2>
           <p>
             Autenticação via conta Google (OAuth) — sem senha própria, sem
@@ -433,8 +473,8 @@
         </section>
 
         <section class="doc-section" id="catalogo">
-          <span class="domain-tag">BigQuery</span>
-          <h2>Catálogo</h2>
+          <span class="domain-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>BigQuery</span>
+          <h2>Catálogo de Dados</h2>
           <p class="section-summary">
             Inventário navegável de todos os datasets e tabelas de um projeto
             BigQuery, sem precisar escrever uma query. A descoberta de região é
@@ -443,43 +483,80 @@
             "região" pra preencher em lugar nenhum do produto.
           </p>
 
-          <h3 class="feature-title">Navegar um dataset</h3>
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>Visão geral do projeto<span class="new-badge">novo</span></h3>
+          <p>
+            A tela de entrada do Catálogo resume o projeto em três números —
+            total de datasets, total de tabelas e <strong>volume ocupado</strong>
+            (soma do tamanho de todas as tabelas) — traz a busca de tabela (abaixo)
+            e a grade de datasets, cada card com nº de tabelas, tamanho e a
+            <strong>distribuição de SLA de freshness</strong> do dataset em três
+            barras (no prazo / atenção / estourado).
+          </p>
+          <figure>
+            <img src="../produto/images/02-catalogo-visao-geral.png" alt="Visão geral do Catálogo de Dados" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Datasets, tabelas e volume do projeto, busca global e a grade de datasets com distribuição de SLA.</figcaption>
+          </figure>
+
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>Navegar um dataset</h3>
           <p>
             Lista as tabelas de um dataset com tamanho, número de linhas, tipo
             (tabela normal, view, tabela externa) e data da última modificação —
             direto do <code>INFORMATION_SCHEMA</code>, sem custo de query real.
+            O cabeçalho traz região, contagem de tabelas/views, tamanho, linhas
+            e a pior faixa de freshness do dataset; cada linha tem
+            <strong>"Ver partições"</strong> e <strong>"Analisar"</strong>, que
+            abre o <a href="#analise">módulo de análise da tabela</a>.
           </p>
           <figure>
-            <img src="../produto/images/02-catalogo-dataset-raw.png" alt="Catálogo de um dataset" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>Inventário de tabelas de um dataset.</figcaption>
+            <img src="../produto/images/04-catalogo-dataset.png" alt="Catálogo de um dataset" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Inventário de tabelas de um dataset, com "Ver partições" e "Analisar" por linha.</figcaption>
           </figure>
 
-          <h3 class="feature-title">Partições de uma tabela</h3>
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/></svg>Partições de uma tabela</h3>
           <p>
             Pra tabelas particionadas, detalha quantas linhas existem em cada
             partição — útil pra confirmar se uma carga do dia chegou, ou
             encontrar uma partição vazia/atrasada sem rodar SQL manualmente.
           </p>
           <figure>
-            <img src="../produto/images/03-catalogo-particoes.png" alt="Partições de uma tabela" onclick="openLightbox(this.src, this.alt)" />
+            <img src="../produto/images/05-catalogo-particoes.png" alt="Partições de uma tabela" onclick="openLightbox(this.src, this.alt)" />
             <figcaption>Linhas por partição de uma tabela particionada.</figcaption>
           </figure>
 
-          <h3 class="feature-title">Busca de tabelas</h3>
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Busca de tabelas</h3>
           <p>
             Encontra em quais datasets do projeto uma tabela (ou um padrão de
-            nome) existe — ou confirma que não existe em lugar nenhum. Útil pra
-            checar cobertura de um pipeline que deveria escrever em vários
-            ambientes/datasets.
+            nome) existe — ou confirma que não existe em lugar nenhum. Quatro
+            modos de comparação: <strong>igual a</strong>, <strong>contém</strong>,
+            <strong>não contém</strong> e <strong>diferente de</strong>. Útil pra
+            checar a cobertura de um pipeline que deveria escrever em vários
+            ambientes/datasets, ou achar quem ainda tem uma tabela que já devia
+            ter sido removida.
           </p>
           <figure>
-            <img src="../produto/images/19-catalogo-buscar-tabelas.png" alt="Busca de tabelas" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>Busca de uma tabela através de todos os datasets do projeto.</figcaption>
+            <img src="../produto/images/03-catalogo-busca.png" alt="Busca de tabelas" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Busca de uma tabela através de todos os datasets do projeto, com filtro de modo.</figcaption>
+          </figure>
+        </section>
+
+        <section class="doc-section" id="analise">
+          <span class="domain-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>BigQuery</span>
+          <h2>Análise de uma tabela<span class="new-badge">novo</span></h2>
+          <p class="section-summary">
+            "Analisar" numa tabela abre uma tela dedicada — não mais um modal —
+            com sete módulos, cada um em sua própria rota (com "Voltar" pro
+            seletor): schema, análise de qualidade, fingerprint de PII, sugestão
+            de tipo de coluna, histórico de profiling, mapa de acesso e lineage.
+            Os detalhes de cada um estão nas seções abaixo.
+          </p>
+          <figure>
+            <img src="../produto/images/06-analise-chooser.png" alt="Seletor de módulos de análise de uma tabela" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Os sete módulos de análise de uma tabela, num só lugar.</figcaption>
           </figure>
         </section>
 
         <section class="doc-section" id="lineage">
-          <span class="domain-tag">BigQuery</span>
+          <span class="domain-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>BigQuery</span>
           <h2>Lineage e tabelas órfãs</h2>
           <p class="section-summary">
             Reconstrói a cadeia de dependência entre tabelas a partir dos audit
@@ -488,21 +565,24 @@
             escreveu na tabela B, existe uma aresta A → B no grafo.
           </p>
 
-          <h3 class="feature-title">Lineage de uma tabela</h3>
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>Lineage de uma tabela</h3>
           <p>
-            Grafo dirigido, upstream (de onde vem) e downstream (pra onde vai),
-            até 15 saltos em cada direção. Buckets do Cloud Storage também entram
-            como nó quando um job de <code>LOAD</code> (bucket → tabela) ou
-            <code>EXTRACT</code> (tabela → bucket) aparece na cadeia. Quando a
-            cadeia atravessa mais de um projeto GCP, cada tabela aparece
-            identificada como <code>projeto.dataset.tabela</code>.
+            Grafo dirigido em tela cheia, upstream (de onde vem) e downstream
+            (pra onde vai), até 15 saltos em cada direção. Buckets do Cloud
+            Storage também entram como nó quando um job de <code>LOAD</code>
+            (bucket → tabela) ou <code>EXTRACT</code> (tabela → bucket) aparece na
+            cadeia. Quando a cadeia atravessa mais de um projeto GCP, cada tabela
+            aparece identificada como <code>projeto.dataset.tabela</code>. Abaixo
+            do grafo, três painéis: <strong>impacto de mudança de schema</strong>
+            (quantas tabelas/views a jusante quebrariam), <strong>fontes</strong>
+            e <strong>consumidores</strong> diretos.
           </p>
           <figure>
-            <img src="../produto/images/08-qualidade-lineage.png" alt="Grafo de lineage" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>Lineage transitivo de uma tabela, upstream e downstream.</figcaption>
+            <img src="../produto/images/15-lineage.png" alt="Grafo de lineage" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Lineage transitivo de uma tabela, upstream e downstream, com painéis de impacto, fontes e consumidores.</figcaption>
           </figure>
 
-          <h3 class="feature-title">Tabelas sem consumidor (órfãs)</h3>
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></svg>Tabelas sem consumidor (órfãs)</h3>
           <p>
             Compara todas as tabelas de um escopo (dataset ou projeto inteiro)
             contra o conjunto de tabelas que apareceram como <em>lidas</em> em
@@ -512,12 +592,12 @@
             mensal.
           </p>
           <figure>
-            <img src="../produto/images/12-governanca-tabelas-sem-consumidor-config.png" alt="Configurar busca de tabelas sem consumidor" onclick="openLightbox(this.src, this.alt)" />
+            <img src="../produto/images/20-orfas-config.png" alt="Configurar busca de tabelas sem consumidor" onclick="openLightbox(this.src, this.alt)" />
             <figcaption>Escopo (datasets) e janela de tempo antes de rodar.</figcaption>
           </figure>
           <figure>
-            <img src="../produto/images/13-governanca-tabelas-sem-consumidor-resultado.png" alt="Diagnóstico de resultado vazio" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>Quando o resultado vem vazio, o Hub explica as causas prováveis com o comando <code>gcloud</code> pronto pra investigar.</figcaption>
+            <img src="../produto/images/21-orfas-resultado.png" alt="Resultado de tabelas sem consumidor" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Tabelas sem leitura conhecida na janela, com custo de storage estimado. Quando o resultado vem vazio, o Hub explica as causas prováveis com o comando <code>gcloud</code> pronto pra investigar.</figcaption>
           </figure>
           <div class="callout">
             <strong>Como funciona por baixo</strong>
@@ -532,7 +612,7 @@
         </section>
 
         <section class="doc-section" id="pii">
-          <span class="domain-tag">BigQuery</span>
+          <span class="domain-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>BigQuery</span>
           <h2>Fingerprinting de PII</h2>
           <p class="section-summary">
             Detecta colunas com provável dado pessoal combinando duas camadas:
@@ -548,13 +628,13 @@
             proporções agregadas. O dado bruto nunca sai do BigQuery.
           </p>
           <figure>
-            <img src="../produto/images/09-qualidade-pii.png" alt="Resultado do fingerprinting de PII" onclick="openLightbox(this.src, this.alt)" />
+            <img src="../produto/images/13-pii.png" alt="Resultado do fingerprinting de PII" onclick="openLightbox(this.src, this.alt)" />
             <figcaption>Colunas sinalizadas por tipo de PII, com nível de confiança.</figcaption>
           </figure>
         </section>
 
         <section class="doc-section" id="acesso-mapa">
-          <span class="domain-tag">BigQuery</span>
+          <span class="domain-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>BigQuery</span>
           <h2>Mapa de acesso</h2>
           <p class="section-summary">
             Responde "quem tocou nessa tabela recentemente" — mesma fonte de
@@ -568,13 +648,13 @@
             "um consumidor externo acessou essa tabela".
           </p>
           <figure>
-            <img src="../produto/images/10-qualidade-acesso.png" alt="Mapa de acesso de uma tabela" onclick="openLightbox(this.src, this.alt)" />
+            <img src="../produto/images/14-mapa-acesso.png" alt="Mapa de acesso de uma tabela" onclick="openLightbox(this.src, this.alt)" />
             <figcaption>Usuários e service accounts que acessaram a tabela, mais recente primeiro.</figcaption>
           </figure>
         </section>
 
         <section class="doc-section" id="qualidade">
-          <span class="domain-tag">BigQuery</span>
+          <span class="domain-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>BigQuery</span>
           <h2>Qualidade de dados e schema drift</h2>
           <p class="section-summary">
             Análise estatística configurável, coluna a coluna, com amostragem e
@@ -582,59 +662,79 @@
             na fatura do BigQuery.
           </p>
 
-          <h3 class="feature-title">Schema</h3>
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M3 9h6"/></svg>Schema</h3>
           <p>
             Nome, tipo e nullability de cada coluna, direto do
-            <code>INFORMATION_SCHEMA</code> — grátis, sem amostrar dado.
+            <code>INFORMATION_SCHEMA</code> — grátis, sem amostrar dado. As
+            colunas de partição e de cluster vêm marcadas.
           </p>
           <figure>
-            <img src="../produto/images/04-qualidade-schema.png" alt="Schema de uma tabela" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>Schema completo, com tipo e nullability por coluna.</figcaption>
+            <img src="../produto/images/07-qualidade-schema.png" alt="Schema de uma tabela" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Schema completo, com tipo e nullability por coluna e marcação de partição/cluster.</figcaption>
           </figure>
 
-          <h3 class="feature-title">Configurar e rodar profiling</h3>
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>Configurar e rodar profiling</h3>
           <p>
-            Antes de executar, o Hub mostra o SQL que vai rodar e estima bytes
-            processados/custo em US$ — o usuário decide se vale a pena antes de
-            gastar a query.
+            Antes de executar, escolhe amostragem, método de unicidade (exato ou
+            aproximado por <code>HLL</code>) e coluna de data. O Hub então mostra
+            o SQL que vai rodar e estima bytes processados / custo em US$ — o
+            usuário decide se vale a pena antes de gastar a query.
           </p>
           <figure>
-            <img src="../produto/images/05-qualidade-analise-config.png" alt="Configuração da análise de qualidade" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>SQL gerado e estimativa de custo antes de confirmar.</figcaption>
+            <img src="../produto/images/08-qualidade-config.png" alt="Configuração da análise de qualidade" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Amostragem, método de unicidade e coluna de data.</figcaption>
           </figure>
           <figure>
-            <img src="../produto/images/06-qualidade-analise-resultado.png" alt="Resultado do profiling" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>Completude, unicidade e duplicatas por coluna, com tipo lógico detectado automaticamente.</figcaption>
+            <img src="../produto/images/09-qualidade-sql-custo.png" alt="SQL gerado e custo estimado" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>SQL gerado e estimativa de bytes/custo antes de confirmar.</figcaption>
+          </figure>
+          <figure>
+            <img src="../produto/images/10-qualidade-resultado.png" alt="Resultado do profiling" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Completude, unicidade e duplicatas por coluna, com tipo lógico detectado automaticamente e flag de qualidade.</figcaption>
+          </figure>
+          <figure>
+            <img src="../produto/images/11-qualidade-score.png" alt="Quality Score e cardinalidade" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Quality Score composto (completude média, densidade geral, cobertura de tipo lógico) e cardinalidade aproximada por coluna.</figcaption>
           </figure>
 
-          <h3 class="feature-title">Histórico e pastas de comparação</h3>
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Histórico e pastas de comparação</h3>
           <p>
             Cada execução de profiling fica salva, permitindo acompanhar
             densidade e duplicatas ao longo do tempo. Resultados também podem ser
             salvos em pastas nomeadas pra comparar execuções lado a lado (ex:
-            antes/depois de uma mudança de pipeline) — a pasta guarda uma
-            <strong>cópia</strong> do resultado no momento em que foi salva, então
-            uma mudança futura na lógica de profiling não altera retroativamente
-            o que já foi arquivado.
+            antes/depois de uma mudança de pipeline, ou métodos de unicidade
+            diferentes) — a pasta guarda uma <strong>cópia</strong> do resultado
+            no momento em que foi salva, então uma mudança futura na lógica de
+            profiling não altera retroativamente o que já foi arquivado.
           </p>
           <figure>
-            <img src="../produto/images/07-qualidade-historico.png" alt="Histórico de profiling" onclick="openLightbox(this.src, this.alt)" />
+            <img src="../produto/images/12-qualidade-historico.png" alt="Histórico de profiling" onclick="openLightbox(this.src, this.alt)" />
             <figcaption>Evolução de densidade/duplicatas entre execuções.</figcaption>
           </figure>
           <figure>
-            <img src="../produto/images/40-qualidade-pastas-profiling.png" alt="Pastas de comparação de profiling" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>Resultados salvos em pasta, pra comparação lado a lado.</figcaption>
+            <img src="../produto/images/16-qualidade-pastas.png" alt="Pastas de comparação de profiling" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Pastas de profiling — recortes salvos pra comparar depois.</figcaption>
+          </figure>
+          <figure>
+            <img src="../produto/images/17-qualidade-pasta-detalhe.png" alt="Entradas salvas numa pasta de profiling" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Dentro de uma pasta: cada entrada guarda a cópia do resultado no momento em que foi salva.</figcaption>
           </figure>
         </section>
 
         <section class="doc-section" id="freshness">
-          <span class="domain-tag">BigQuery</span>
+          <span class="domain-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>BigQuery</span>
           <h2>Freshness com SLA</h2>
           <p class="section-summary">
             Classifica cada tabela contra janelas de SLA fixas, a partir do
             metadado de última modificação do BigQuery — sem precisar declarar
-            manualmente qual é o SLA esperado de cada tabela.
+            manualmente qual é o SLA esperado de cada tabela. É uma das duas
+            frentes da overview de <strong>Governança</strong> (a outra é
+            <a href="#lineage">tabelas sem consumidor</a>).
           </p>
+          <figure>
+            <img src="../produto/images/18-governanca-visao-geral.png" alt="Visão geral de Governança" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Overview de Governança — Freshness &amp; SLA e Tabelas sem consumidor.</figcaption>
+          </figure>
           <ul>
             <li><strong>ok</strong> — atualizada há até 12h</li>
             <li><strong>warning_12_24</strong> — 12h a 24h</li>
@@ -642,14 +742,21 @@
             <li>faixas adicionais até 7 dias / 1 mês, pra tabelas com cadência
               esperada mais espaçada</li>
           </ul>
+          <p>
+            A distribuição de cada dataset aparece em <strong>três barras
+            verticais</strong> — no prazo (verde), atenção (amarelo) e estourado
+            (vermelho), colapsando as seis faixas por severidade; a altura de cada
+            barra é proporcional à contagem, e as três estão sempre visíveis
+            (altura mínima quando zero) pra a leitura ser consistente entre linhas.
+          </p>
           <figure>
-            <img src="../produto/images/11-governanca-freshness.png" alt="Painel de freshness" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>Status de freshness por tabela, com a faixa de SLA aplicada.</figcaption>
+            <img src="../produto/images/19-freshness.png" alt="Painel de freshness" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Status de freshness por tabela e a distribuição de SLA por dataset em três barras.</figcaption>
           </figure>
         </section>
 
         <section class="doc-section" id="finops">
-          <span class="domain-tag">BigQuery</span>
+          <span class="domain-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>BigQuery</span>
           <h2>FinOps</h2>
           <p class="section-summary">
             Custo e desperdício de BigQuery, sem depender do Cloud Billing
@@ -658,52 +765,129 @@
             por projeto+SKU, nunca por dataset/tabela.
           </p>
 
-          <h3 class="feature-title">Candidatas a particionamento</h3>
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>Visão geral<span class="new-badge">novo</span></h3>
           <p>
-            Sinaliza tabelas grandes, sem partição, com uma coluna de data/hora
-            candidata — com economia estimada de forma deliberadamente
-            conservadora (nunca um número único de falsa precisão).
+            A tela de entrada de FinOps reúne: os <strong>big numbers</strong>
+            (gasto do período, meta mensal, projeção, nº de tabelas de baixo
+            score); o gráfico de <strong>custo ao longo do período</strong> —
+            barras por período + linha acumulada, com troca de granularidade
+            (dia/mês) e de tipo (tudo / query / storage), e a meta de projeto
+            como linha de referência; o painel de <strong>eficiência de
+            custo</strong> (um score por tabela e o do projeto) e o ranking de
+            <strong>Top ofensores</strong>, onde clicar numa linha abre a
+            decomposição do score (particionamento, utilização, eficiência de
+            scan); e os cards de atalho pra Scanner, Budget e Configurar budget.
           </p>
           <figure>
-            <img src="../produto/images/14-finops-scanner-particionamento.png" alt="Candidatas a particionamento" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>Tabelas grandes sem partição, com coluna de data candidata.</figcaption>
+            <img src="../produto/images/22-finops-visao-geral.png" alt="Visão geral de FinOps" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Big numbers, custo ao longo do período e cards de atalho.</figcaption>
+          </figure>
+          <figure>
+            <img src="../produto/images/23-finops-eficiencia.png" alt="Eficiência de custo e Top ofensores" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Score de eficiência por tabela e o ranking dos piores, com decomposição no clique.</figcaption>
           </figure>
 
-          <h3 class="feature-title">Sugestão de tipo de coluna</h3>
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Scanner de desperdício</h3>
+          <p>
+            Overview de duas frentes — <strong>candidatas a particionamento</strong>
+            e <strong>sugestão de tipo de coluna</strong>, cada uma em sua própria
+            sub-rota. Tabelas sem uso ficaram só em
+            <a href="#lineage">Governança → Tabelas sem consumidor</a>, pra não
+            duplicar a mesma informação em dois lugares.
+          </p>
+          <figure>
+            <img src="../produto/images/24-finops-scanner.png" alt="Scanner de desperdício de FinOps" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>As duas frentes do scanner de desperdício de BigQuery.</figcaption>
+          </figure>
+
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>Candidatas a particionamento</h3>
+          <p>
+            Sinaliza tabelas ≥ 1 GB, sem partição, com uma coluna de
+            <code>DATE</code>/<code>DATETIME</code>/<code>TIMESTAMP</code>
+            candidata a chave de partição. A economia estimada (quando exibida)
+            usa o custo real observado nos últimos 30 dias de jobs que
+            referenciaram a tabela — sem atividade recente, a tabela ainda
+            aparece como candidata, só sem número de economia.
+          </p>
+          <figure>
+            <img src="../produto/images/25-finops-particionamento-config.png" alt="Escopo de candidatas a particionamento" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Escopo de tabelas antes de rodar.</figcaption>
+          </figure>
+          <figure>
+            <img src="../produto/images/26-finops-particionamento-resultado.png" alt="Resultado de candidatas a particionamento" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Tabelas grandes sem partição, com coluna de data candidata e economia observada.</figcaption>
+          </figure>
+
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg>Sugestão de tipo de coluna</h3>
           <p>
             Amostra dados reais via <code>TABLESAMPLE</code> pra sugerir tipos
             mais baratos (ex: <code>STRING</code> guardando só números vira
-            candidata a <code>INT64</code>/<code>FLOAT64</code>) — com estimativa
-            de custo da amostragem antes de rodar.
+            candidata a <code>INT64</code>/<code>FLOAT64</code>). Diferente das
+            outras telas do scanner, <strong>esta tem custo de BigQuery</strong> —
+            escopo + estimativa de custo antes de escanear.
           </p>
           <figure>
-            <img src="../produto/images/15-finops-scanner-tipos-coluna-config.png" alt="Configurar scanner de tipos de coluna" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>Configuração e estimativa de custo antes da amostragem.</figcaption>
+            <img src="../produto/images/27-finops-tipos-coluna-config.png" alt="Configurar scanner de tipos de coluna" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Escopo e amostragem, com estimativa de custo antes de escanear.</figcaption>
           </figure>
           <figure>
-            <img src="../produto/images/16-finops-scanner-tipos-coluna-resultado.png" alt="Resultado do scanner de tipos de coluna" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>Tipo atual vs. sugerido, com economia mensal estimada.</figcaption>
+            <img src="../produto/images/28-finops-tipos-coluna-resultado.png" alt="Resultado do scanner de tipos de coluna" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Tipo atual → sugerido por coluna, com economia mensal estimada.</figcaption>
           </figure>
 
-          <h3 class="feature-title">Budget de custo</h3>
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Budget de custo</h3>
           <p>
-            Três visões do custo do mês corrente, todas derivadas da mesma fonte
-            (audit log de bytes cobrados + preço público on-demand): custo
-            agrupado (por tabela, dataset, usuário, dia, mês ou ano), top N
-            queries mais caras, e a projeção do mês.
+            Estima o custo de um período via audit log de jobs (bytes cobrados) +
+            preço público on-demand — sem depender do Cloud Billing Export. A
+            <strong>janela é escolhível</strong>: presets de 7, 15 e 30 dias ou um
+            valor livre, com teto de 31 dias (retenção do cache de audit log). A
+            projeção é um <strong>run-rate de 30 dias</strong> (média diária da
+            janela × 30), não "o resto do mês". O resultado traz custo até agora,
+            média diária, projeção e a janela analisada, mais o custo quebrado por
+            tabela / dataset / usuário / dia / mês / ano e as queries mais caras.
           </p>
           <figure>
-            <img src="../produto/images/17-finops-budget-config.png" alt="Configuração do budget" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>Escopo e agrupamento antes de calcular o budget.</figcaption>
+            <img src="../produto/images/29-finops-budget-config.png" alt="Configuração do budget" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Janela (7 / 15 / 30 dias ou livre), agrupamento e limite antes de calcular.</figcaption>
           </figure>
           <figure>
-            <img src="../produto/images/18-finops-budget-resultado.png" alt="Resultado do budget" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>Custo até agora, média diária e projeção do mês.</figcaption>
+            <img src="../produto/images/30-finops-budget-resultado.png" alt="Resultado do budget" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Custo até agora, média diária, projeção mensal e janela analisada.</figcaption>
+          </figure>
+          <p>
+            <strong>Metas de budget<span class="new-badge">novo</span></strong> —
+            um diálogo permite cadastrar metas de custo mensais por projeto,
+            dataset ou tabela. Cada usuário tem as suas (não são compartilhadas);
+            a meta de escopo "projeto" vira a linha de referência no gráfico de
+            custo da <a href="#finops">visão geral</a>.
+          </p>
+          <figure>
+            <img src="../produto/images/31-finops-budget-dialog.png" alt="Configurar metas de budget" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Metas de custo mensais por projeto, dataset ou tabela.</figcaption>
+          </figure>
+        </section>
+
+        <section class="doc-section" id="favoritos-recentes">
+          <span class="domain-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>BigQuery</span>
+          <h2>Favoritos e Recentes<span class="new-badge">novo</span></h2>
+          <p class="section-summary">
+            Datasets e tabelas marcados com estrela, e o histórico de tabelas
+            abertas, agora com <strong>tela própria</strong> além do acesso
+            rápido inline na sidebar. As duas são escopadas ao projeto
+            selecionado e por usuário.
+          </p>
+          <figure>
+            <img src="../produto/images/36-favoritos.png" alt="Página de favoritos" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Tabelas e datasets favoritos do projeto, com apelido editável.</figcaption>
+          </figure>
+          <figure>
+            <img src="../produto/images/37-recentes.png" alt="Página de recentes" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Tabelas abertas recentemente, da mais recente pra mais antiga.</figcaption>
           </figure>
         </section>
 
         <section class="doc-section" id="storage">
-          <span class="domain-tag">Cloud Storage</span>
+          <span class="domain-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" x2="6.01" y1="16" y2="16"/><line x1="10" x2="10.01" y1="16" y2="16"/></svg>Cloud Storage</span>
           <h2>Catálogo e scanner de buckets</h2>
           <p class="section-summary">
             Extensão do Hub pra além do BigQuery — mesma governança (catálogo +
@@ -712,44 +896,52 @@
             job de <code>LOAD</code>/<code>EXTRACT</code>.
           </p>
 
-          <h3 class="feature-title">Catálogo de buckets</h3>
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>Visão geral<span class="new-badge">novo</span></h3>
           <p>
-            Storage class, tamanho, quantidade de objetos e regras de lifecycle
-            já configuradas em cada bucket do projeto.
+            Ao entrar em Cloud Storage, uma overview de dois cards leva a
+            <strong>Buckets</strong> (catálogo) e ao <strong>Scanner de
+            desperdício</strong>.
           </p>
           <figure>
-            <img src="../produto/images/20-storage-buckets.png" alt="Catálogo de buckets" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>Buckets do projeto, com storage class e tamanho.</figcaption>
-          </figure>
-          <figure>
-            <img src="../produto/images/21-storage-bucket-detalhe.png" alt="Navegação de um bucket" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>Navegação pasta a pasta dentro de um bucket.</figcaption>
-          </figure>
-          <figure>
-            <img src="../produto/images/22-storage-bucket-pasta.png" alt="Arquivos de uma pasta" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>Arquivos de uma pasta — nome, tamanho e data de modificação.</figcaption>
+            <img src="../produto/images/32-storage-visao-geral.png" alt="Visão geral de Cloud Storage" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Overview de Cloud Storage — Buckets e Scanner de desperdício.</figcaption>
           </figure>
 
-          <h3 class="feature-title">Scanner de desperdício</h3>
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" x2="6.01" y1="16" y2="16"/></svg>Catálogo de buckets</h3>
+          <p>
+            Storage class, tamanho, quantidade de objetos, região e regras de
+            lifecycle já configuradas em cada bucket do projeto. Clicar num bucket
+            abre a navegação pasta a pasta, com tamanho e storage class de cada
+            objeto.
+          </p>
+          <figure>
+            <img src="../produto/images/33-storage-buckets.png" alt="Catálogo de buckets" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Buckets do projeto, com storage class, tamanho e lifecycle rule.</figcaption>
+          </figure>
+
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Scanner de desperdício</h3>
           <p>
             Sinaliza objetos em storage class <code>STANDARD</code> parados há
             muito tempo, candidatos a uma classe mais barata (Nearline, Coldline
             ou Archive). O nível de confiança da recomendação muda conforme o
-            audit log de leitura de objeto esteja habilitado no projeto: "leitura
-            confirmada" quando está, "baseado em configuração" (idade do objeto,
-            sem confirmar se alguém ainda lê) quando não.
+            audit log de leitura de objeto (<code>DATA_READ</code>) esteja
+            habilitado no projeto: "leitura confirmada" quando está, "sem leitura
+            confirmada" (só idade do objeto + config, sem confirmar se alguém
+            ainda lê) quando não — a checagem degrada graciosamente, sem bloquear
+            o resultado.
           </p>
           <figure>
-            <img src="../produto/images/23-storage-scanner-config.png" alt="Configuração do scanner de storage" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>Escopo do scanner antes de rodar.</figcaption>
+            <img src="../produto/images/34-storage-scanner-config.png" alt="Configuração do scanner de storage" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Idade mínima do objeto antes de rodar.</figcaption>
           </figure>
           <figure>
-            <img src="../produto/images/24-storage-scanner-resultado.png" alt="Resultado do scanner de storage" onclick="openLightbox(this.src, this.alt)" />
+            <img src="../produto/images/35-storage-scanner-resultado.png" alt="Resultado do scanner de storage" onclick="openLightbox(this.src, this.alt)" />
             <figcaption>Economia estimada por bucket, com nível de confiança.</figcaption>
           </figure>
         </section>
 
         <section class="doc-section" id="solicitar-acesso">
+          <span class="domain-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L18 2"/><path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/></svg>Acesso</span>
           <h2>Solicitar acesso a um projeto</h2>
           <p class="section-summary">
             Se você digita um <code>project_id</code> que o Hub não libera pra
@@ -757,23 +949,16 @@
             um ticket ou mandar mensagem pro time.
           </p>
 
-          <h3 class="feature-title">Projeto já onboardado, só falta liberar pra mim</h3>
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>Projeto já onboardado, só falta liberar pra mim</h3>
           <p>
             Quando o projeto já está pronto no Hub e só falta você ter permissão
             (caso mais comum), o erro mostra o botão <strong>"Solicitar
             acesso"</strong> — abre um pedido que entra direto na fila de um
-            admin aprovar ou negar.
+            admin aprovar ou negar, com confirmação imediata na tela (sem e-mail
+            nem ticket à parte).
           </p>
-          <figure>
-            <img src="../produto/images/25-acesso-solicitar-projeto.png" alt="Solicitar acesso a um projeto" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>Pedido de acesso a um ou mais projetos, direto pela interface.</figcaption>
-          </figure>
-          <figure>
-            <img src="../produto/images/26-acesso-solicitacao-confirmada.png" alt="Solicitação enviada" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>Confirmação imediata — sem e-mail nem ticket à parte.</figcaption>
-          </figure>
 
-          <h3 class="feature-title">Projeto ainda não incluído no Hub<span class="new-badge">novo</span></h3>
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>Projeto ainda não incluído no Hub</h3>
           <p>
             Se o erro for de acesso negado na SA do Hub (o projeto nunca foi
             liberado pra ninguém) ou de projeto inexistente/nome incorreto, o
@@ -784,18 +969,19 @@
             projeto no Hub <strong>e</strong> libera quem pediu, num clique só —
             ver <a href="#admin">Administração → Solicitações</a>.
           </p>
-          <div class="pending-shot">Print pendente — funcionalidade nova, ainda sem captura de tela.</div>
+          <div class="pending-shot">Captura desta tela em atualização — ver o <a href="../produto/">demonstrativo do produto</a> pro fluxo de solicitação a partir da fila do admin.</div>
         </section>
 
         <section class="doc-section" id="admin">
+          <span class="domain-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Administração</span>
           <h2>Administração</h2>
           <p class="section-summary">
             Quem é admin do Hub, quais projetos cada usuário/grupo pode ver, fila
-            de solicitações e visibilidade de uso — tudo separado do login (que
-            continua controlado só pela allowlist do OAuth).
+            de solicitações, caches e visibilidade de uso — tudo separado do login
+            (que continua controlado só pela allowlist do OAuth).
           </p>
 
-          <h3 class="feature-title">Por usuário</h3>
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Por usuário</h3>
           <p>
             Controla quem é administrador do Hub e a quais projetos GCP cada
             usuário tem acesso, num só lugar. <code>"*"</code> na lista de
@@ -803,91 +989,90 @@
             alcançar.
           </p>
           <figure>
-            <img src="../produto/images/27-admin-por-usuario.png" alt="Admin por usuário" onclick="openLightbox(this.src, this.alt)" />
+            <img src="../produto/images/38-admin-usuarios.png" alt="Admin por usuário" onclick="openLightbox(this.src, this.alt)" />
             <figcaption>Usuários, status de admin e projetos liberados.</figcaption>
           </figure>
 
-          <h3 class="feature-title">Por projeto</h3>
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>Por projeto</h3>
           <p>
             Visão inversa: escolhe um projeto e vê quem tem acesso a ele — inclui
-            liberar o projeto pra todo mundo de uma vez ("liberado a todos").
+            liberar o projeto pra todo mundo de uma vez ("liberado a todos") e
+            apagar o registro do projeto (isso só o tira da lista "Por projeto";
+            acessos já concedidos individualmente continuam valendo até serem
+            revogados à parte). O botão <strong>"Verificar checklist"</strong>
+            testa, na hora, se a service account do Hub consegue ler BigQuery,
+            Cloud Logging e Cloud Storage daquele projeto — sem abrir o Console do
+            GCP. É "best-effort": ele tenta a operação real e reporta
+            sucesso/falha, mas não confirma sozinho a role
+            <code>logging.privateLogViewer</code> (que falha silenciosamente —
+            devolve sempre vazio) nem se os Data Access audit logs estão
+            habilitados (o checklist já traz o comando <code>gcloud</code> pronto
+            pra isso).
           </p>
           <figure>
-            <img src="../produto/images/28-admin-por-projeto.png" alt="Admin por projeto" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>Projetos registrados e quem tem acesso a cada um.</figcaption>
+            <img src="../produto/images/39-admin-por-projeto.png" alt="Admin por projeto" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Projetos registrados, quem tem acesso a cada um e o checklist da SA do Hub.</figcaption>
           </figure>
-          <p>
-            <strong>Apagar projeto<span class="new-badge">novo</span></strong> —
-            cada linha tem um botão pra remover o registro do projeto. Isso só
-            tira o projeto da lista "Por projeto"; acessos já concedidos
-            individualmente a usuários/grupos específicos continuam valendo até
-            serem revogados à parte (são dois controles independentes).
-          </p>
-          <p>
-            <strong>Verificar checklist<span class="new-badge">novo</span></strong>
-            — antes de registrar um projeto novo (ou pra revisar um já
-            registrado), um botão testa, na hora, se a service account do Hub
-            realmente consegue ler BigQuery, Cloud Logging e Cloud Storage
-            daquele projeto — sem precisar abrir o Console do GCP pra conferir
-            IAM manualmente. É um teste "best-effort": ele tenta a operação real
-            e reporta sucesso/falha, mas não confirma sozinho se a role
-            <code>logging.privateLogViewer</code> foi concedida (essa falha de
-            forma silenciosa — a chamada funciona, só devolve sempre vazio) nem
-            se os Data Access audit logs estão habilitados (isso exige conferir
-            manualmente, o próprio checklist já traz o comando <code>gcloud</code>
-            pronto).
-          </p>
-          <div class="pending-shot">Print pendente — funcionalidades novas (apagar/checklist), ainda sem captura de tela.</div>
 
-          <h3 class="feature-title">Grupos</h3>
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Grupos</h3>
           <p>
             Grupos do Google Workspace integrados via domain-wide delegation — os
             membros reais são lidos direto do Workspace a cada consulta (cache
-            curto), sem manter uma lista manual duplicada dentro do Hub.
+            curto), sem manter uma lista manual duplicada dentro do Hub. Cada
+            membro herda os projetos liberados do grupo, somando com o que já tem
+            individualmente.
           </p>
           <figure>
-            <img src="../produto/images/29-admin-grupos.png" alt="Admin de grupos" onclick="openLightbox(this.src, this.alt)" />
+            <img src="../produto/images/40-admin-grupos.png" alt="Admin de grupos" onclick="openLightbox(this.src, this.alt)" />
             <figcaption>Grupos do Workspace com projetos herdados por todos os membros.</figcaption>
           </figure>
 
-          <h3 class="feature-title">Solicitações de acesso</h3>
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="m9 15 2 2 4-4"/></svg>Solicitações de acesso</h3>
           <p>
-            Fila de pedidos — quem pediu, quando, status (pendente/aprovada/
-            negada) e quem resolveu. Desde a extensão de "solicitar inclusão"
-            <span class="new-badge">novo</span>, cada linha também mostra o
-            <strong>tipo</strong> do pedido (acesso vs. inclusão de projeto) —
-            aprovar um pedido de inclusão registra o projeto automaticamente
-            antes de liberar o solicitante, então vale rodar o checklist daquele
-            projeto antes de aprovar.
+            Fila de pedidos — quem pediu, quando, <strong>tipo</strong> (acesso a
+            projeto vs. inclusão de projeto novo), status (pendente/aprovada/
+            negada) e quem resolveu. Aprovar um pedido de inclusão registra o
+            projeto automaticamente antes de liberar o solicitante, então vale
+            rodar o checklist daquele projeto antes de aprovar.
           </p>
           <figure>
-            <img src="../produto/images/30-admin-solicitacoes.png" alt="Fila de solicitações" onclick="openLightbox(this.src, this.alt)" />
+            <img src="../produto/images/41-admin-solicitacoes.png" alt="Fila de solicitações" onclick="openLightbox(this.src, this.alt)" />
             <figcaption>Fila de solicitações, com ações de aprovar/negar.</figcaption>
           </figure>
 
-          <h3 class="feature-title">Uso do Hub</h3>
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>Uso do Hub</h3>
           <p>
-            Visibilidade de adoção sem sair do próprio Hub: acessos e usuários
-            únicos (hoje/semana/mês), log de logins recentes, funil de retenção
-            (quem só loga vs. quem de fato usa alguma funcionalidade) e mapa de
-            calor de horário de uso, favoritos mais comuns, atividade de
-            profiling, demanda por acesso a projeto (quais são mais pedidos) e
-            navegação (tabelas mais vistas, buscas mais frequentes).
+            Visibilidade de adoção sem sair do próprio Hub, com cada seção num
+            bloco próprio: acessos e usuários únicos (hoje/semana/mês) num gráfico
+            de coluna + linha configurável; log de logins recentes; funil de
+            retenção (quem só loga vs. quem de fato usa alguma funcionalidade) em
+            <strong>barras proporcionais</strong>; mapa de calor de dia × hora;
+            bases mais favoritadas; atividade de profiling; demanda por acesso a
+            projeto (quais são mais pedidos); e navegação (tabelas mais vistas,
+            buscas mais frequentes, scans de PII).
           </p>
           <figure>
-            <img src="../produto/images/31-admin-uso-hub-acessos.png" alt="Uso do Hub — acessos" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>Acessos e usuários únicos ao longo do tempo.</figcaption>
+            <img src="../produto/images/44-admin-uso-acessos.png" alt="Uso do Hub — acessos" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Acessos e usuários únicos ao longo do tempo, coluna + linha.</figcaption>
           </figure>
           <figure>
-            <img src="../produto/images/33-admin-uso-hub-funil-horario.png" alt="Funil de retenção e horário" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>Funil de retenção e mapa de calor de horário de uso.</figcaption>
+            <img src="../produto/images/45-admin-uso-funil-horario.png" alt="Funil de retenção e horário" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Funil de retenção em barras proporcionais e mapa de calor de horário de uso.</figcaption>
           </figure>
           <figure>
-            <img src="../produto/images/37-admin-uso-hub-solicitacoes-analytics.png" alt="Analytics de solicitações" onclick="openLightbox(this.src, this.alt)" />
+            <img src="../produto/images/46-admin-uso-favoritos-profiling.png" alt="Favoritos e atividade de profiling" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Bases mais favoritadas e toda execução de profiling registrada.</figcaption>
+          </figure>
+          <figure>
+            <img src="../produto/images/47-admin-uso-solicitacoes.png" alt="Analytics de solicitações" onclick="openLightbox(this.src, this.alt)" />
             <figcaption>Volume e taxa de aprovação de pedidos de acesso, projetos mais pedidos.</figcaption>
           </figure>
+          <figure>
+            <img src="../produto/images/48-admin-uso-navegacao.png" alt="Navegação e scans de PII" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Tabelas mais vistas, buscas mais frequentes e scans de PII.</figcaption>
+          </figure>
 
-          <h3 class="feature-title">Caches<span class="new-badge">novo</span></h3>
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>Caches</h3>
           <p>
             Aba de acompanhamento do cache de audit log — card de resumo da
             execução, botão "Atualizar agora" com seletor de projetos e opção
@@ -895,21 +1080,26 @@
             projeto. Detalhado em <a href="#cache-audit-log">Cache de audit
             log</a>.
           </p>
+          <figure>
+            <img src="../produto/images/42-admin-caches.png" alt="Aba Caches em Administração" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Card de resumo da execução, seletor de projetos e "forçar completo".</figcaption>
+          </figure>
         </section>
 
         <section class="doc-section" id="cache-audit-log">
-          <h2>Cache de audit log<span class="new-badge">novo</span></h2>
+          <span class="domain-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>Administração</span>
+          <h2>Cache de audit log</h2>
           <p class="section-summary">
-            Lineage, mapa de acesso, tabelas órfãs, FinOps (budget e scanner de
-            desperdício) e o scanner de uso de Storage dependem de escanear o
-            audit log de jobs do BigQuery no Cloud Logging — em projetos com muito
-            volume, fazer isso a cada clique é lento, consome a cota do Cloud
-            Logging e, em casos extremos, chegava a falhar
+            Lineage, mapa de acesso, tabelas órfãs, FinOps (budget, visão geral e
+            scanner de desperdício) e o scanner de uso de Storage dependem de
+            escanear o audit log de jobs do BigQuery no Cloud Logging — em
+            projetos com muito volume, fazer isso a cada clique é lento, consome a
+            cota do Cloud Logging e, em casos extremos, chegava a falhar
             (<code>Failed to fetch</code>). Essas telas leem um cache
             pré-computado por um job, não mais um scan ao vivo a cada consulta.
           </p>
 
-          <h3 class="feature-title">Job incremental diário</h3>
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 2v4"/><path d="M16 2v4"/></svg>Job incremental diário</h3>
           <ul>
             <li>Um job roda 1× por dia (madrugada, horário UTC) e atualiza o cache
               de todos os projetos conhecidos pelo Hub.</li>
@@ -923,7 +1113,7 @@
               explicitamente ("forçar completo", abaixo).</li>
           </ul>
 
-          <h3 class="feature-title">Aba "Caches" em Administração</h3>
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg>Aba "Caches" em Administração</h3>
           <p>
             Uma aba dedicada em <a href="#admin">Administração</a> dá
             visibilidade granular do cache, sem tocar o Cloud Logging:
@@ -953,8 +1143,8 @@
               <strong>"nunca rodou"</strong> de uma janela já preenchida.</li>
           </ul>
           <figure>
-            <img src="../produto/images/41-admin-caches.png" alt="Aba Caches em Administração" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>Aba "Caches": card de resumo da execução, seletor de projetos e "forçar completo", histórico de execuções filtrável e freshness por projeto × domínio.</figcaption>
+            <img src="../produto/images/43-admin-caches-historico.png" alt="Histórico de execuções e freshness do cache" onclick="openLightbox(this.src, this.alt)" />
+            <figcaption>Histórico de execuções filtrável (cada linha expande pro detalhe por projeto) e freshness por projeto × domínio.</figcaption>
           </figure>
 
           <div class="callout">
