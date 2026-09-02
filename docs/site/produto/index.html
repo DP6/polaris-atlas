@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Observability Hub — descritivo do produto</title>
+<title>Observability Hub — demonstrativo do produto</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Ubuntu:wght@300;400;700&display=swap');
 
@@ -17,6 +17,7 @@
     --color-text-muted: #5B626C;
     --color-text-inverse: #1D1D1B;
     --font-sans: 'Ubuntu', 'Verdana', system-ui, sans-serif;
+    --radius: 6px;
   }
 
   * { box-sizing: border-box; }
@@ -31,9 +32,10 @@
     overflow: hidden;
   }
 
+  svg { display: block; }
+
   /* --- Barra de 4 abas do site (produto / guia técnico / componentes /
-     desenvolvimento) — igual nas quatro páginas, ver docs/site/README
-     internamente nos comentários de cada index.html. */
+     desenvolvimento) — igual nas quatro páginas. */
   .page { display: flex; flex-direction: column; height: 100vh; }
 
   /* Compacta só nesta página (produto) — libera mais altura pro conteúdo
@@ -99,7 +101,7 @@
   /* --- Sidebar de navegação (scroll vertical), recolhível --------------- */
 
   .sidebar {
-    width: 280px;
+    width: 288px;
     flex: 0 0 auto;
     height: 100%;
     overflow-y: auto;
@@ -118,7 +120,7 @@
   .sidebar-toggle {
     position: absolute;
     top: 10px;
-    left: 280px;
+    left: 288px;
     transform: translateX(-50%);
     z-index: 5;
     width: 26px;
@@ -169,6 +171,9 @@
   }
 
   .sidebar-group-label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
     padding: 16px 16px 4px;
     font-size: 0.7rem;
     font-weight: 700;
@@ -176,6 +181,8 @@
     letter-spacing: 0.08em;
     color: var(--color-text-muted);
   }
+
+  .sidebar-group-label svg { width: 13px; height: 13px; flex: 0 0 auto; }
 
   .sidebar-item {
     display: block;
@@ -208,15 +215,21 @@
   }
 
   .sidebar-item.divider-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     font-size: 0.75rem;
-    padding-top: 10px;
-    padding-bottom: 10px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+    margin-top: 6px;
     color: var(--color-text-primary);
     border-left: 3px solid var(--color-primary);
   }
+
+  .sidebar-item.divider-item svg { width: 15px; height: 15px; flex: 0 0 auto; }
 
   /* --- Área principal ----------------------------------------------------- */
 
@@ -250,11 +263,13 @@
 
   .slide-caption {
     flex: 0 0 auto;
-    max-width: 900px;
+    max-width: 940px;
   }
 
   .slide-caption .domain-tag {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     font-size: 0.7rem;
     font-weight: 700;
     letter-spacing: 0.08em;
@@ -262,9 +277,11 @@
     color: var(--color-text-inverse);
     background: var(--color-primary);
     border-radius: 999px;
-    padding: 2px 10px;
+    padding: 3px 11px 3px 9px;
     margin-bottom: 8px;
   }
+
+  .slide-caption .domain-tag svg { width: 13px; height: 13px; }
 
   .slide-caption h2 {
     margin: 0 0 4px;
@@ -292,9 +309,9 @@
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
-    border-radius: 8px;
+    border-radius: 10px;
     border: 1px solid var(--color-border);
-    box-shadow: 0 16px 40px rgba(29, 29, 27, 0.14);
+    box-shadow: 0 18px 44px rgba(29, 29, 27, 0.16);
     cursor: zoom-in;
   }
 
@@ -309,6 +326,15 @@
     max-width: 640px;
   }
 
+  .slide.title-slide .title-mark {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 20px;
+    color: var(--color-primary);
+  }
+
+  .slide.title-slide .title-mark svg { width: 100%; height: 100%; }
+
   .slide.title-slide h2 {
     font-size: 2.5rem;
   }
@@ -319,6 +345,8 @@
 
   /* Slide divisor de seção ("contracapa") */
   .slide.divider-slide {
+    position: relative;
+    overflow: hidden;
     align-items: center;
     justify-content: center;
     text-align: center;
@@ -328,6 +356,8 @@
 
   .slide.divider-slide .slide-caption {
     max-width: 640px;
+    position: relative;
+    z-index: 1;
   }
 
   .slide.divider-slide .domain-tag {
@@ -346,6 +376,16 @@
     opacity: 0.85;
   }
 
+  .divider-icon {
+    position: absolute;
+    right: -48px;
+    bottom: -72px;
+    opacity: 0.14;
+    pointer-events: none;
+    color: var(--color-text-inverse);
+  }
+
+  .divider-icon svg { width: 340px; height: 340px; stroke-width: 1.4; }
 
   /* --- Lightbox ------------------------------------------------------------ */
 
@@ -423,257 +463,347 @@
   </div>
 
   <script>
+    // --- Ícones (lucide, MIT) por domínio / divisor de seção -------------
+    const P = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+    const ICONS = {
+      "Acesso": `<svg ${P}><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/></svg>`,
+      "Catálogo de Dados": `<svg ${P}><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>`,
+      "Qualidade": `<svg ${P}><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>`,
+      "Governança": `<svg ${P}><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>`,
+      "FinOps": `<svg ${P}><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
+      "Cloud Storage": `<svg ${P}><line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" x2="6.01" y1="16" y2="16"/><line x1="10" x2="10.01" y1="16" y2="16"/></svg>`,
+      "Favoritos": `<svg ${P}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
+      "Favoritos e Recentes": `<svg ${P}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
+      "Administração": `<svg ${P}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+      "BigQuery": `<svg ${P}><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>`,
+    };
+    const MARK = `<svg ${P}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M11 8v6"/><path d="M8 11h6"/></svg>`;
+
     // Cada slide: { title, description, image (opcional), domain (opcional,
-    // vira badge acima do título), type ('divider' = contracapa de seção,
-    // ausente + sem image = capa/encerramento, ausente + com image = tela
-    // normal do produto) }.
+    // vira badge com ícone acima do título), type ('divider' = contracapa
+    // de seção, ausente + sem image = capa/encerramento, ausente + com
+    // image = tela normal do produto) }.
     const slides = [
       {
         title: "Observability Hub",
-        description: "Plataforma de observabilidade de dados no GCP — catálogo, qualidade, lineage, PII, acesso, freshness, FinOps e Cloud Storage em um só lugar.",
+        description: "Plataforma de observabilidade de dados no GCP — catálogo, qualidade, lineage, PII, mapa de acesso, freshness, FinOps e Cloud Storage num só lugar. Um tour pelas telas do produto.",
       },
       {
         title: "Login",
+        domain: "Acesso",
         description: "Acesso via conta Google (OAuth) — sem senha própria, sem cadastro manual. Quem pode entrar é controlado por uma allowlist de domínio.",
         image: "01-login.png",
       },
+
       {
         type: "divider",
         title: "BigQuery",
-        description: "Catálogo, qualidade, lineage, PII, governança e FinOps — tudo que o Hub observa em datasets e tabelas do BigQuery.",
+        description: "Catálogo de Dados, análise de tabela (qualidade, PII, lineage), governança e FinOps — tudo que o Hub observa em datasets e tabelas do BigQuery.",
       },
       {
-        title: "Catálogo — dataset",
-        domain: "Catálogo",
-        description: "Inventário navegável de todas as tabelas de um dataset, com tamanho, linhas, tipo e data de atualização — visão de raio-X do BigQuery sem escrever uma query.",
-        image: "02-catalogo-dataset-raw.png",
-      },
-      {
-        title: "Partições de uma tabela",
-        domain: "Catálogo",
-        description: "Detalha as partições de uma tabela particionada — quantidade de linhas por partição, sem precisar rodar SQL manualmente.",
-        image: "03-catalogo-particoes.png",
+        title: "Catálogo de Dados — visão geral",
+        domain: "Catálogo de Dados",
+        description: "A porta de entrada: total de datasets, tabelas e volume ocupado no projeto, busca de tabela por qualquer dataset e a grade de datasets com a distribuição de SLA de freshness de cada um — tudo sem escrever uma query.",
+        image: "02-catalogo-visao-geral.png",
       },
       {
         title: "Busca de tabelas",
-        domain: "Catálogo",
-        description: "Encontra em quais datasets uma tabela ou partição existe (ou não existe) dentro do projeto — útil pra confirmar cobertura de um pipeline.",
-        image: "19-catalogo-buscar-tabelas.png",
+        domain: "Catálogo de Dados",
+        description: "Procura uma tabela ou partição em todos os datasets do projeto de uma vez, com quatro modos de comparação — igual a, contém, não contém, diferente de. Útil pra checar a cobertura de um pipeline.",
+        image: "03-catalogo-busca.png",
       },
       {
-        title: "Qualidade — schema",
-        domain: "Qualidade",
-        description: "Schema completo de uma tabela — nome, tipo e nullability de cada coluna, direto do INFORMATION_SCHEMA.",
-        image: "04-qualidade-schema.png",
+        title: "Dataset",
+        domain: "Catálogo de Dados",
+        description: "Inventário de um dataset — região, nº de tabelas e views, tamanho, linhas e a pior faixa de freshness. Cada linha tem 'Ver partições' e 'Analisar', que abre o módulo de análise da tabela.",
+        image: "04-catalogo-dataset.png",
       },
       {
-        title: "Qualidade — configurar análise",
+        title: "Partições de uma tabela",
+        domain: "Catálogo de Dados",
+        description: "Linhas por partição de uma tabela particionada, sem rodar SQL — útil pra confirmar se a carga do dia chegou ou achar uma partição vazia.",
+        image: "05-catalogo-particoes.png",
+      },
+
+      {
+        title: "Análise de uma tabela",
         domain: "Qualidade",
-        description: "Antes de rodar o profiling, o Hub mostra o SQL gerado e estima o custo em bytes/US$ — nunca surpresa na fatura do BigQuery.",
-        image: "05-qualidade-analise-config.png",
+        description: "Ao abrir uma tabela pra analisar, sete módulos num só lugar: schema, análise de qualidade, fingerprint de PII, sugestão de tipo de coluna, histórico, mapa de acesso e lineage.",
+        image: "06-analise-chooser.png",
       },
       {
-        title: "Qualidade — resultado do profiling",
+        title: "Schema",
         domain: "Qualidade",
-        description: "Completude, unicidade e duplicatas coluna a coluna, com tipo lógico detectado automaticamente (id, e-mail, categórico, data...) e flag de qualidade.",
-        image: "06-qualidade-analise-resultado.png",
+        description: "Nome, tipo e nullability de cada coluna, com marcação de partição e cluster — direto do INFORMATION_SCHEMA, sem custo de query.",
+        image: "07-qualidade-schema.png",
       },
       {
-        title: "Qualidade — histórico",
+        title: "Configurar o profiling",
         domain: "Qualidade",
-        description: "Cada execução de profiling fica salva — dá pra acompanhar densidade e duplicatas ao longo do tempo e pegar regressão de qualidade cedo.",
-        image: "07-qualidade-historico.png",
+        description: "Antes de rodar: amostragem, método de unicidade (exato ou aproximado por HLL) e coluna de data. Nada é executado sem passar por aqui.",
+        image: "08-qualidade-config.png",
       },
       {
-        title: "Lineage",
+        title: "SQL gerado e custo estimado",
         domain: "Qualidade",
-        description: "Reconstrói de onde os dados de uma tabela vêm e pra onde vão, a partir dos jobs de LOAD/QUERY/EXTRACT do BigQuery — inclusive buckets do GCS como nó.",
-        image: "08-qualidade-lineage.png",
+        description: "O Hub mostra o SQL exato que vai rodar e estima bytes processados e custo em US$ — a decisão de gastar a query é sempre do usuário, nunca surpresa na fatura.",
+        image: "09-qualidade-sql-custo.png",
       },
       {
-        title: "Fingerprinting de PII",
+        title: "Resultado do profiling",
         domain: "Qualidade",
-        description: "Escaneia colunas por heurística de nome + amostra de dado real, sinalizando quais têm alta confiança de conter informação pessoal (e-mail, CPF, telefone...).",
-        image: "09-qualidade-pii.png",
+        description: "Completude, unicidade (HLL) e duplicatas coluna a coluna, com o tipo lógico detectado (data, categórica, chave, numérica…) e uma flag de qualidade por coluna.",
+        image: "10-qualidade-resultado.png",
+      },
+      {
+        title: "Quality Score e cardinalidade",
+        domain: "Qualidade",
+        description: "Um score composto (completude média, densidade geral e cobertura de tipo lógico) e a cardinalidade aproximada de cada coluna, com a contagem exata no hover.",
+        image: "11-qualidade-score.png",
+      },
+      {
+        title: "Histórico de profiling",
+        domain: "Qualidade",
+        description: "Toda execução fica salva — a evolução de densidade e duplicatas ao longo do tempo pega regressão de qualidade cedo.",
+        image: "12-qualidade-historico.png",
+      },
+      {
+        title: "Fingerprint de PII",
+        domain: "Qualidade",
+        description: "Escaneia por heurística de nome + amostra real de dado (via TABLESAMPLE), contando matches de padrão dentro do próprio BigQuery — a API do Hub só recebe contagens agregadas, nunca o valor da coluna.",
+        image: "13-pii.png",
       },
       {
         title: "Mapa de acesso",
         domain: "Qualidade",
-        description: "Quem leu ou escreveu numa tabela recentemente, via audit logs — confirma se ela ainda tem consumidor antes de arquivar ou mudar o schema.",
-        image: "10-qualidade-acesso.png",
+        description: "Quem leu ou escreveu na tabela nos últimos 30 dias, via audit log — confirma se ela ainda tem consumidor antes de arquivar, apagar ou mudar o schema.",
+        image: "14-mapa-acesso.png",
+      },
+      {
+        title: "Lineage",
+        domain: "Qualidade",
+        description: "Grafo de dependência em tela cheia, reconstruído dos jobs de LOAD / QUERY / EXTRACT do BigQuery — com painéis de impacto de mudança de schema, fontes e consumidores diretos, e buckets do GCS como nó.",
+        image: "15-lineage.png",
       },
       {
         title: "Pastas de profiling",
         domain: "Qualidade",
-        description: "Resultados de profiling podem ser salvos em pastas nomeadas pra comparar execuções lado a lado — útil antes/depois de uma mudança de pipeline.",
-        image: "40-qualidade-pastas-profiling.png",
+        description: "Recortes de runs de profiling salvos em pastas nomeadas, pra comparar depois — ex: métodos de unicidade ou janelas de data diferentes de uma mesma tabela.",
+        image: "16-qualidade-pastas.png",
       },
       {
-        title: "Freshness",
+        title: "Pasta de comparação",
+        domain: "Qualidade",
+        description: "Cada pasta guarda uma cópia do resultado no momento em que foi salvo — uma mudança futura na lógica de profiling não altera retroativamente o que já está arquivado.",
+        image: "17-qualidade-pasta-detalhe.png",
+      },
+
+      {
+        title: "Governança — visão geral",
         domain: "Governança",
-        description: "Monitora se as tabelas estão sendo atualizadas dentro do esperado, com faixas de SLA (12h, 24h, 48h, 7 dias, 1 mês) por dataset.",
-        image: "11-governanca-freshness.png",
+        description: "Freshness com SLA e tabelas sem consumidor conhecido — as duas frentes de governança do catálogo, cada uma no seu card.",
+        image: "18-governanca-visao-geral.png",
       },
       {
-        title: "Tabelas sem consumidor",
+        title: "Freshness com SLA",
         domain: "Governança",
-        description: "Sinaliza tabelas que não aparecem como lidas em nenhum job dentro do período analisado — mesmo que só tenham sido escritas e nunca consultadas.",
-        image: "12-governanca-tabelas-sem-consumidor-config.png",
+        description: "Cada tabela classificada contra faixas de SLA fixas (12h, 24h, 48h, 7 dias, 1 mês) a partir da última modificação — a distribuição de cada dataset em três barras: no prazo, atenção, estourado.",
+        image: "19-freshness.png",
       },
       {
-        title: "Tabelas sem consumidor — diagnóstico",
+        title: "Tabelas sem consumidor — escopo",
         domain: "Governança",
-        description: "Quando o resultado vem vazio, o Hub explica as causas prováveis (audit log desabilitado, role faltando) com o comando gcloud pronto pra investigar.",
-        image: "13-governanca-tabelas-sem-consumidor-resultado.png",
+        description: "Escolhe os datasets e a janela antes de rodar; escanear o projeto inteiro pode ser lento em produção.",
+        image: "20-orfas-config.png",
       },
       {
-        title: "FinOps — candidatas a particionamento",
+        title: "Tabelas sem consumidor — resultado",
+        domain: "Governança",
+        description: "Tabelas que não aparecem lidas em nenhum job na janela — mesmo que só tenham sido escritas e nunca consultadas — com o custo de storage estimado de cada uma.",
+        image: "21-orfas-resultado.png",
+      },
+
+      {
+        title: "FinOps — visão geral",
         domain: "FinOps",
-        description: "Sinaliza tabelas grandes ainda não particionadas com coluna de data candidata — com economia estimada a partir do custo real observado nos últimos 30 dias.",
-        image: "14-finops-scanner-particionamento.png",
+        description: "Gasto do período, meta mensal, projeção e nº de tabelas de baixo score no topo; o custo ao longo do período num gráfico de barras + linha acumulada, com troca de granularidade (dia/mês) e de tipo (tudo/query/storage); e os cards de Scanner, Budget e Configurar budget à mão.",
+        image: "22-finops-visao-geral.png",
       },
       {
-        title: "FinOps — sugestão de tipo de coluna",
+        title: "Eficiência de custo e Top ofensores",
         domain: "FinOps",
-        description: "Amostra dados reais via TABLESAMPLE pra sugerir tipos de coluna mais baratos (ex: STRING → FLOAT64) — com estimativa de custo antes de rodar.",
-        image: "15-finops-scanner-tipos-coluna-config.png",
+        description: "Um score de eficiência por tabela (particionamento, utilização e eficiência de scan) e o ranking dos piores — clicar numa linha abre a decomposição do score.",
+        image: "23-finops-eficiencia.png",
       },
       {
-        title: "FinOps — resultado de tipos de coluna",
+        title: "Scanner de desperdício",
         domain: "FinOps",
-        description: "Tipo atual vs. sugerido por coluna, com a economia mensal estimada de cada troca.",
-        image: "16-finops-scanner-tipos-coluna-resultado.png",
+        description: "Duas frentes de desperdício de BigQuery: candidatas a particionamento e sugestão de tipo de coluna.",
+        image: "24-finops-scanner.png",
       },
       {
-        title: "FinOps — budget de custo",
+        title: "Candidatas a particionamento — escopo",
         domain: "FinOps",
-        description: "Estima o custo do mês corrente via audit logs de jobs do BigQuery (bytes cobrados) + preço público on-demand — sem depender do Cloud Billing Export.",
-        image: "17-finops-budget-config.png",
+        description: "Escolhe o conjunto de tabelas antes de rodar.",
+        image: "25-finops-particionamento-config.png",
       },
       {
-        title: "FinOps — custo por agrupamento",
+        title: "Candidatas a particionamento — resultado",
         domain: "FinOps",
-        description: "Custo até agora, média diária e projeção do mês, quebrados por dataset, tabela, usuário, dia, mês ou ano.",
-        image: "18-finops-budget-resultado.png",
+        description: "Tabelas ≥ 1 GB, sem partição, com coluna de data candidata — com a economia estimada pelo custo real de scan dos últimos 30 dias.",
+        image: "26-finops-particionamento-resultado.png",
       },
+      {
+        title: "Tipos de coluna — escopo",
+        domain: "FinOps",
+        description: "Diferente das outras telas do scanner, esta amostra dado real via TABLESAMPLE e tem custo de BigQuery — escopo + estimativa antes de escanear.",
+        image: "27-finops-tipos-coluna-config.png",
+      },
+      {
+        title: "Tipos de coluna — resultado",
+        domain: "FinOps",
+        description: "Tipo atual → sugerido por coluna (ex: STRING → INT64), com a economia mensal estimada de cada troca.",
+        image: "28-finops-tipos-coluna-resultado.png",
+      },
+      {
+        title: "Budget de custo — janela",
+        domain: "FinOps",
+        description: "Estima o custo por audit log de jobs (bytes cobrados) + preço público on-demand, sem depender do Cloud Billing Export. A janela é escolhível — 7, 15, 30 dias ou um valor livre (teto de 31 dias, retenção do cache).",
+        image: "29-finops-budget-config.png",
+      },
+      {
+        title: "Budget de custo — resultado",
+        domain: "FinOps",
+        description: "Custo até agora, média diária, projeção mensal (run-rate) e a janela analisada; o custo quebrado por tabela / dataset / usuário / dia / mês / ano e as queries mais caras.",
+        image: "30-finops-budget-resultado.png",
+      },
+      {
+        title: "Configurar metas de budget",
+        domain: "FinOps",
+        description: "Metas de custo mensais por projeto, dataset ou tabela — a meta de escopo 'projeto' vira a linha de referência no gráfico de custo. Cada usuário tem as suas.",
+        image: "31-finops-budget-dialog.png",
+      },
+
       {
         type: "divider",
         title: "Cloud Storage",
-        description: "Catálogo de buckets, navegação de objetos e scanner de desperdício — a mesma governança do BigQuery, agora pra dados em bucket.",
+        description: "Catálogo de buckets e scanner de desperdício — a mesma governança do BigQuery, agora pra dados em bucket. Buckets também entram como nó no grafo de lineage.",
       },
       {
-        title: "Cloud Storage — buckets",
+        title: "Cloud Storage — visão geral",
         domain: "Cloud Storage",
-        description: "Catálogo de buckets do projeto — storage class, tamanho, quantidade de objetos e regras de lifecycle já configuradas.",
-        image: "20-storage-buckets.png",
+        description: "Catálogo de buckets e scanner de desperdício, cada um no seu card.",
+        image: "32-storage-visao-geral.png",
       },
       {
-        title: "Cloud Storage — navegação de bucket",
+        title: "Buckets",
         domain: "Cloud Storage",
-        description: "Explora o conteúdo de um bucket pasta a pasta, com tamanho e storage class de cada objeto.",
-        image: "21-storage-bucket-detalhe.png",
+        description: "Buckets do projeto — storage class, tamanho, nº de objetos, região e regras de lifecycle já configuradas.",
+        image: "33-storage-buckets.png",
       },
       {
-        title: "Cloud Storage — arquivos",
+        title: "Scanner de desperdício — config",
         domain: "Cloud Storage",
-        description: "Detalhe de uma pasta dentro do bucket — nome, tamanho e data de modificação de cada arquivo.",
-        image: "22-storage-bucket-pasta.png",
+        description: "Objetos em storage class STANDARD parados há muito tempo, candidatos a mudar pra uma classe mais barata (Nearline, Coldline ou Archive).",
+        image: "34-storage-scanner-config.png",
       },
       {
-        title: "Cloud Storage — scanner de desperdício",
+        title: "Scanner de desperdício — resultado",
         domain: "Cloud Storage",
-        description: "Sinaliza objetos em storage class STANDARD parados há muito tempo, candidatos a mudar pra uma classe mais barata (Nearline/Coldline/Archive).",
-        image: "23-storage-scanner-config.png",
+        description: "Economia estimada por bucket, com nível de confiança — 'leitura confirmada' quando o audit log de leitura de objeto está habilitado no projeto, 'sem leitura confirmada' quando a checagem cai só pra idade + config.",
+        image: "35-storage-scanner-resultado.png",
+      },
+
+      {
+        type: "divider",
+        title: "Favoritos e Recentes",
+        description: "Datasets, tabelas e histórico de navegação de cada usuário — agora com tela própria, além do acesso rápido na sidebar.",
       },
       {
-        title: "Cloud Storage — resultado do scanner",
-        domain: "Cloud Storage",
-        description: "Economia estimada por bucket, com nível de confiança — 'leitura confirmada' quando o audit log de acesso a objeto está habilitado, 'baseado em configuração' quando não.",
-        image: "24-storage-scanner-resultado.png",
+        title: "Favoritos",
+        domain: "Favoritos",
+        description: "Tudo que você marcou com estrela neste projeto, em tela cheia — tabelas e datasets favoritos, com apelido editável.",
+        image: "36-favoritos.png",
       },
+      {
+        title: "Recentes",
+        domain: "Favoritos",
+        description: "As tabelas que você abriu recentemente neste projeto, da mais recente pra mais antiga.",
+        image: "37-recentes.png",
+      },
+
       {
         type: "divider",
         title: "Administração",
-        description: "Solicitação e liberação de acesso, usuários, grupos do Workspace e uso do próprio Hub — quem pode ver o quê, e quem está usando.",
+        description: "Solicitação e liberação de acesso, usuários, grupos do Workspace, caches e uso do próprio Hub — quem pode ver o quê, e quem está usando.",
       },
       {
-        title: "Solicitar acesso a um projeto",
-        domain: "Acesso",
-        description: "Qualquer usuário pode pedir acesso a um ou mais projetos direto pela interface — um admin do Hub revisa e libera (ou nega) cada um.",
-        image: "25-acesso-solicitar-projeto.png",
-      },
-      {
-        title: "Solicitação enviada",
-        domain: "Acesso",
-        description: "Confirmação imediata — o pedido entra na fila de aprovação do admin, sem precisar de e-mail ou ticket à parte.",
-        image: "26-acesso-solicitacao-confirmada.png",
-      },
-      {
-        title: "Admin — usuários",
+        title: "Admin — por usuário",
         domain: "Administração",
-        description: "Controla quem é administrador do Hub e a quais projetos GCP cada usuário tem acesso, num só lugar.",
-        image: "27-admin-por-usuario.png",
+        description: "Quem é administrador do Hub e a quais projetos GCP cada usuário tem acesso. O login em si continua controlado pela allowlist do OAuth, fora daqui.",
+        image: "38-admin-usuarios.png",
       },
       {
         title: "Admin — por projeto",
         domain: "Administração",
-        description: "Mesma informação, organizada por projeto — inclui a opção de liberar um projeto pra todo mundo de uma vez.",
-        image: "28-admin-por-projeto.png",
+        description: "A visão inversa — escolhe um projeto e vê quem tem acesso, com a opção de liberar pra todo mundo de uma vez e um checklist que testa na hora se a service account do Hub consegue ler aquele projeto.",
+        image: "39-admin-por-projeto.png",
       },
       {
         title: "Admin — grupos",
         domain: "Administração",
-        description: "Grupos do Google Workspace integrados via domain-wide delegation — os membros são puxados automaticamente, sem manter lista manual duplicada.",
-        image: "29-admin-grupos.png",
+        description: "Grupos do Google Workspace via domain-wide delegation — membros puxados automaticamente, sem lista manual duplicada; cada membro herda os projetos liberados do grupo.",
+        image: "40-admin-grupos.png",
       },
       {
-        title: "Admin — solicitações de acesso",
+        title: "Admin — solicitações",
         domain: "Administração",
-        description: "Fila de pedidos de acesso a projeto, com quem pediu, status e quem resolveu.",
-        image: "30-admin-solicitacoes.png",
+        description: "Fila de pedidos de acesso (e de inclusão de projeto novo) — quem pediu, tipo, status e quem resolveu.",
+        image: "41-admin-solicitacoes.png",
+      },
+      {
+        title: "Admin — caches",
+        domain: "Administração",
+        description: "Acompanhamento do cache de audit log — resumo da execução, 'Atualizar agora' com seletor de projetos e opção de forçar completo.",
+        image: "42-admin-caches.png",
+      },
+      {
+        title: "Caches — histórico e freshness",
+        domain: "Administração",
+        description: "Histórico de execuções filtrável (cada linha expande pro detalhe por projeto) e freshness do cache por projeto × domínio.",
+        image: "43-admin-caches-historico.png",
       },
       {
         title: "Uso do Hub — acessos",
         domain: "Administração",
-        description: "Quantos acessos e usuários únicos o Hub teve hoje, na semana e no mês — visibilidade de adoção sem sair da própria ferramenta.",
-        image: "31-admin-uso-hub-acessos.png",
+        description: "Acessos e usuários únicos (hoje / semana / mês) num gráfico de coluna + linha, com granularidade e período configuráveis, e o log de acessos recentes.",
+        image: "44-admin-uso-acessos.png",
       },
       {
-        title: "Uso do Hub — acessos recentes",
+        title: "Uso do Hub — funil e horário",
         domain: "Administração",
-        description: "Log dos últimos logins, com quem e quando — paginado pra não sobrecarregar a tela.",
-        image: "32-admin-uso-hub-acessos-recentes.png",
+        description: "Funil de retenção (quem só loga vs. quem de fato usa) em barras proporcionais, e o mapa de calor de dia × hora — sinal de quando é seguro fazer manutenção.",
+        image: "45-admin-uso-funil-horario.png",
       },
       {
-        title: "Uso do Hub — funil de retenção e horário",
+        title: "Uso do Hub — favoritos e profiling",
         domain: "Administração",
-        description: "Quantos usuários só logam vs. de fato usam alguma funcionalidade, e em que dia/horário o uso se concentra — sinal de quando é seguro fazer manutenção.",
-        image: "33-admin-uso-hub-funil-horario.png",
+        description: "Bases mais favoritadas e toda execução de profiling registrada — quem rodou, quando, densidade e duplicatas.",
+        image: "46-admin-uso-favoritos-profiling.png",
       },
       {
-        title: "Uso do Hub — favoritos",
+        title: "Uso do Hub — solicitações",
         domain: "Administração",
-        description: "Quais bases e tabelas mais viram favorito entre os usuários — sinal do que é mais consultado no dia a dia.",
-        image: "34-admin-uso-hub-favoritos.png",
-      },
-      {
-        title: "Uso do Hub — atividade de profiling",
-        domain: "Administração",
-        description: "Toda execução de profiling registrada — quem rodou, quando, e o resultado de densidade/duplicatas.",
-        image: "35-admin-uso-hub-profiling.png",
-      },
-      {
-        title: "Uso do Hub — solicitações de acesso",
-        domain: "Administração",
-        description: "Total de pedidos de acesso, taxa de aprovação e quais projetos são mais pedidos — visibilidade de demanda por dado.",
-        image: "37-admin-uso-hub-solicitacoes-analytics.png",
+        description: "Volume e taxa de aprovação de pedidos de acesso e quais projetos são mais pedidos.",
+        image: "47-admin-uso-solicitacoes.png",
       },
       {
         title: "Uso do Hub — navegação",
         domain: "Administração",
-        description: "Tabelas mais vistas e buscas mais frequentes — o que as pessoas mais procuram no catálogo, sem precisar perguntar.",
-        image: "38-admin-uso-hub-navegacao.png",
+        description: "Tabelas mais vistas, buscas mais frequentes e scans de PII — o que as pessoas procuram no catálogo, sem precisar perguntar.",
+        image: "48-admin-uso-navegacao.png",
       },
+
       {
         title: "Obrigado",
         description: "Esse foi um resumo das principais telas do Observability Hub. Dúvidas ou sugestões? Fale com o time responsável pelo Hub na DP6.",
@@ -705,10 +835,21 @@
 
         const caption = document.createElement('div');
         caption.className = 'slide-caption';
-        caption.innerHTML =
-          (slide.domain ? `<span class="domain-tag">${slide.domain}</span>` : '') +
-          `<h2>${slide.title}</h2><p>${slide.description}</p>`;
+        const tag = slide.domain
+          ? `<span class="domain-tag">${ICONS[slide.domain] || ''}<span>${slide.domain}</span></span>`
+          : '';
+        const mark = (!slide.image && slide.type !== 'divider')
+          ? `<div class="title-mark">${MARK}</div>`
+          : '';
+        caption.innerHTML = mark + tag + `<h2>${slide.title}</h2><p>${slide.description}</p>`;
         section.appendChild(caption);
+
+        if (slide.type === 'divider') {
+          const wm = document.createElement('div');
+          wm.className = 'divider-icon';
+          wm.innerHTML = ICONS[slide.title] || '';
+          section.appendChild(wm);
+        }
 
         if (slide.image) {
           const figure = document.createElement('div');
@@ -716,6 +857,7 @@
           const img = document.createElement('img');
           img.src = 'images/' + slide.image;
           img.alt = slide.title;
+          img.loading = 'lazy';
           img.addEventListener('click', () => openLightbox(img.src, img.alt));
           figure.appendChild(img);
           section.appendChild(figure);
@@ -728,7 +870,7 @@
           const item = document.createElement('a');
           item.className = 'sidebar-item divider-item';
           item.href = '#slide-' + i;
-          item.textContent = slide.title;
+          item.innerHTML = (ICONS[slide.title] || '') + `<span>${slide.title}</span>`;
           sidebarEl.appendChild(item);
           lastGroupLabel = null;
         } else {
@@ -736,7 +878,7 @@
           if (groupLabel && groupLabel !== lastGroupLabel) {
             const label = document.createElement('div');
             label.className = 'sidebar-group-label';
-            label.textContent = groupLabel;
+            label.innerHTML = (ICONS[groupLabel] || '') + `<span>${groupLabel}</span>`;
             sidebarEl.appendChild(label);
             lastGroupLabel = groupLabel;
           }
