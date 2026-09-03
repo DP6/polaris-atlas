@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Observability Hub — demonstrativo do produto</title>
+<link rel="icon" type="image/png" href="../assets/favicon.png" />
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Ubuntu:wght@300;400;700&display=swap');
 
@@ -315,32 +316,73 @@
     cursor: zoom-in;
   }
 
-  /* Slide de capa/encerramento — sem screenshot, texto centralizado */
+  /* Slide de capa / encerramento — sem screenshot, texto centralizado, com o
+     grafismo da marca DP6 ocupando a largura toda ao fundo. Mesmo padrão da
+     hero do Polaris (grafismo em marca d'água + texto por cima), adaptado ao
+     fundo claro deste site. */
   .slide.title-slide {
+    position: relative;
+    overflow: hidden;
     align-items: center;
     justify-content: center;
     text-align: center;
+    background: var(--color-bg-surface);
+  }
+
+  .slide.title-slide::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: url('../assets/dp6-grafismo.png') no-repeat center;
+    background-size: 118% auto;
+    opacity: 0.08;
+    pointer-events: none;
   }
 
   .slide.title-slide .slide-caption {
-    max-width: 640px;
+    position: relative;
+    z-index: 1;
+    max-width: 720px;
   }
-
-  .slide.title-slide .title-mark {
-    width: 64px;
-    height: 64px;
-    margin: 0 auto 20px;
-    color: var(--color-primary);
-  }
-
-  .slide.title-slide .title-mark svg { width: 100%; height: 100%; }
 
   .slide.title-slide h2 {
-    font-size: 2.5rem;
+    font-size: clamp(2rem, 5vw, 3.25rem);
+    letter-spacing: -0.02em;
   }
 
   .slide.title-slide p {
     font-size: 1.125rem;
+  }
+
+  /* Os domínios do app em chips — o eco da faixa "Nossas áreas" da hero do
+     Polaris, citando o que o Hub cobre. */
+  .cover-topics { margin-top: 28px; }
+
+  .cover-topics-label {
+    display: block;
+    margin-bottom: 12px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+  }
+
+  .cover-topics-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+  }
+
+  .cover-chip {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    padding: 5px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.72);
+    color: var(--color-text-primary);
   }
 
   /* Slide divisor de seção ("contracapa") */
@@ -477,16 +519,18 @@
       "Administração": `<svg ${P}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
       "BigQuery": `<svg ${P}><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>`,
     };
-    const MARK = `<svg ${P}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M11 8v6"/><path d="M8 11h6"/></svg>`;
 
     // Cada slide: { title, description, image (opcional), domain (opcional,
-    // vira badge com ícone acima do título), type ('divider' = contracapa
-    // de seção, ausente + sem image = capa/encerramento, ausente + com
-    // image = tela normal do produto) }.
+    // vira badge com ícone acima do título), topics (opcional, só nos slides
+    // de capa/encerramento — lista de domínios em chips, com topicsLabel), type
+    // ('divider' = contracapa de seção, ausente + sem image = capa/encerramento,
+    // ausente + com image = tela normal do produto) }.
     const slides = [
       {
         title: "Observability Hub",
-        description: "Plataforma de observabilidade de dados no GCP — catálogo, qualidade, lineage, PII, mapa de acesso, freshness, FinOps e Cloud Storage num só lugar. Um tour pelas telas do produto.",
+        description: "Plataforma de observabilidade de dados no GCP: um só lugar pra saber o que existe nos datasets, se está saudável, quem usou, quanto custa e o que dá pra economizar — sem escrever uma query. Este é um tour pelas telas do produto.",
+        topicsLabel: "O que o Hub cobre",
+        topics: ["Catálogo de Dados", "Qualidade e schema drift", "Lineage e tabelas órfãs", "Fingerprint de PII", "Mapa de acesso", "Freshness com SLA", "FinOps", "Cloud Storage", "Favoritos e Recentes", "Administração"],
       },
       {
         title: "Login",
@@ -807,6 +851,8 @@
       {
         title: "Obrigado",
         description: "Esse foi um resumo das principais telas do Observability Hub. Dúvidas ou sugestões? Fale com o time responsável pelo Hub na DP6.",
+        topicsLabel: "Tudo isso num só lugar",
+        topics: ["Catálogo de Dados", "Qualidade e schema drift", "Lineage e tabelas órfãs", "Fingerprint de PII", "Mapa de acesso", "Freshness com SLA", "FinOps", "Cloud Storage", "Favoritos e Recentes", "Administração"],
       },
     ];
 
@@ -838,10 +884,11 @@
         const tag = slide.domain
           ? `<span class="domain-tag">${ICONS[slide.domain] || ''}<span>${slide.domain}</span></span>`
           : '';
-        const mark = (!slide.image && slide.type !== 'divider')
-          ? `<div class="title-mark">${MARK}</div>`
+        const topics = slide.topics
+          ? `<div class="cover-topics"><span class="cover-topics-label">${slide.topicsLabel || 'No app'}</span>` +
+            `<div class="cover-topics-list">${slide.topics.map((t) => `<span class="cover-chip">${t}</span>`).join('')}</div></div>`
           : '';
-        caption.innerHTML = mark + tag + `<h2>${slide.title}</h2><p>${slide.description}</p>`;
+        caption.innerHTML = tag + `<h2>${slide.title}</h2><p>${slide.description}</p>` + topics;
         section.appendChild(caption);
 
         if (slide.type === 'divider') {
