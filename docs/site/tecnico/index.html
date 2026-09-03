@@ -378,12 +378,14 @@
     border-right: none;
   }
 
+  /* O toggle é filho da .toc (que é sticky) e fica ancorado ao topo-direito
+     dela — assim acompanha a coluna abaixo da faixa de topo em vez de flutuar
+     sobre ela, como acontecia com position: fixed. */
   .menu-toggle {
-    position: fixed;
-    top: 52px;
-    left: 288px;
-    transform: translateX(-50%);
-    z-index: 25;
+    position: absolute;
+    top: 10px;
+    right: 6px;
+    z-index: 5;
     width: 26px;
     height: 26px;
     border-radius: 50%;
@@ -397,12 +399,20 @@
     font-size: 0.8rem;
     line-height: 1;
     color: var(--color-text-primary);
-    transition: left 0.18s ease;
     padding: 0;
   }
 
   .menu-toggle:hover { background: var(--color-bg-muted); }
-  .menu-collapsed .menu-toggle { left: 8px; transform: none; }
+
+  /* Toc recolhida não tem largura (e overflow: hidden) — o toggle vira fixo no
+     canto pra escapar do clip e continuar clicável. */
+  .menu-collapsed .menu-toggle {
+    position: fixed;
+    top: 52px;
+    left: 8px;
+    right: auto;
+    z-index: 25;
+  }
 
   @media (max-width: 900px) {
     .toc { display: none; }
@@ -453,8 +463,8 @@
     </header>
 
     <div class="layout">
-      <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Ocultar menu">‹</button>
       <nav class="toc" id="toc">
+        <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Ocultar menu">‹</button>
         <div class="toc-group-label">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
           Início

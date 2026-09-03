@@ -125,11 +125,21 @@
     font-weight: 700;
   }
 
+  /* Largura ampla em telas grandes; o texto corrido continua limitado a uma
+     medida legível (regra abaixo), então quem aproveita o espaço extra são o
+     diagrama, a tabela de gates e os quadros de resumo. Em telas pequenas o
+     flex manda e o max-width nunca é atingido. */
   .content {
     flex: 1 1 auto;
     min-width: 0;
     padding: 40px 56px 120px;
-    max-width: 840px;
+    max-width: 1180px;
+  }
+
+  .content section.doc-section > p,
+  .content section.doc-section > ul:not(.collab-list),
+  .content section.doc-section > ol {
+    max-width: 860px;
   }
 
   .content h1 { font-size: 2rem; margin: 0 0 8px; }
@@ -387,12 +397,14 @@
     border-right: none;
   }
 
+  /* O toggle é filho da .toc (que é sticky) e fica ancorado ao topo-direito
+     dela — assim acompanha a coluna abaixo da faixa de topo em vez de flutuar
+     sobre ela, como acontecia com position: fixed. */
   .menu-toggle {
-    position: fixed;
-    top: 52px;
-    left: 260px;
-    transform: translateX(-50%);
-    z-index: 25;
+    position: absolute;
+    top: 10px;
+    right: 6px;
+    z-index: 5;
     width: 26px;
     height: 26px;
     border-radius: 50%;
@@ -406,12 +418,20 @@
     font-size: 0.8rem;
     line-height: 1;
     color: var(--color-text-primary);
-    transition: left 0.18s ease;
     padding: 0;
   }
 
   .menu-toggle:hover { background: var(--color-bg-muted); }
-  .menu-collapsed .menu-toggle { left: 8px; transform: none; }
+
+  /* Toc recolhida não tem largura (e overflow: hidden) — o toggle vira fixo no
+     canto pra escapar do clip e continuar clicável. */
+  .menu-collapsed .menu-toggle {
+    position: fixed;
+    top: 52px;
+    left: 8px;
+    right: auto;
+    z-index: 25;
+  }
 
   @media (max-width: 900px) {
     .toc { display: none; }
@@ -460,8 +480,8 @@
     </header>
 
     <div class="layout">
-      <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Ocultar menu">‹</button>
       <nav class="toc" id="toc">
+        <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Ocultar menu">‹</button>
         <div class="toc-group-label">Neste documento</div>
         <a href="#introducao">Introdução</a>
         <a href="#colaboradores">Colaboradores do projeto</a>
