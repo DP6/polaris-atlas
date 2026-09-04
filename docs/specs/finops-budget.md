@@ -1,6 +1,22 @@
 # Spec — Domínio: FinOps — Budget de custo
 
-**Versão:** 1.10 (fix `fix/finops-projection-days-elapsed` — a projeção
+**Versão:** 1.11 (2026-09-04 — planejada, ver "Histórico mensal e
+consistência card/gráfico — pendente": `GET /finops/{p}/cost-series`
+ganha `total_cost_usd` na resposta [soma de `points[].total_cost_usd`,
+já filtrada por `cost_type`/janela/`datasets`/`tables` — nenhuma query
+BQ nova]; o card "Gasto no mês" da `FinOpsOverviewPage` passa a ler daqui
+em vez de `budget.total_cost_usd`, fechando a divergência com o
+"Acumulado" do gráfico [antes: card só somava query; gráfico em "Tudo"
+somava query+storage] e passando a herdar o filtro de `cost_type`, que
+antes só afetava o gráfico — renomeado pra "Gasto no período". Novo
+endpoint `GET /finops/{p}/cost-history` — totais **mensais** persistidos
+no Firestore [`hub_projects/{p}/finops_daily_costs/{data}`, granularidade
+diária, retenção **24 meses**, gravado pelo Job diário pra **todo**
+`hub_project` — não só o projeto aberto na UI], fora do alcance do cache
+de 31 dias de audit log, pra comparar até 24 meses pra trás. Não interfere
+com a projeção month-to-date da v1.10 abaixo — `projection` continua vindo
+só de `get_budget`.)
+v1.10 (fix `fix/finops-projection-days-elapsed` — a projeção
 mensal (`projection.projected_month_total_usd`) virou **month-to-date
 real**, decidido pelo usuário entre as opções levantadas em
 `finops-overview-date-range` (v1.9): `cost_so_far_usd`/`daily_average_usd`
@@ -40,7 +56,7 @@ v1.5: CRUD de meta de custo por usuário (`domains/budget`). v1.4: cache de
 audit log **incremental**, janela 30 → **31 dias** — ver ASM-001)
 **Status:** Aprovada
 **Fase:** 4 — FinOps (segunda frente: budget por dataset/projeto)
-**Última atualização:** 2026-09-04 (v1.10)
+**Última atualização:** 2026-09-04 (v1.11)
 
 ---
 
@@ -61,6 +77,9 @@ usada pelo scanner de desperdício — nenhuma integração nova:
 2. **Top N queries mais caras** — os jobs individuais de maior custo.
 3. **Projeção do mês** — custo até agora, média diária, projeção pro
    total do mês.
+4. **Comparação com meses anteriores** (v1.11, planejada) — totais
+   mensais persistidos, até 24 meses pra trás. Ver "Histórico mensal
+   (`cost-history` — v1.11)".
 
 *(A v1.0 também tinha "top N gastadores" como visão separada — removida
 na v1.1: `group_by=user` cobre o mesmo caso, sem duplicar lógica de
@@ -324,6 +343,7 @@ custo de **query** e de **storage** por período, filtrável.
   "cost_type": "all",
   "period_start": "2026-08-03T00:00:00Z",
   "period_end": "2026-09-01T14:00:00Z",
+  "total_cost_usd": 8.41,
   "points": [
     { "period": "2026-08-03", "query_cost_usd": 1.23,
       "storage_cost_usd": 0.44, "total_cost_usd": 1.67 }
@@ -336,6 +356,17 @@ custo de **query** e de **storage** por período, filtrável.
 
 `points` é **contíguo** (um ponto por dia/mês da janela, mesmo sem custo
 — o gráfico não pode ter buraco).
+
+`total_cost_usd` (v1.11, planejada) — soma de `points[].total_cost_usd`
+da resposta inteira, já respeitando `cost_type`/`datasets`/`tables`/janela
+(nenhuma soma nova: os pontos já carregam o valor certo, isto só agrega).
+**Fonte única do card "Gasto no período" da `FinOpsOverviewPage`** — o
+card deixa de chamar `get_budget` pra esse número e passa a ler este
+campo, garantindo que bate com o "Acumulado" do `ComboChart` (mesma
+resposta) e reage a `cost_type`/data do jeito que o gráfico já reage,
+sem chamada HTTP extra. `budget_target_usd` e `projection`
+(month-to-date real, v1.10) continuam vindo só de `GET .../budget` — não
+têm equivalente aqui.
 
 ### De onde vem cada série
 
@@ -379,6 +410,91 @@ do usuário já provou que essa família de views responde no projeto (a SA
 tem a permissão de metadado); o erro era só o nome da coluna. Se por
 algum motivo a view cobrar, a degradação acima
 ainda protege o endpoint; ajustar aqui se o dry-run em dev mostrar bytes.
+
+---
+
+## Histórico mensal (`cost-history` — v1.11, planejada)
+
+`cost-series`/`budget` só enxergam a janela do cache de audit log (piso
+de 31 dias, ver `finops-waste-scanner.md` v1.4) — não dá pra comparar
+"este mês vs. mês passado" com eles. Este endpoint lê uma fonte
+**diferente e persistida**, sem esse teto.
+
+### Onde o dado vive
+
+Firestore, banco nomeado por ambiente (`hub-dev`/`hub-prod`, já
+provisionado — nenhum recurso GCP novo, nenhuma role de IAM nova).
+Subcoleção por projeto, mesmo padrão de `hub_projects/{project_id}` e de
+`users/{email}/budgets/{doc_id}`:
+
+```
+hub_projects/{project_id}/finops_daily_costs/{YYYY-MM-DD}
+  { date, query_cost_usd, storage_cost_usd, total_cost_usd,
+    billed_bytes, storage_bytes, computed_at }
+```
+
+**Quem grava:** `jobs/refresh_event_cache.py` — o mesmo Job diário
+(D-1, `0 3 * * *` UTC) que já itera todo `hub_project` pra
+lineage/access/finops/storage — ganha um passo a mais: depois do scan do
+dia, calcula o custo de query **só daquele dia** (não os 31d) + a foto de
+storage do dia e faz upsert do doc acima. Sem Cloud Run Job novo, sem
+Cloud Scheduler novo.
+
+**Escopo: todo `hub_project`**, não só o projeto aberto na UI no
+momento — mesmo racional do resto do Job, que já roda pra todos
+independente do que está selecionado na tela.
+
+**Retenção: 24 meses**, rolante — o próprio Job, ao gravar o dia D-1,
+apaga docs de `finops_daily_costs` com `date` anterior a
+`hoje − 24 meses` (paridade com o teto de `months` do endpoint abaixo:
+não guarda dado que o endpoint nunca consegue expor). Sem TTL nativo do
+Firestore nesta fase — a eviction é lógica do Job, mesmo padrão do cache
+de 31 dias, só que num período maior e sempre um doc por dia (sem
+merge/dedup — não há re-scan retroativo de um dia já gravado).
+
+### GET /api/v1/finops/{project_id}/cost-history
+
+Agrega **só** o Firestore — nunca toca Cloud Logging nem o cache de 31
+dias.
+
+**Parâmetros opcionais:**
+- `months` (query, default `12`, `1`–`24`) — quantos meses pra trás,
+  contando o mês corrente. Clampado (não 422), mesma filosofia do resto
+  do domínio. Teto de 24 = retenção do Firestore acima.
+
+**Response 200 (`CostHistoryResponse`):**
+```json
+{
+  "project_id": "observability-hub-dev",
+  "months": [
+    { "month": "2026-08", "query_cost_usd": 0.28, "storage_cost_usd": 0.03,
+      "total_cost_usd": 0.31, "days_recorded": 31 }
+  ],
+  "history_available_since": "2026-09-05",
+  "warning": null
+}
+```
+`months` é **contíguo** (um ponto por mês pedido, mesmo sem nenhum doc —
+mesmo princípio de `points` em `cost-series`, sem buraco no gráfico de
+comparação). `days_recorded` deixa explícito quando um mês está
+incompleto (início do histórico, ou dia(s) em que o Job falhou/pulou —
+sem preencher retroativamente por estimativa). `history_available_since`
+= data do primeiro doc já gravado em **qualquer** `hub_project` — a UI
+usa isso pra rotular "histórico começa em X" em vez de desenhar meses
+anteriores como gasto zero (zero ≠ ausência de dado).
+
+### Sem backfill
+
+Não há como reconstruir meses anteriores à data de deploy desta feature
+— os 31 dias do cache de audit log não cobrem retroativamente o
+suficiente. O histórico só começa a acumular a partir do primeiro run do
+Job depois do deploy. Ver ASM-004.
+
+### Frontend (planejado)
+
+Nova seção "Comparar com meses anteriores" na `FinOpsOverviewPage` —
+gráfico de barras por mês + variação % vs. mês anterior, hook
+`useCostHistory` novo em `features/finops/hooks.ts`.
 
 ---
 
@@ -518,17 +634,20 @@ apps/backend/src/observability_hub/
 │                          # + GET/PUT/DELETE /finops/{project_id}/budgets (CRUD, v1.5)
 │                          # + GET /finops/{project_id}/cost-series (v1.6)
 │                          # + GET /finops/{project_id}/table-scores (v1.7)
+│                          # + GET /finops/{project_id}/cost-history (v1.11, planejada)
 ├── domains/finops/
-│   ├── service.py          # + get_budget() (user_email → budget_target_usd); + get_cost_series() (v1.6); + _table_efficiency_score() + compute_table_scores() (v1.7)
-│   ├── repository.py       # ScanEvent + get_scan_events_cached() (cache, ver finops-waste-scanner.md v1.4); _parse_table_ref filtra INFORMATION_SCHEMA; + StorageTimelineDay + get_storage_cost_timeline() (v1.6)
-│   └── schemas.py          # + BudgetResponse (+ budget_target_usd); + CostSeries* (v1.6); + TableScoreFactor, TableScore, TableScoresResponse (v1.7)
+│   ├── service.py          # + get_budget() (user_email → budget_target_usd; projeção month-to-date real, v1.10); + get_cost_series() (v1.6, + total_cost_usd na v1.11); + _table_efficiency_score() + compute_table_scores() (v1.7); + get_cost_history() (v1.11, planejada — lê só Firestore)
+│   ├── repository.py       # ScanEvent + get_scan_events_cached() (cache, ver finops-waste-scanner.md v1.4); _parse_table_ref filtra INFORMATION_SCHEMA; + StorageTimelineDay + get_storage_cost_timeline() (v1.6); + write_daily_cost_snapshot()/list_daily_cost_snapshots()/evict_daily_cost_snapshots_older_than() (v1.11, planejada — hub_projects/{p}/finops_daily_costs)
+│   └── schemas.py          # + BudgetResponse (+ budget_target_usd); + CostSeries* (v1.6, + total_cost_usd na v1.11); + TableScoreFactor, TableScore, TableScoresResponse (v1.7); + CostHistoryResponse, CostHistoryMonth (v1.11, planejada)
 ├── domains/budget/          # v1.5 — CRUD de meta de custo por usuário (Firestore, espelha domains/favorites)
 │   ├── schemas.py           # BudgetScope, BudgetEntry, BudgetUpsertRequest, BudgetListResponse
 │   ├── repository.py        # _budget_doc_id, list/upsert/remove_budget, get_project_budget_amount
 │   └── service.py           # wrappers finos sobre repository
+├── jobs/
+│   └── refresh_event_cache.py   # v1.11, planejada — depois do scan do dia, grava o snapshot diário de custo (query do dia + foto de storage) por hub_project e evicta o que passou de 24 meses
 └── tests/unit/
-    ├── finops/test_service.py      # + get_budget/budget_target_usd + get_cost_series (v1.6) + _table_efficiency_score / compute_table_scores (v1.7)
-    ├── finops/test_repository.py   # + INFORMATION_SCHEMA filter + get_storage_cost_timeline (v1.6)
+    ├── finops/test_service.py      # + get_budget/budget_target_usd + get_cost_series (v1.6) + _table_efficiency_score / compute_table_scores (v1.7) + total_cost_usd / get_cost_history (v1.11, planejada)
+    ├── finops/test_repository.py   # + INFORMATION_SCHEMA filter + get_storage_cost_timeline (v1.6) + snapshot diário / eviction 24 meses (v1.11, planejada)
     └── budget/{test_repository,test_service}.py  # v1.5 — doc_id por escopo, preservação de created_at, get_project_budget_amount
 ```
 
@@ -569,6 +688,9 @@ tinha com o texto da query inline na célula).
 | **cost-series:** timeline de storage indisponível em todas as regiões | `storage_available=false`, `storage_cost_usd=0` em todos os pontos, `query_cost_usd` intacto, `warning` explica — nunca 500 |
 | **cost-series:** dia sem query e sem storage | Ponto presente com os três valores `0` (série contígua, sem buraco) |
 | **cost-series:** `cost_type=query` | Timeline de storage nem é consultada; `storage_available=false` |
+| **cost-history:** mês pedido sem nenhum doc gravado no Firestore | Aparece na resposta com os três custos `0.0` e `days_recorded=0` — série contígua, sem buraco (mesmo princípio de `cost-series`) |
+| **cost-history:** `months` fora de 1–24 | Clampado no service (não é 422) — 24 é o teto de retenção do Firestore, não uma escolha do chamador |
+| **cost-history:** Job de um dia específico falhou (não gravou o snapshot daquele dia) | O mês correspondente sai com `days_recorded` menor que o total de dias do mês — nunca preenchido retroativamente por estimativa |
 
 ---
 
@@ -593,8 +715,12 @@ tinha com o texto da query inline na célula).
   cobrança on-demand; num projeto flat-rate os números aqui não
   refletem o gasto real (mesma premissa já embutida em `domains/quality`
   e no scanner de desperdício).
-- **Histórico entre meses** — só o mês corrente; sem persistência,
-  cada consulta reflete só a janela de audit logs disponível agora.
+- ~~**Histórico entre meses** — só o mês corrente; sem persistência,
+  cada consulta reflete só a janela de audit logs disponível agora.~~
+  Coberto a partir da v1.11 (planejada) — `GET .../cost-history`,
+  Firestore, sem depender do cache de 31 dias. Ver "Histórico mensal
+  (`cost-history` — v1.11, planejada)". Continua fora de escopo: dado
+  anterior à data de deploy desta feature (sem backfill, ver ASM-004).
 - **Atribuição proporcional de custo em JOINs multi-tabela** — custo
   soma inteiro em cada tabela tocada (`group_by=table`), não dividido
   pela proporção real de bytes por tabela dentro do job (dado que não
@@ -652,3 +778,49 @@ Suposicao **ASM-FIN-RV-02** (confirmada, R2-9): o budget mora em
 adicionar superficie de permissao nova — cada usuario ve e edita so os
 seus, mesma fronteira dos favoritos. Se um dia o produto quiser budget de
 equipe, e um endpoint/colecao nova, nao uma migracao deste.
+
+---
+
+## Histórico mensal e consistência card/gráfico — pendente (2026-09)
+
+Motivada por uma inconsistência real observada em produção (dev): o card
+"Gasto no mês" mostrava US$ 0,009298 enquanto o "Acumulado" do gráfico,
+com o filtro de tipo de custo em "Tudo", mostrava US$ 0,01 — a diferença
+real era o custo de storage (que o card nunca somava, só query), somada
+ao efeito de `formatUsd` trocar de 6 pra 2 casas decimais bem em torno de
+US$ 0,01. Ver "Histórico mensal (`cost-history` — v1.11, planejada)" e o
+novo campo `total_cost_usd` em `cost-series` pro contrato completo — esta
+seção só rastreia critérios de aceite, suposições e status. Independente
+da projeção month-to-date da v1.10 (fix `fix/finops-projection-days-elapsed`)
+— nenhum dos dois mexe no cálculo do outro.
+
+Decisões confirmadas com o usuário (2026-09-04): retenção do histórico
+diário = **24 meses**; escopo da gravação = **todo `hub_project`** (não
+só o projeto aberto na UI); janela do endpoint de comparação = **24
+meses**, mesmo teto da retenção (ver ASM-005/ASM-006 abaixo).
+
+| ID | Comportamento | Teste |
+|---|---|---|
+| AC-FIN-HIST-01 | `cost-series` retorna `total_cost_usd` = soma de `points[].total_cost_usd`, já respeitando os filtros aplicados aos pontos (`cost_type`/`datasets`/`tables`/janela) | `test_get_cost_series_total_cost_usd_matches_sum_of_points` |
+| AC-FIN-HIST-02 | Card "Gasto no período" (`FinOpsOverviewPage`) lê `seriesQuery.data.total_cost_usd` em vez de `budgetQuery.data.total_cost_usd` — muda ao trocar `cost_type` (Tudo/Query/Storage) ou o intervalo de data, sem chamada HTTP extra; `budgetQuery` continua alimentando "Meta mensal" e "Projeção do mês" | teste de FE (React Testing Library) |
+| AC-FIN-HIST-03 | O Job diário grava `hub_projects/{p}/finops_daily_costs/{data}` pra **todo** `hub_project`, não só o selecionado na UI | `test_refresh_project_writes_daily_cost_snapshot` |
+| AC-FIN-HIST-04 | O Job apaga, na mesma execução, docs de `finops_daily_costs` com `date < hoje − 24 meses` | `test_refresh_project_evicts_daily_cost_snapshots_older_than_24_months` |
+| AC-FIN-HIST-05 | `GET /cost-history` agrega só a partir do Firestore, nunca toca Cloud Logging/cache de 31 dias | `test_get_cost_history_reads_only_firestore` |
+| AC-FIN-HIST-06 | `months` fora de 1–24 é clampado, não 422 | `test_get_cost_history_clamps_months` |
+| AC-FIN-HIST-07 | Mês sem nenhum doc no período pedido aparece com os três custos `0.0` e `days_recorded=0` (série contígua, sem buraco) | `test_get_cost_history_fills_gaps_with_zero` |
+| AC-FIN-HIST-08 | `history_available_since` reflete a data do primeiro doc gravado em qualquer `hub_project` — meses anteriores a essa data aparecem com `days_recorded=0`, nunca como "gasto zero real" | `test_get_cost_history_reports_history_available_since` |
+
+### Suposições
+
+| ID | Suposição | Status |
+|---|---|---|
+| ASM-004 | Sem backfill: histórico só existe a partir da data de deploy desta feature — os 31 dias do cache de audit log não cobrem meses anteriores o suficiente pra reconstruir nada além do mês corrente. `history_available_since` comunica isso na resposta em vez de esconder. | confirmada |
+| ASM-005 | Retenção de 24 meses no Firestore (`finops_daily_costs`) e teto de `months` em `cost-history` são o mesmo número de propósito — evita guardar dado que o endpoint nunca consegue expor. Se um dia divergirem, revisar os dois juntos. Decidido com o usuário em 2026-09-04. | confirmada |
+| ASM-006 | O snapshot diário é gravado pra **todo** `hub_project`, não só o que está aberto na UI no momento — mesmo racional do resto do Job (já roda pra todos por causa de lineage/access/storage). Custo: mais writes de Firestore por dia (um por `hub_project`), considerado desprezível frente ao resto do Job. Decidido com o usuário em 2026-09-04. | confirmada |
+
+**Status (2026-09-04): spec aprovada, implementação pendente.** Nenhum
+código escrito ainda — esta seção documenta o plano debatido com o
+usuário (card `total_cost_usd`, snapshot diário no Firestore, endpoint
+`cost-history`) antes de tocar em `service.py`/`repository.py`/
+`refresh_event_cache.py`, seguindo a regra deste repositório de não
+implementar sem spec aprovada.
