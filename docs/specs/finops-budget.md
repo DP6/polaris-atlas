@@ -1,8 +1,9 @@
 # Spec — Domínio: FinOps — Budget de custo
 
-**Versão:** 1.13 (2026-09-05 — implementada, script de migração ainda
-não rodado em nenhum ambiente; ver "Budget compartilhado por projeto —
-pendente": budget deixa de ser por usuário
+**Versão:** 1.13 (2026-09-05 — implementada, migração de dados rodada em
+dev e prod (2 registros apagados em dev, prod já estava limpo); código
+ainda não deployado. Ver "Budget compartilhado por projeto — pendente":
+budget deixa de ser por usuário
 (`users/{email}/budgets`) e vira recurso do **projeto**
 (`hub_projects/{project_id}/budgets/{doc_id}`) — reverte a decisão da
 v1.5/ASM-FIN-RV-02 ("sem compartilhamento entre usuários"), a pedido do
@@ -1077,9 +1078,14 @@ contra o `dataset_id` do próprio request — `None` em `scope=project` só
 passa pra grant `datasets: null`); `GET .../budget` injeta
 `budget_target_usd` incondicionalmente (não depende mais de
 `user_email`). `scripts/delete_legacy_personal_budgets.py` escrito
-(dry-run por default, `--confirm` apaga) — **ainda não rodado** em
-nenhum ambiente; rodar antes do primeiro deploy desta versão, dev
-primeiro. Frontend: `BudgetConfigDialog` trava os campos pra quem não é
-Admin de projeto no escopo selecionado (`useCanManageProject`,
-compartilhado com a UI de metadados). 903 testes de backend passando,
+(dry-run por default, `--confirm` apaga) — **já rodado** em dev
+(2026-09-05, 2 registros de `observability-hub-dev` apagados,
+confirmado com um dry-run posterior mostrando zero) e em prod (dry-run
+não encontrou nenhum registro — nada a apagar). Migração de dado
+completa nos dois ambientes; **falta só o deploy do código** (push,
+PR, revisão do gate de prod — nada disso feito ainda, precisa de
+autorização à parte). Frontend: `BudgetConfigDialog` trava os campos
+pra quem não é Admin de projeto no escopo selecionado
+(`useCanManageProject`, compartilhado com a UI de metadados). 903
+testes de backend passando,
 `pnpm lint`/`tsc -b`/`vite build` limpos no frontend.
