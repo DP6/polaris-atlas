@@ -1,6 +1,18 @@
 # Spec — Domínio: FinOps — Budget de custo
 
-**Versão:** 1.12 (2026-09-04 — fusão "Detalhamento de custo", branch
+**Versão:** 1.13 (2026-09-05 — planejada, ver "Budget compartilhado por
+projeto — pendente": budget deixa de ser por usuário
+(`users/{email}/budgets`) e vira recurso do **projeto**
+(`hub_projects/{project_id}/budgets/{doc_id}`) — reverte a decisão da
+v1.5/ASM-FIN-RV-02 ("sem compartilhamento entre usuários"), a pedido do
+usuário, como parte do escopo do novo papel "Admin de projeto"
+(`docs/specs/admin.md` v1.11: metadados + budget). Leitura continua
+aberta a qualquer um com acesso ao projeto; escrita
+(`PUT`/`DELETE .../budgets`) passa a exigir `require_project_admin` em
+vez de só `get_current_user`. **Precisa de decisão de migração dos
+budgets pessoais já existentes antes da implementação** — ver Q-xxx na
+seção pendente, ainda aberta.)
+v1.12 (2026-09-04 — fusão "Detalhamento de custo", branch
 `feat/finops-cost-detail`: `GET /finops/{p}/budget` ganha
 `include_storage` [bool, default `false`] — quando `true` e `group_by` é
 `table`/`dataset`, `CostGroup` ganha `storage_cost_usd`/`total_cost_usd`
@@ -357,6 +369,11 @@ sem o `project_id`, formato que o filtro de `cost-series` já espera).
 
 ## Cadastro de budget (CRUD — v1.5, refresh visual R2-9)
 
+> ⚠️ **Superado pela v1.13 (planejada)** — ver "Budget compartilhado por
+> projeto" logo abaixo. Esta seção documenta o modelo **atual**
+> (por usuário) até a v1.13 ser implementada; não editar como se já
+> tivesse mudado.
+
 Metas de custo **por usuário**, não compartilhadas (ASM-005 do brief /
 ASM-002 abaixo). Firestore, coleção `users/{email}/budgets/{doc_id}` —
 mesmo lugar e mesmo racional dos favoritos (`domains/favorites`), sem
@@ -404,6 +421,68 @@ Remove um budget. Query params `scope` (obrigatório), `dataset_id`,
 
 Os três exigem `require_project_access` (dependency do router, path tem
 `project_id`) **e** `get_current_user` (recorte por usuário).
+
+---
+
+## Budget compartilhado por projeto (v1.13, planejada)
+
+Decisão do usuário: budget deixa de ser uma meta pessoal e vira um
+recurso do **projeto** — visível a qualquer um com acesso de leitura ao
+projeto (mesma regra de sempre, `require_project_access`), editável só
+por quem tem o papel "Admin de projeto" (`docs/specs/admin.md` v1.11) ou
+é superadmin. **Reverte deliberadamente a v1.5/ASM-FIN-RV-02** ("sem
+compartilhamento entre usuários") — decisão de produto explícita, não uma
+correção de bug.
+
+### Modelo de dados
+
+Sai de `users/{email}/budgets/{doc_id}`, entra
+`hub_projects/{project_id}/budgets/{doc_id}` — mesma convenção de
+`doc_id` por `scope`, só sem o segmento de projeto (que já é o
+documento-pai):
+
+| `scope` | `doc_id` | Campos exigidos no upsert |
+|---|---|---|
+| `project` | `_project` (fixo — não há segmento de dataset/tabela pra usar como ID) | — |
+| `dataset` | `{dataset_id}` | `dataset_id` |
+| `table` | `{dataset_id}__{table_id}` | `dataset_id` + `table_id` |
+
+Registro salvo: `{ scope, dataset_id, table_id, amount_usd,
+period: "month", created_by, updated_by, created_at, updated_at }` — sem
+`project_id` (implícito no caminho do documento) e sem `email` de dono
+(o recurso não pertence a ninguém especificamente). `created_by`/
+`created_at` preservados num upsert repetido, `updated_by` passa a
+registrar **quem editou por último** (novo campo — antes não fazia
+sentido sem múltiplos editores possíveis).
+
+### Endpoints (mesmos paths, dependency e corpo mudam)
+
+- `GET /api/v1/finops/{project_id}/budgets` — lista os budgets do
+  **projeto** (não mais "do usuário logado no projeto"). Gated por
+  `require_project_access` — igual a hoje, sem `get_current_user`
+  no papel de filtro (continua presente só se algo mais da resposta
+  precisar, ex.: nenhum caso previsto agora).
+- `PUT /api/v1/finops/{project_id}/budgets` — upsert. Gated por
+  `require_project_admin(project_id, dataset_id=body.dataset_id)`
+  (dataset relevante quando `scope` é `dataset`/`table`; `None` quando
+  `scope=project`, exigindo `datasets: null` no grant — projeto inteiro).
+  Mesma validação de coerência escopo×campos do schema atual.
+- `DELETE /api/v1/finops/{project_id}/budgets` — remove. Mesmo gate de
+  `PUT`.
+
+`GET /finops/{project_id}/budget` (o endpoint de leitura agregada, **sem
+"s"**, que injeta `budget_target_usd` na resposta) passa a ler o budget
+do **projeto** em vez de `user.email` — deixa de depender de
+`get_current_user` pra esse campo especificamente (a rota continua
+autenticada, só não personaliza mais por quem está logado).
+
+### Frontend
+
+`BudgetConfigDialog`/`BudgetPage` (cadastro de meta) só ficam habilitados
+pra quem é Admin de projeto/superadmin daquele projeto — usuário comum
+vê o valor cadastrado (cards, linha de referência no gráfico) mas não
+edita, mesmo padrão de leitura-sempre-aberta/escrita-restrita do resto do
+Admin de projeto.
 
 ---
 
@@ -728,7 +807,9 @@ def get_budget(
 apps/backend/src/observability_hub/
 ├── api/v1/
 │   └── finops.py          # + GET /finops/{project_id}/budget?group_by=...&include_storage=... (v1.12)
-│                          # + GET/PUT/DELETE /finops/{project_id}/budgets (CRUD, v1.5)
+│                          # + GET/PUT/DELETE /finops/{project_id}/budgets (CRUD, v1.5;
+│                          #   PUT/DELETE gated por require_project_admin em vez de
+│                          #   get_current_user na v1.13, planejada — bloqueada por Q-003)
 │                          # + GET /finops/{project_id}/cost-series (v1.6)
 │                          # + GET /finops/{project_id}/table-scores (v1.7)
 │                          # + GET /finops/{project_id}/cost-history (v1.11, planejada — não implementada)
@@ -736,9 +817,13 @@ apps/backend/src/observability_hub/
 │   ├── service.py          # + get_budget() (user_email → budget_target_usd; projeção month-to-date real, v1.10; include_storage + _merge_storage_into_groups(), v1.12); + get_cost_series() (v1.6, + total_cost_usd, v1.11/v1.12); + _table_efficiency_score() + compute_table_scores() (v1.7); + get_cost_history() (v1.11, planejada — não implementada)
 │   ├── repository.py       # ScanEvent + get_scan_events_cached() (cache, ver finops-waste-scanner.md v1.4); _parse_table_ref filtra INFORMATION_SCHEMA; + StorageTimelineDay + get_storage_cost_timeline() (v1.6); + get_storage_bytes_by_table() (v1.12 — storage por tabela/dataset, GROUP BY em vez de SUM); + write_daily_cost_snapshot()/list_daily_cost_snapshots()/evict_daily_cost_snapshots_older_than() (v1.11, planejada — hub_projects/{p}/finops_daily_costs)
 │   └── schemas.py          # + BudgetResponse (+ budget_target_usd); + CostGroup.storage_cost_usd/total_cost_usd (v1.12); + CostSeries* (v1.6, + total_cost_usd, v1.11/v1.12); + TableScoreFactor, TableScore, TableScoresResponse (v1.7); + CostHistoryResponse, CostHistoryMonth (v1.11, planejada)
-├── domains/budget/          # v1.5 — CRUD de meta de custo por usuário (Firestore, espelha domains/favorites)
-│   ├── schemas.py           # BudgetScope, BudgetEntry, BudgetUpsertRequest, BudgetListResponse
-│   ├── repository.py        # _budget_doc_id, list/upsert/remove_budget, get_project_budget_amount
+├── domains/budget/          # v1.5 — CRUD de meta de custo (Firestore)
+│   │                        # v1.13, planejada: sai de users/{email}/budgets pra
+│   │                        # hub_projects/{project_id}/budgets — bloqueada por Q-003
+│   ├── schemas.py           # BudgetScope, BudgetEntry (+ updated_by, v1.13), BudgetUpsertRequest, BudgetListResponse
+│   ├── repository.py        # _budget_doc_id (doc_id de scope=project vira "_project" fixo, v1.13),
+│   │                        # list/upsert/remove_budget (assinatura troca email → project_id, v1.13),
+│   │                        # get_project_budget_amount
 │   └── service.py           # wrappers finos sobre repository
 ├── jobs/
 │   └── refresh_event_cache.py   # v1.11, planejada — depois do scan do dia, grava o snapshot diário de custo (query do dia + foto de storage) por hub_project e evicta o que passou de 24 meses
@@ -878,12 +963,16 @@ cache). Nenhum `dry_run` com bytes a reportar.
 |---|---|---|
 | Q-002 | A fórmula do score por tabela (3 fatores — particionamento 0.45 / utilização 0.30 / eficiência de scan 0.25 — e o agregado do projeto ponderado por tamanho) é a certa? Pesos, limiares (`100 GB` pra zerar utilização, `10×` pra meia-nota de scan) e a ausência de "drift de schema" / "é órfã" (sinais cross-domain, deixados de fora de propósito) precisam de validação de produto. | aberta — revisar no PR final; a decomposição em `factors[]` na resposta existe justamente pra recalibrar sem quebrar contrato |
 
-Suposicao **ASM-FIN-RV-02** (confirmada, R2-9): o budget mora em
+~~Suposicao **ASM-FIN-RV-02** (confirmada, R2-9): o budget mora em
 `users/{email}/budgets` (por usuario), nao em `projects/{projectId}/budgets`
 (compartilhado). Satisfaz ASM-005 do brief ("sem compartilhamento") sem
 adicionar superficie de permissao nova — cada usuario ve e edita so os
 seus, mesma fronteira dos favoritos. Se um dia o produto quiser budget de
-equipe, e um endpoint/colecao nova, nao uma migracao deste.
+equipe, e um endpoint/colecao nova, nao uma migracao deste.~~ **Revertida
+na v1.13 (planejada, 2026-09-05)** — o produto quis budget de equipe/
+projeto antes do previsto aqui, a pedido do usuário, como parte do
+escopo do papel "Admin de projeto". Ver "Budget compartilhado por
+projeto (v1.13, planejada)".
 
 ---
 
@@ -930,3 +1019,42 @@ usuário (card `total_cost_usd`, snapshot diário no Firestore, endpoint
 `cost-history`) antes de tocar em `service.py`/`repository.py`/
 `refresh_event_cache.py`, seguindo a regra deste repositório de não
 implementar sem spec aprovada.
+
+---
+
+## Budget compartilhado por projeto — pendente (2026-09)
+
+Parte do escopo do novo papel "Admin de projeto"
+(`docs/specs/admin.md` v1.11: metadados + budget). Ver "Budget
+compartilhado por projeto (v1.13, planejada)" acima pro contrato
+completo — esta seção só rastreia critérios de aceite, suposições,
+**uma pergunta em aberto real** e status.
+
+| ID | Comportamento | Teste |
+|---|---|---|
+| AC-FIN-SHARED-01 | `GET /finops/{p}/budgets` lista os budgets do **projeto** — mesmo resultado pra qualquer usuário com acesso de leitura, independente de quem criou cada registro | `test_list_budgets_returns_project_scoped_not_user_scoped` |
+| AC-FIN-SHARED-02 | `PUT`/`DELETE /finops/{p}/budgets` exige `require_project_admin` — usuário comum com acesso de leitura ao projeto mas sem o papel recebe 403 | `test_upsert_budget_requires_project_admin`, `test_remove_budget_requires_project_admin` |
+| AC-FIN-SHARED-03 | Admin de projeto com `datasets: ["RAW"]` consegue `PUT` em `scope=dataset`/`table` dentro de `RAW`, mas recebe 403 em `scope=project` ou em outro dataset | `test_upsert_budget_scoped_admin_denied_outside_scope` |
+| AC-FIN-SHARED-04 | `GET /finops/{p}/budget` (agregado, injeta `budget_target_usd`) lê o budget do **projeto**, não mais de `user.email` — dois usuários diferentes veem o mesmo `budget_target_usd` pro mesmo projeto | `test_get_budget_target_is_project_scoped_not_per_user` |
+| AC-FIN-SHARED-05 | `doc_id` de `scope=project` é o literal `_project` (não `{project_id}`, que já é o documento-pai) | `test_budget_doc_id_project_scope_uses_fixed_segment` |
+
+### Suposições
+
+| ID | Suposição | Status |
+|---|---|---|
+| ASM-007 | Leitura de budget (`GET .../budgets`, `GET .../budget`) continua exigindo só `require_project_access` — não fica mais restrita que hoje; só a escrita (`PUT`/`DELETE`) ganha o gate de `require_project_admin`. | confirmada |
+| ASM-008 | `updated_by` (novo campo) substitui a necessidade de `created_by` continuar sendo "o dono" — com múltiplos editores possíveis, `created_by` vira só "quem criou o registro pela primeira vez", sem significado de propriedade. | confirmada |
+
+### Pergunta em aberto — migração dos budgets pessoais existentes
+
+| ID | Pergunta | Status |
+|---|---|---|
+| Q-003 | Quando a v1.13 for implementada, o que acontece com os budgets **já cadastrados** em `users/{email}/budgets` (produção, dado real)? Três caminhos possíveis: **(a)** apagar tudo, projeto começa sem budget compartilhado até um Admin de projeto recadastrar; **(b)** migração automática — mas cada projeto pode ter budgets de **vários usuários diferentes** pro mesmo `scope`, sem uma regra óbvia de qual vira o valor do projeto (mais recente por `updated_at`? maior valor? pedir pro usuário escolher por projeto?); **(c)** os dois modelos coexistem por um tempo (pessoal continua de leitura/histórico, projeto é o novo "oficial" exibido nos cards) — mais complexo de implementar e de explicar na UI. | **aberta — bloqueia a implementação da v1.13**, não só um detalhe a ajustar depois. Precisa de decisão explícita do usuário antes de qualquer código; nenhuma das três opções foi escolhida como padrão nesta spec. |
+
+**Status (2026-09-05): estrutura aprovada, prosa desta seção escrita,
+implementação bloqueada pela Q-003.** Diferente do resto desta spec — as
+outras seções pendentes (`cost-history`, `include_storage`) não tinham
+uma decisão de produto pendente que afetasse dado real já em produção;
+esta tem. Não implementar `PUT`/`DELETE /finops/{p}/budgets` com o gate
+novo nem migrar/apagar nada de `users/{email}/budgets` antes de Q-003
+virar "respondida".

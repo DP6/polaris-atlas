@@ -18,8 +18,9 @@ O produto monitora BigQuery (todos os datasets/tabelas da organização) e, a pa
 | Freshness com SLA | Monitora se tabelas estão sendo atualizadas dentro do esperado | Metadados de última modificação (BigQuery) |
 | FinOps | Scanner de desperdício (tabelas não usadas, partições mal configuradas) e acompanhamento de budget | BigQuery + Cloud Billing |
 | Cloud Storage | Catálogo de buckets, scanner de desperdício (idade + config, com confirmação opcional de uso real via audit log) | Cloud Storage API + Cloud Logging (audit logs de leitura de objeto) |
+| Metadados de governança | Descrição, ownership, classificação, certificação e histórico de edição por tabela/coluna, com PII confirmado e glossário livre; linka lineage/qualidade/freshness/budget em vez de duplicar | Firestore (dado próprio do Hub, não do GCP) — ver `docs/specs/metadata.md` |
 
-Esses oito domínios são a espinha dorsal da estrutura de pastas do backend e do frontend — cada um vira um módulo isolado, não uma feature espalhada por camadas transversais. `storage` é o único que não segue o agrupamento "BigQuery" da sidebar (`SidebarServiceGroup` próprio, "Cloud Storage") — ver `docs/specs/storage.md`.
+Esses nove domínios são a espinha dorsal da estrutura de pastas do backend e do frontend — cada um vira um módulo isolado, não uma feature espalhada por camadas transversais. `storage` é o único que não segue o agrupamento "BigQuery" da sidebar (`SidebarServiceGroup` próprio, "Cloud Storage") — ver `docs/specs/storage.md`. `metadata` é o único cuja escrita é gated por um papel específico (Admin de projeto, `docs/specs/admin.md`), não por acesso comum ao projeto.
 
 ## Stack
 
@@ -95,7 +96,8 @@ Nunca remova um sufixo de ambiente de um nome de recurso "pra simplificar" — s
 │   │   │   │   ├── quality/
 │   │   │   │   ├── freshness/
 │   │   │   │   ├── finops/
-│   │   │   │   ├── auth/        # Domínio de plataforma (não é dos 7 de observabilidade) — login OAuth, sessão
+│   │   │   │   ├── metadata/    # ver docs/specs/metadata.md
+│   │   │   │   ├── auth/        # Domínio de plataforma (não é dos 8 de observabilidade) — login OAuth, sessão
 │   │   │   │   └── admin/       # Domínio de plataforma — ACL de usuário×projeto, ver docs/specs/admin.md
 │   │   │   └── core/            # Config, clients GCP compartilhados, logging, exceptions, auth
 │   │   └── tests/

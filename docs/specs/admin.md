@@ -1,6 +1,15 @@
 # Spec — Domínio: Admin (controle de acesso por usuário × projeto)
 
-**Versão:** 1.10 (aba "Caches" — cache de audit log incremental: toggle
+**Versão:** 1.11 (2026-09-05 — novo eixo de autorização: "Admin de
+projeto" (`project_admins`, subcoleção de `hub_projects`). Papel
+delegável (sem trava de redelegação), escopado por dataset ou projeto
+inteiro, revogação simétrica entre pares, superadmin sempre com bypass
+total. Nova dependency `require_project_admin` em `core/auth.py`,
+aplicada por endpoint — não por router inteiro como `require_admin`.
+Escopo do papel hoje: `domains/metadata` (spec nova,
+`docs/specs/metadata.md`) e o budget compartilhado por projeto
+(`docs/specs/finops-budget.md` v1.13). Ver "Admin de projeto")
+v1.10 (aba "Caches" — cache de audit log incremental: toggle
 "forçar completo" + **multi-seleção de projetos** no disparo manual,
 freshness com `never_run`/`window_start`/`mode`, histórico de execuções em
 `GET /event-cache/runs` (separado de `/status`) com card de resumo +
@@ -8,7 +17,7 @@ tabela filtrável/paginada no cliente, retenção de 200 execuções; ver
 "Acompanhamento do cache de audit log")
 **Status:** Aprovada
 **Fase:** Transversal (não faz parte do roadmap de observabilidade de `docs/prd.md`) — plataforma
-**Última atualização:** 2026-08-28
+**Última atualização:** 2026-09-05
 
 ---
 
@@ -298,6 +307,121 @@ antigo pra quem quer um grupo só com `manual_members`.
 
 Diferente de `hub_users`, não existe `LastAdminLockoutError` equivalente
 pra grupos — grupos não carregam status de admin, só acesso a projeto.
+
+---
+
+## Admin de projeto (`project_admins`, v1.11)
+
+Quinto eixo de autorização, mas de natureza diferente dos quatro
+anteriores (`hub_users.allowed_projects`, `hub_projects.is_public`,
+`hub_groups`, e o próprio `hub_users.is_admin`) — aqueles controlam
+**leitura** de projeto ou administração global; este controla **escrita
+elevada dentro de um projeto que o usuário já pode ler**, delegável por
+quem já tem o papel, sem passar por superadmin a cada concessão.
+Motivação: dois domínios de escrita precisam de um autor autorizado que
+não seja superadmin — `domains/metadata` (`docs/specs/metadata.md`) e o
+budget compartilhado por projeto (`docs/specs/finops-budget.md`, v1.13).
+
+**Escopo do papel, hoje**: gerenciar metadados de tabela/coluna e
+gerenciar budget compartilhado (criar/editar/excluir, nos níveis
+projeto/dataset/tabela) — nada além disso. Se um domínio novo quiser gate
+por Admin de projeto no futuro, é decisão de spec nova, não extensão
+automática deste documento.
+
+Superadmin (`hub_users.is_admin`) continua administrador de **todos** os
+projetos por regra — não precisa de doc em `project_admins` pra nada,
+mesmo bypass que já vale em `require_admin`.
+
+### Modelo de dados
+
+Subcoleção de `hub_projects` — diferente do padrão dos outros três eixos
+de acesso, que guardam a lista de projetos **dentro do documento do
+usuário/grupo** (`hub_users.allowed_projects`). Aqui é o inverso: o
+documento vive **dentro do projeto**, porque a pergunta mais frequente
+deste eixo é "quem administra o projeto X" (mostrado dentro da própria
+tela de metadados/budget daquele projeto), não "quais papéis o usuário Y
+tem em todo lugar" — o layout segue o padrão de leitura mais comum, mesmo
+racional já usado na aba "Por projeto" existente.
+
+```json
+// hub_projects/{project_id}/project_admins/{email}
+{
+  "email": "consultor.a@dp6.com.br",
+  "datasets": null,
+  "granted_by": "consultor.b@dp6.com.br",
+  "granted_at": "2026-09-05T10:00:00Z",
+  "updated_at": "2026-09-05T10:00:00Z"
+}
+```
+
+`datasets: null` = projeto inteiro (todos os datasets, presentes e
+futuros — reavaliado contra o catálogo real a cada request, dinâmico por
+natureza). `datasets: ["RAW", "TRUSTED"]` = só esses datasets, estático
+até alguém editar o grant — sem meio-termo "todos os atuais, mas não os
+futuros".
+
+### `require_project_admin` — nova dependency em `core/auth.py`
+
+```python
+def require_project_admin(
+    project_id: str,
+    dataset_id: str | None = None,   # None em endpoints project-scoped (ex: budget de projeto)
+    user=Depends(get_current_user),
+    client=Depends(get_firestore_client),
+) -> UserInfo:
+    """403 (ProjectAdminRequiredError) se o usuário não for superadmin
+    (bypass total) nem tiver doc em
+    hub_projects/{project_id}/project_admins/{email} cujo `datasets`
+    seja null ou contenha dataset_id."""
+```
+
+Aplicada **por endpoint**, não por router inteiro (diferente de
+`require_admin`, que gate-a `/api/v1/admin` inteiro): os endpoints de
+escrita de `domains/metadata` e do budget compartilhado usam
+`require_project_admin`; os de leitura continuam `require_project_access`
+(o acesso comum já existente, sem mudança nenhuma nele).
+
+**Não implica acesso de leitura ao projeto** — é uma checagem
+independente de `has_project_access`. Se o alvo de um grant ainda não tem
+acesso básico ao projeto (nenhum dos três eixos de leitura), ganhar Admin
+de projeto não libera a leitura sozinho; quem concede precisa garantir os
+dois separadamente, se for o caso. Ver ASM-005.
+
+### Delegação e revogação
+
+Qualquer Admin de projeto (superadmin, ou com doc próprio cobrindo o
+`dataset_id` em questão) pode **conceder** o mesmo papel a outro
+usuário — sem trava de redelegação: quem recebe também pode delegar.
+`granted_by` registra quem concedeu **este** grant especificamente, não
+uma cadeia de delegação completa até o superadmin original.
+
+**Revogação**: superadmin revoga qualquer Admin de projeto de qualquer
+projeto (mesmo bypass de sempre). Entre Admins de projeto, revogação é
+**simétrica** — qualquer um pode revogar qualquer outro do mesmo projeto,
+independente de quem concedeu a quem ou do escopo relativo de cada um (um
+admin com `datasets: ["RAW"]` pode revogar um admin com `datasets: null`,
+projeto inteiro). Deliberadamente simples: não há hierarquia de escopo a
+arbitrar, e não existe risco de "projeto sem admin" — superadmin sempre
+cobre qualquer projeto, então não há aqui um `LastAdminLockoutError`
+equivalente. Ver ASM-004.
+
+Concessão só pra indivíduo (e-mail) — delegar pra um `hub_groups` inteiro
+fica fora de escopo desta versão, ver "Fora do escopo".
+
+### Endpoints
+
+- `GET /api/v1/projects/{project_id}/admins` — lista os `project_admins`
+  do projeto. Gated por `require_project_access` (qualquer um com acesso
+  de leitura ao projeto vê quem o administra — não precisa ser admin pra
+  consultar).
+- `PUT /api/v1/projects/{project_id}/admins/{email}` — concede/atualiza
+  (upsert). Body: `{"datasets": ["RAW"] | null}`. Gated por
+  `require_project_admin(project_id)` (sem `dataset_id` — conceder o
+  papel é uma ação de escopo de projeto, mesmo que o grant resultante
+  seja restrito a datasets). `granted_by`/`granted_at` fixos na criação;
+  `updated_at` em toda atualização subsequente.
+- `DELETE /api/v1/projects/{project_id}/admins/{email}` — revoga.
+  Idempotente. Gated por `require_project_admin(project_id)`.
 
 ---
 
@@ -825,21 +949,27 @@ apps/backend/src/observability_hub/
 │   └── auth.py                 # + is_admin em GET /me
 ├── core/
 │   ├── auth.py                 # require_admin, require_project_access
+│   │                           # + require_project_admin (v1.11)
 │   └── exceptions.py           # ProjectNotAuthorizedError, AdminAccessRequiredError,
 │                                # LastAdminLockoutError, AccessRequestNotFoundError (v1.1)
+│                                # + ProjectAdminRequiredError (v1.11)
 ├── domains/
 │   ├── admin/                  # schemas, repository, service — hub_users + hub_projects (v1.1)
 │   │                           # + access_requests (v1.1, request_type na v1.9)
 │   │                           # + analytics_{schemas,repository,service}.py (v1.2, +3 funções v1.3)
 │   │                           # + hub_groups (v1.4) — service.list_workspace_groups (v1.6)
 │   │                           # + checklist_service.py (v1.9) — checklist best-effort de onboarding
+│   │                           # + project_admin_repository.py (v1.11) — grant/revoke/list de
+│   │                           #   hub_projects/{p}/project_admins, mesmo estilo de repository.py
 │   ├── quality/history_repository.py  # + project_id/dataset_id/table_id no run (v1.2)
 │   ├── pii/history_repository.py      # novo (v1.3) — pii_scan_history/{doc}/scans
 │   └── auth/schemas.py         # UserInfo + is_admin
 └── tests/unit/
     ├── admin/                  # + test_analytics_repository.py, test_analytics_service.py (v1.2, estendidos v1.3)
+    │                           # + test_project_admin_repository.py, test_project_admin_service.py (v1.11)
     ├── pii/test_history_repository.py  # novo (v1.3)
     └── core/test_auth.py       # require_admin/require_project_access
+                                 # + require_project_admin (v1.11)
 
 scripts/seed_admin.py           # bootstrap do primeiro admin
 
@@ -885,7 +1015,14 @@ apps/frontend/src/
                                    # + AccessRequestAnalyticsResponse, NavigationAnalyticsResponse,
                                    #   PiiScanActivityResponse (v1.3)
                                    # + HubGroup, HubGroupsListResponse, UpsertHubGroupRequest (v1.4)
+                                   # + ProjectAdmin, ProjectAdminsListResponse (v1.11)
 ```
+
+A UI de conceder/revogar Admin de projeto **não** vive em `features/admin/`
+(gated por `RequireAdmin`, exclusivo de superadmin) — vive dentro de
+`features/metadata/` (seção "Gerenciar acesso" da visão de Governança do
+projeto), porque o próprio propósito do papel é permitir que alguém sem
+ser superadmin administre; ver `docs/specs/metadata.md`, "Frontend".
 
 ---
 
@@ -922,6 +1059,12 @@ apps/frontend/src/
 | Checklist verificado num projeto sem `logging.privateLogViewer` (só `logging.viewer`) | Item `logging` reporta `"ok"` — o probe não distingue disso de "sem atividade", `detail` sempre traz essa ressalva |
 | Pedido `"inclusion"` aprovado pra um `project_id` que já tinha doc em `hub_projects` (registrado por outro caminho nesse meio-tempo) | `upsert_project` é idempotente — sobrescreve `is_public=False` (comportamento normal de upsert), sem erro |
 | Pedido `"access"` e pedido `"inclusion"` pendentes ao mesmo tempo, mesmo usuário e projeto | Coexistem — dedupe é por `(project_id, request_type)`, não só `project_id` |
+| Superadmin consultado em `GET /projects/{id}/admins` | Não aparece na lista — a coleção só guarda grants explícitos; superadmin é admin de tudo por regra, não por doc |
+| Grant com `datasets: []` (lista vazia, não `null`) | Equivale a "nenhum dataset" coberto — distinto de `null` (projeto inteiro). Documentado, não é bug |
+| Dataset novo criado no projeto depois de um grant com `datasets: ["RAW"]` | Não coberto automaticamente — só `datasets: null` acompanha datasets futuros |
+| Admin de projeto revoga o próprio acesso | Permitido (mesma regra simétrica de revogação entre pares) — sem confirmação extra |
+| `require_project_admin` chamado sem `dataset_id` (endpoint project-scoped, ex: budget de projeto) | Só passa quem tem `datasets: null` (projeto inteiro) — um admin restrito a datasets específicos não passa nessa checagem, mesmo que `dataset_id` não se aplique à ação |
+| `PUT /projects/{id}/admins/{email}` pra um usuário sem nenhum acesso de leitura ao projeto | Grant é criado normalmente — não injeta acesso de leitura (ver ASM-005) |
 
 ---
 
@@ -937,6 +1080,11 @@ apps/frontend/src/
 | AC-006 | Criar um pedido `"inclusion"` propaga o tipo pro dedupe e pro doc criado | `test_create_access_requests_passes_inclusion_type_through` |
 | AC-007 | Aprovar um pedido `"inclusion"` registra o projeto (`upsert_project`) **antes** de liberar o solicitante (`grant_project_to_user`) | `test_approve_inclusion_request_registers_project_and_grants_access` |
 | AC-008 | Aprovar um pedido `"access"` (default, sem `request_type` no doc) nunca chama `upsert_project` — regressão do comportamento original | `test_approve_access_request_grants_project_and_marks_approved` |
+| AC-009 | Superadmin passa em `require_project_admin` pra qualquer projeto/dataset, sem doc em `project_admins` | `test_require_project_admin_superadmin_bypasses` |
+| AC-010 | Admin de projeto com `datasets: null` passa pra qualquer `dataset_id` do projeto; com `datasets: ["RAW"]` passa só pra `"RAW"`, nega pros demais | `test_require_project_admin_null_covers_any_dataset`, `test_require_project_admin_scoped_denies_outside_scope` |
+| AC-011 | `PUT /projects/{id}/admins/{email}` por um Admin de projeto existente concede o papel a um novo usuário, sem checagem de hierarquia de escopo (sem trava de redelegação) | `test_grant_project_admin_no_redelegation_lock` |
+| AC-012 | `DELETE /projects/{id}/admins/{email}` por qualquer Admin de projeto do mesmo projeto revoga outro Admin de projeto, independente de quem concedeu a quem | `test_revoke_project_admin_symmetric_between_peers` |
+| AC-013 | `PUT`/`DELETE /projects/{id}/admins/...` por um usuário que não é superadmin nem Admin de projeto daquele projeto é rejeitado (403) | `test_require_project_admin_denies_regular_user` |
 
 ## Suposições
 
@@ -946,6 +1094,8 @@ apps/frontend/src/
 | ASM-002 | Checklist não lê a IAM policy do projeto-alvo (probing, não introspecção) — não exige nenhuma role nova da SA do Hub além do que já está em `docs/onboarding-cliente.md` | confirmada |
 | ASM-003 | Apagar `hub_projects/{id}` não cascateia pra `allowed_projects` de usuários/grupos — mesmo racional de eixos independentes já documentado nesta spec | confirmada |
 | ASM-004 | `access_denied` e `project_not_found` no seletor de projeto ganham a mesma CTA de inclusão — usuário comum não distingue os dois casos, admin investiga ao revisar o pedido | confirmada com o usuário |
+| ASM-005 | Revogação entre Admins de projeto é simétrica (qualquer um revoga qualquer outro do mesmo projeto), sem hierarquia por escopo nem proteção de "último admin" — superadmin é fallback permanente, então não há aqui um `LastAdminLockoutError` equivalente. | confirmada com o usuário (aprovação do plano da spec, 2026-09-05) |
+| ASM-006 | Conceder Admin de projeto **não** concede acesso de leitura ao projeto — checagens independentes (`require_project_admin` não chama `has_project_access`). Quem concede o papel garante o acesso básico separadamente, se necessário. | confirmada com o usuário (aprovação do plano da spec, 2026-09-05) |
 
 ## Perguntas em aberto
 
@@ -983,6 +1133,15 @@ apps/frontend/src/
 - **Notificação por e-mail** ao aprovar/negar uma solicitação — só
   reflete dentro do Hub (badge de pendentes some da visão do admin; o
   solicitante percebe na próxima vez que tentar acessar o projeto).
+- **Delegação de Admin de projeto pra um `hub_groups` inteiro** — só
+  indivíduo (e-mail) nesta versão.
+- **Escopo do papel crescer além de metadados + budget** — decisão de
+  spec nova, não extensão automática deste documento.
+- **Histórico de concessões/revogações de Admin de projeto** — mesmo
+  racional do resto do domínio (`updated_at`/`granted_by` cobrem "por
+  último", não um log completo ao longo do tempo).
+- **Expiração automática do papel** — permanente até alguém revogar,
+  mesma premissa do resto do ACL do Hub.
 
 
 ---
