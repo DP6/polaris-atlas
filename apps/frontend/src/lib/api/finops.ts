@@ -39,6 +39,7 @@ export const finopsApi = {
     limit = 10,
     lookbackDays = 30,
     dateRange?: { from?: string; to?: string },
+    includeStorage = false,
   ) => {
     const params = new URLSearchParams({
       group_by: groupBy,
@@ -47,6 +48,7 @@ export const finopsApi = {
     })
     if (dateRange?.from) params.set('from', dateRange.from)
     if (dateRange?.to) params.set('to', dateRange.to)
+    if (includeStorage) params.set('include_storage', 'true')
     return httpClient.get<BudgetResponse>(`/api/v1/finops/${projectId}/budget?${params}`)
   },
 

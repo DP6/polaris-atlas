@@ -306,7 +306,7 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
             </NavLink>
             <NavLink to="/finops/budget" className={NAV_LINK_CLASS}>
               <DollarSign size={16} />
-              Budget de custo
+              Detalhamento de custo
             </NavLink>
           </nav>
         </SidebarSection>

@@ -178,8 +178,8 @@ export function FinOpsOverviewPage() {
         />
         <OptionCard
           icon={<TrendingUp size={18} />}
-          title="Budget de custo"
-          description="Custo agrupável (tabela / dataset / usuário / dia), queries mais caras e projeção do mês."
+          title="Detalhamento de custo"
+          description="Custo agrupável (tabela / dataset / usuário / dia), split query/storage, comparação com meta e queries mais caras."
           to="/finops/budget"
         />
         <OptionCard
@@ -192,11 +192,15 @@ export function FinOpsOverviewPage() {
 
       {budget?.warning && <WarningCallout>{budget.warning}</WarningCallout>}
 
+      {/* Linha 1: nunca muda com o filtro de período/tipo de custo abaixo —
+          "Gasto no mês" é sempre month-to-date real (v1.10), "Meta
+          mensal"/"Projeção do mês" são metas/projeção do mês corrente, e
+          "Tabelas de baixo score" não depende de período nenhum. */}
       <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(13rem,1fr))]">
         <BigNumber
           icon={<DollarSign size={14} />}
           label="Gasto no mês"
-          value={budget ? formatUsd(budget.total_cost_usd) : '—'}
+          value={budget ? formatUsd(budget.projection.cost_so_far_usd) : '—'}
         />
         <BigNumber
           icon={<Target size={14} />}
@@ -217,15 +221,58 @@ export function FinOpsOverviewPage() {
         />
       </div>
 
-      <Panel
-        title="Custo ao longo do período"
-        subtitle={
-          seriesQuery.data && !seriesQuery.data.storage_available && costType !== 'query'
-            ? 'Linha de storage indisponível neste projeto — só o custo de query está no gráfico.'
-            : undefined
-        }
-        actions={
-          <div className="flex flex-wrap items-end gap-3">
+      {/* Bloco contido: tudo aqui dentro reage ao filtro de Período/Tipo de
+          custo — o card "Gasto no período filtrado" e o gráfico
+          compartilham a mesma fonte (seriesQuery), então também
+          compartilham o mesmo filtro visualmente. */}
+      <div className="flex flex-col gap-4 rounded-lg border border-border bg-muted/20 p-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1">
+            <span className="text-label text-muted-foreground">Período</span>
+            <ChoiceToggle
+              aria-label="Atalhos de período"
+              options={DATE_PRESET_OPTIONS}
+              value={datePreset}
+              onChange={applyDatePreset}
+            />
+          </div>
+          <DateField
+            id="finops-date-from"
+            label="De"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+          />
+          <DateField
+            id="finops-date-to"
+            label="Até"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+          />
+          <div className="flex flex-col gap-1">
+            <span className="text-label text-muted-foreground">Tipo de custo</span>
+            <ChoiceToggle
+              aria-label="Tipo de custo"
+              options={COST_TYPE_OPTIONS}
+              value={costType}
+              onChange={setCostType}
+            />
+          </div>
+        </div>
+
+        <BigNumber
+          icon={<DollarSign size={14} />}
+          label="Gasto no período filtrado"
+          value={seriesQuery.data ? formatUsd(seriesQuery.data.total_cost_usd) : '—'}
+        />
+
+        <Panel
+          title="Custo ao longo do período"
+          subtitle={
+            seriesQuery.data && !seriesQuery.data.storage_available && costType !== 'query'
+              ? 'Linha de storage indisponível neste projeto — só o custo de query está no gráfico.'
+              : undefined
+          }
+          actions={
             <div className="flex flex-col gap-1">
               <span className="text-label text-muted-foreground">Granularidade</span>
               <ChoiceToggle
@@ -235,74 +282,44 @@ export function FinOpsOverviewPage() {
                 onChange={setGranularity}
               />
             </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-label text-muted-foreground">Tipo de custo</span>
-              <ChoiceToggle
-                aria-label="Tipo de custo"
-                options={COST_TYPE_OPTIONS}
-                value={costType}
-                onChange={setCostType}
+          }
+        >
+          {seriesQuery.isLoading ? (
+            <LoadingState />
+          ) : seriesQuery.isError ? (
+            <ApiErrorNotice error={seriesQuery.error} />
+          ) : (
+            <>
+              {seriesQuery.data?.warning && (
+                <WarningCallout variant="info">{seriesQuery.data.warning}</WarningCallout>
+              )}
+              <ComboChart
+                data={chartData}
+                xKey="period"
+                bar={{ key: 'value', name: 'Por período', color: 'var(--color-status-info)' }}
+                lines={[
+                  {
+                    key: 'accumulated',
+                    name: 'Acumulado',
+                    color: 'var(--color-primary)',
+                  },
+                ]}
+                refLine={
+                  showBudgetRefLine && budget?.budget_target_usd != null
+                    ? { y: budget.budget_target_usd, label: 'Meta' }
+                    : undefined
+                }
+                height={260}
+                valueFormat={formatUsd}
               />
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-label text-muted-foreground">Período</span>
-              <ChoiceToggle
-                aria-label="Atalhos de período"
-                options={DATE_PRESET_OPTIONS}
-                value={datePreset}
-                onChange={applyDatePreset}
-              />
-            </div>
-            <DateField
-              id="finops-date-from"
-              label="De"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-            />
-            <DateField
-              id="finops-date-to"
-              label="Até"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-            />
-          </div>
-        }
-      >
-        {seriesQuery.isLoading ? (
-          <LoadingState />
-        ) : seriesQuery.isError ? (
-          <ApiErrorNotice error={seriesQuery.error} />
-        ) : (
-          <>
-            {seriesQuery.data?.warning && (
-              <WarningCallout variant="info">{seriesQuery.data.warning}</WarningCallout>
-            )}
-            <ComboChart
-              data={chartData}
-              xKey="period"
-              bar={{ key: 'value', name: 'Por período', color: 'var(--color-status-info)' }}
-              lines={[
-                {
-                  key: 'accumulated',
-                  name: 'Acumulado',
-                  color: 'var(--color-primary)',
-                },
-              ]}
-              refLine={
-                showBudgetRefLine && budget?.budget_target_usd != null
-                  ? { y: budget.budget_target_usd, label: 'Meta' }
-                  : undefined
-              }
-              height={260}
-              valueFormat={formatUsd}
-            />
-            <p className="mt-2 flex flex-wrap items-center gap-2 text-muted-foreground text-xs">
-              Custo estimado (on-demand).{' '}
-              <CacheStalenessBadge cacheUpdatedAt={budget?.cache_updated_at ?? null} />
-            </p>
-          </>
-        )}
-      </Panel>
+              <p className="mt-2 flex flex-wrap items-center gap-2 text-muted-foreground text-xs">
+                Custo estimado (on-demand).{' '}
+                <CacheStalenessBadge cacheUpdatedAt={budget?.cache_updated_at ?? null} />
+              </p>
+            </>
+          )}
+        </Panel>
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-[auto_1fr] [&>*]:min-w-0">
         <Panel title="Eficiência de custo" as="h3" actions={<ScoreExplainer />}>

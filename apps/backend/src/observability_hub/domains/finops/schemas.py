@@ -76,6 +76,12 @@ class CostGroup(BaseModel):
     cost_usd: float
     billed_bytes: int
     job_count: int
+    # Só populados quando get_budget(include_storage=True) e group_by é
+    # table/dataset (v1.12) — None nos demais casos, retrocompatível
+    # (BudgetPage sem esse flag continua recebendo exatamente a resposta
+    # de antes).
+    storage_cost_usd: float | None = None
+    total_cost_usd: float | None = None
 
 
 class CostlyQuery(BaseModel):
@@ -142,6 +148,12 @@ class CostSeriesResponse(BaseModel):
     period_start: datetime
     period_end: datetime
     points: list[CostSeriesPoint]
+    # Soma de points[].total_cost_usd — já respeita cost_type/datasets/
+    # tables/janela (nenhuma soma nova, os pontos já carregam o valor
+    # certo). Fonte única do card "Gasto no período" da FinOpsOverviewPage
+    # (v1.11): evita a divergência de reler get_budget (query-only) pra
+    # esse número.
+    total_cost_usd: float
     # False quando a INFORMATION_SCHEMA.TABLE_STORAGE_USAGE_TIMELINE_BY_PROJECT
     # não pôde ser lida (erro de permissão/schema/região) — os pontos ainda
     # trazem query_cost_usd, storage_cost_usd fica 0. Nunca vira 500.

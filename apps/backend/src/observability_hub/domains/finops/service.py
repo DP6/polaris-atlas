@@ -326,6 +326,82 @@ def _resolve_date_window(
     return start, end, (end - start).days + 1, (" ".join(warnings) or None)
 
 
+def _merge_storage_into_groups(
+    client: bigquery.Client,
+    project_id: str,
+    group_by: BudgetGroupBy,
+    group_bytes: dict[str, int],
+    group_jobs: dict[str, int],
+    start_date: date,
+    end_date: date,
+) -> tuple[list[CostGroup], str | None]:
+    """Só chamada quando include_storage=True e group_by é table/dataset —
+    une as chaves vindas de eventos de query (group_bytes/group_jobs) com
+    TODAS as tabelas que têm bytes de storage > 0 (mesmo as nunca
+    consultadas na janela — decisão do usuário: mostrar tabela abandonada
+    custando storage é o sinal mais útil de FinOps aqui). Fonte $0
+    (INFORMATION_SCHEMA.TABLE_STORAGE via repository.get_storage_bytes_by_table).
+    Nunca lança: se nenhuma região responder, devolve os groups só-de-query
+    inalterados + warning."""
+    regions = discover_regions(project_id, client=client)
+    bytes_by_table, reason = repository.get_storage_bytes_by_table(client, project_id, regions)
+
+    if bytes_by_table is None:
+        storage_warning = _STORAGE_UNAVAILABLE_WARNING.format(project_id=project_id)
+        if reason:
+            storage_warning = f"{storage_warning} Motivo do BigQuery: {reason}."
+        fallback_groups = sorted(
+            (
+                CostGroup(
+                    key=key,
+                    cost_usd=_estimate_query_cost_usd(billed),
+                    billed_bytes=billed,
+                    job_count=group_jobs[key],
+                )
+                for key, billed in group_bytes.items()
+            ),
+            key=lambda g: g.cost_usd,
+            reverse=True,
+        )
+        return fallback_groups, storage_warning
+
+    days_count = (end_date - start_date).days + 1
+    storage_cost_by_key: dict[str, float] = {}
+    for (dataset_id, table_id), byte_count in bytes_by_table.items():
+        cost = sum(
+            _storage_cost_for_day(byte_count, start_date + timedelta(days=i))
+            for i in range(days_count)
+        )
+        key = (
+            f"{project_id}.{dataset_id}.{table_id}"
+            if group_by == BudgetGroupBy.TABLE
+            else f"{project_id}.{dataset_id}"
+        )
+        storage_cost_by_key[key] = storage_cost_by_key.get(key, 0.0) + cost
+
+    all_keys = set(group_bytes) | set(storage_cost_by_key)
+    groups = sorted(
+        (
+            CostGroup(
+                key=key,
+                cost_usd=_estimate_query_cost_usd(group_bytes.get(key, 0)),
+                billed_bytes=group_bytes.get(key, 0),
+                job_count=group_jobs.get(key, 0),
+                storage_cost_usd=round(storage_cost_by_key.get(key, 0.0), 6),
+                total_cost_usd=round(
+                    _estimate_query_cost_usd(group_bytes.get(key, 0))
+                    + storage_cost_by_key.get(key, 0.0),
+                    6,
+                ),
+            )
+            for key in all_keys
+        ),
+        key=lambda g: g.total_cost_usd or 0.0,
+        reverse=True,
+    )
+    return groups, None
+
+
 def get_budget(
     logging_client: cloud_logging.Client,
     storage_client: storage.Client,
@@ -337,6 +413,8 @@ def get_budget(
     from_date: date | None = None,
     to_date: date | None = None,
     user_email: str | None = None,
+    client: bigquery.Client | None = None,
+    include_storage: bool = False,
 ) -> BudgetResponse:
     now = datetime.now(UTC)
     start_date, end_date, lookback_days, clamp_warning = _resolve_date_window(
@@ -425,6 +503,16 @@ def get_budget(
         reverse=True,
     )
 
+    storage_warning: str | None = None
+    if (
+        include_storage
+        and group_by in (BudgetGroupBy.TABLE, BudgetGroupBy.DATASET)
+        and client is not None
+    ):
+        groups, storage_warning = _merge_storage_into_groups(
+            client, project_id, group_by, group_bytes, group_jobs, start_date, end_date
+        )
+
     top_queries = sorted(queries, key=lambda q: q.cost_usd, reverse=True)[:limit]
 
     total_cost_usd = _estimate_query_cost_usd(total_billed_bytes)
@@ -451,6 +539,8 @@ def get_budget(
         )
     elif lookback_days > 30:
         warning_parts.append(_BUDGET_RETENTION_CAVEAT.format(days=lookback_days))
+    if storage_warning:
+        warning_parts.append(storage_warning)
     warning = " ".join(warning_parts) or None
 
     budget_target_usd = (
@@ -628,6 +718,7 @@ def get_cost_series(
         period_start=datetime.combine(start_date, datetime.min.time(), tzinfo=UTC),
         period_end=datetime.combine(end_date, datetime.min.time(), tzinfo=UTC),
         points=points,
+        total_cost_usd=round(sum(p.total_cost_usd for p in points), 6),
         storage_available=storage_available,
         cache_updated_at=cache_updated_at,
         warning=warning,

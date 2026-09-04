@@ -26,6 +26,10 @@ export interface CostGroup {
   cost_usd: number
   billed_bytes: number
   job_count: number
+  // Só populados quando getBudget(includeStorage=true) e groupBy é
+  // table/dataset (v1.12) — null nos demais casos.
+  storage_cost_usd: number | null
+  total_cost_usd: number | null
 }
 
 export interface CostlyQuery {
@@ -82,6 +86,9 @@ export interface CostSeriesResponse {
   period_start: string
   period_end: string
   points: CostSeriesPoint[]
+  // Soma de points[].total_cost_usd (v1.11) — fonte do card "Gasto no
+  // período filtrado" da FinOpsOverviewPage, já respeita cost_type/janela.
+  total_cost_usd: number
   storage_available: boolean
   cache_updated_at: string | null
   warning: string | null

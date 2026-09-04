@@ -658,6 +658,132 @@ def test_get_budget_projection_is_independent_of_lookback_days(monkeypatch):
     assert narrow.projection.projected_month_total_usd == wide.projection.projected_month_total_usd
 
 
+# --- get_budget(include_storage=True) — v1.12, split query/storage por
+# tabela/dataset em domains/finops/service.py::_merge_storage_into_groups.
+
+
+def _stub_storage_by_table(monkeypatch, bytes_by_table, reason=None):
+    monkeypatch.setattr(service, "discover_regions", lambda project_id, client: ["US"])
+    result = (bytes_by_table, reason) if bytes_by_table is not None else (None, reason)
+    monkeypatch.setattr(service.repository, "get_storage_bytes_by_table", lambda *a, **kw: result)
+
+
+def test_get_budget_include_storage_adds_storage_cost_to_table_groups(monkeypatch):
+    events = [_event([("proj", "RAW", "a")], _now(), total_billed_bytes=10**12)]
+    _stub_budget_events(monkeypatch, events)
+    _stub_storage_by_table(monkeypatch, {("RAW", "a"): 5 * 1024**4})
+
+    result = service.get_budget(
+        MagicMock(), MagicMock(), MagicMock(), "proj", client=MagicMock(), include_storage=True
+    )
+
+    group = next(g for g in result.groups if g.key == "proj.RAW.a")
+    assert group.storage_cost_usd is not None
+    assert group.storage_cost_usd > 0
+    assert group.total_cost_usd == pytest.approx(group.cost_usd + group.storage_cost_usd, abs=1e-6)
+
+
+def test_get_budget_include_storage_includes_tables_with_zero_query_cost(monkeypatch):
+    # Decisão do usuário: união — tabela nunca consultada na janela, mas
+    # com storage > 0, tem que aparecer (cost_usd=0, storage_cost_usd>0) —
+    # é o sinal de tabela abandonada que esse breakdown existe pra achar.
+    _stub_budget_events(monkeypatch, [])
+    _stub_storage_by_table(monkeypatch, {("RAW", "idle"): 2 * 1024**4})
+
+    result = service.get_budget(
+        MagicMock(), MagicMock(), MagicMock(), "proj", client=MagicMock(), include_storage=True
+    )
+
+    group = next(g for g in result.groups if g.key == "proj.RAW.idle")
+    assert group.cost_usd == 0
+    assert group.storage_cost_usd > 0
+
+
+def test_get_budget_include_storage_aggregates_dataset_level(monkeypatch):
+    _stub_budget_events(monkeypatch, [])
+    # Duas tabelas com o MESMO tamanho no mesmo dataset — o custo de
+    # storage do dataset tem que ser a soma das duas, não o de uma só.
+    _stub_storage_by_table(monkeypatch, {("RAW", "a"): 1 * 1024**4, ("RAW", "b"): 1 * 1024**4})
+
+    by_table = service.get_budget(
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        "proj",
+        group_by=BudgetGroupBy.TABLE,
+        client=MagicMock(),
+        include_storage=True,
+    )
+    single_table_storage_cost = next(
+        g.storage_cost_usd for g in by_table.groups if g.key == "proj.RAW.a"
+    )
+
+    by_dataset = service.get_budget(
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        "proj",
+        group_by=BudgetGroupBy.DATASET,
+        client=MagicMock(),
+        include_storage=True,
+    )
+    dataset_group = next(g for g in by_dataset.groups if g.key == "proj.RAW")
+
+    assert dataset_group.storage_cost_usd == pytest.approx(2 * single_table_storage_cost, abs=1e-6)
+
+
+def test_get_budget_include_storage_ignored_for_non_table_dataset_group_by(monkeypatch):
+    events = [_event([("proj", "RAW", "a")], _now(), total_billed_bytes=10**12)]
+    _stub_budget_events(monkeypatch, events)
+    _stub_storage_by_table(monkeypatch, {("RAW", "a"): 5 * 1024**4})
+
+    result = service.get_budget(
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        "proj",
+        group_by=BudgetGroupBy.USER,
+        client=MagicMock(),
+        include_storage=True,
+    )
+
+    assert all(g.storage_cost_usd is None for g in result.groups)
+
+
+def test_get_budget_include_storage_without_client_is_noop(monkeypatch):
+    events = [_event([("proj", "RAW", "a")], _now(), total_billed_bytes=10**12)]
+    _stub_budget_events(monkeypatch, events)
+
+    result = service.get_budget(
+        MagicMock(), MagicMock(), MagicMock(), "proj", client=None, include_storage=True
+    )
+
+    assert all(g.storage_cost_usd is None for g in result.groups)
+
+
+def test_get_budget_include_storage_degrades_when_storage_unavailable(monkeypatch):
+    events = [_event([("proj", "RAW", "a")], _now(), total_billed_bytes=10**12)]
+    _stub_budget_events(monkeypatch, events)
+    _stub_storage_by_table(monkeypatch, None, reason="403 Permission denied")
+
+    result = service.get_budget(
+        MagicMock(), MagicMock(), MagicMock(), "proj", client=MagicMock(), include_storage=True
+    )
+
+    assert all(g.storage_cost_usd is None for g in result.groups)
+    assert result.warning is not None
+    assert "storage" in result.warning.lower()
+
+
+def test_get_budget_include_storage_false_by_default_is_unchanged(monkeypatch):
+    events = [_event([("proj", "RAW", "a")], _now(), total_billed_bytes=10**12)]
+    _stub_budget_events(monkeypatch, events)
+
+    result = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj")
+
+    assert all(g.storage_cost_usd is None and g.total_cost_usd is None for g in result.groups)
+
+
 def test_get_budget_sets_warning_when_no_events(monkeypatch):
     _stub_budget_events(monkeypatch, [])
 
@@ -965,6 +1091,22 @@ def test_get_cost_series_clamps_start_date_older_than_cache_and_warns(monkeypatc
 
     assert result.warning is not None
     assert "cache de audit log" in result.warning
+
+
+def test_get_cost_series_total_cost_usd_sums_all_points(monkeypatch):
+    # v1.11 — total_cost_usd é a fonte do card "Gasto no período" da
+    # FinOpsOverviewPage, precisa bater com a soma exata dos pontos
+    # (query + storage), não só query.
+    result = _cost_series(
+        monkeypatch,
+        events=[_event([("proj", "RAW", "a")], _now(), total_billed_bytes=10**12)],
+        current_bytes=5 * 1024**4,
+        lookback_days=10,
+    )
+
+    expected = round(sum(p.total_cost_usd for p in result.points), 6)
+    assert result.total_cost_usd == expected
+    assert result.total_cost_usd > 0
 
 
 # --- _table_efficiency_score / compute_table_scores --------------------------
