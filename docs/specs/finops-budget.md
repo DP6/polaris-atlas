@@ -1,6 +1,22 @@
 # Spec — Domínio: FinOps — Budget de custo
 
-**Versão:** 1.9 (rodada 3 — filtro de data real na Visão Geral, AC-FIN-RV-02:
+**Versão:** 1.10 (fix `fix/finops-projection-days-elapsed` — a projeção
+mensal (`projection.projected_month_total_usd`) virou **month-to-date
+real**, decidido pelo usuário entre as opções levantadas em
+`finops-overview-date-range` (v1.9): `cost_so_far_usd`/`daily_average_usd`
+passam a somar só os eventos do dia 1 do mês corrente até hoje, e
+`days_elapsed` passa a ser `days_elapsed_in_month` (calendário) — nada
+disso depende mais de `lookback_days`/`from`/`to`, que continuam só
+recortando `groups`/`top_queries`/`total_cost_usd`. Antes (v1.8), a
+projeção reusava a janela escolhida como base do run-rate; como
+`lookback_days` (default 30) e `days_in_month` (28–31) ficavam sempre
+próximos, `projected_month_total_usd` colapsava pra ≈ `cost_so_far_usd` —
+achado registrado no CHANGELOG em `finops-overview-date-range` sem fix
+aplicado. `BudgetResponse.lookback_days` (não mais
+`projection.days_elapsed`) é o campo certo pra exibir "janela analisada"
+no FE. Cabe sempre no cache de `_FINOPS_CACHE_MAX_DAYS` porque nenhum mês
+tem mais de 31 dias (ASM-001).)
+v1.9 (rodada 3 — filtro de data real na Visão Geral, AC-FIN-RV-02:
 `GET /finops/{p}/budget` e `GET /finops/{p}/cost-series` ganham `from`/`to`
 (query, `YYYY-MM-DD`) — um intervalo explícito, que passa a valer sobre
 `lookback_days` quando presente. Continuam clampados no piso do cache
@@ -24,7 +40,7 @@ v1.5: CRUD de meta de custo por usuário (`domains/budget`). v1.4: cache de
 audit log **incremental**, janela 30 → **31 dias** — ver ASM-001)
 **Status:** Aprovada
 **Fase:** 4 — FinOps (segunda frente: budget por dataset/projeto)
-**Última atualização:** 2026-09-04
+**Última atualização:** 2026-09-04 (v1.10)
 
 ---
 
@@ -146,12 +162,12 @@ Janela **"últimos N dias"** (rodada 3; antes era fixo no mês corrente).
   `user`, `day`, `month`, `year`. Ver "Agrupamento configurável".
 - `limit` (query, default `10`, mínimo `1`, máximo `50`) — tamanho de
   `top_queries`.
-- `lookback_days` (query, default `30`, `1`–`31`) — janela analisada.
-  `period_start = now - lookback_days`. Teto de 31 = retenção do cache de
-  audit log (fora dele o `_BUDGET_RETENTION_CAVEAT` avisa). O service
-  clampa (não é 422). A **projeção mensal** (`projected_month_total_usd`)
-  passou a ser `média_diária_da_janela × dias_do_mês` — não é mais
-  "resto do mês corrente".
+- `lookback_days` (query, default `30`, `1`–`31`) — janela analisada, só
+  recorta `groups`/`top_queries`/`total_cost_usd`. `period_start = now -
+  lookback_days`. Teto de 31 = retenção do cache de audit log (fora dele
+  o `_BUDGET_RETENTION_CAVEAT` avisa). O service clampa (não é 422). A
+  **projeção mensal** (objeto `projection`) é **independente** deste
+  parâmetro — ver abaixo.
 - `from`/`to` (query, `YYYY-MM-DD`, rodada 3 — filtro de data real da
   Visão Geral, AC-FIN-RV-02) — intervalo explícito, que **sobrescreve**
   `lookback_days` quando presente (`_resolve_date_window`). `to` clampado
@@ -159,6 +175,20 @@ Janela **"últimos N dias"** (rodada 3; antes era fixo no mês corrente).
   cache (hoje − 30 dias); se `from` vier depois de `to` após os clamps,
   o service troca os dois em vez de 422. Qualquer clamp entra no
   `warning` da resposta — nunca falha/trunca em silêncio.
+
+**Projeção mensal (`projection`) — month-to-date real, v1.10:**
+sempre calculada sobre o dia 1 do mês corrente até hoje, **nunca** sobre
+`lookback_days`/`from`/`to` (decisão do usuário — v1.8 tinha deixado a
+projeção reusar a janela escolhida como base do run-rate, mas com
+`lookback_days` default 30 ≈ `days_in_month`, `projected_month_total_usd`
+colapsava pra ≈ `cost_so_far_usd`, achado sem fix em
+`finops-overview-date-range`). `days_elapsed` = dias corridos do mês
+corrente (`hoje.day`), `cost_so_far_usd`/`daily_average_usd` somam só os
+eventos do mês corrente. Cabe sempre no cache de `_FINOPS_CACHE_MAX_DAYS`
+(nenhum mês tem mais de 31 dias, ASM-001). Pra exibir a janela
+efetivamente usada nas outras três visões (`groups`/`top_queries`/
+`total_cost_usd`), o FE deve ler `lookback_days` (topo da resposta), não
+mais `projection.days_elapsed`.
 
 **Response 200:**
 ```json
@@ -189,11 +219,11 @@ Janela **"últimos N dias"** (rodada 3; antes era fixo no mês corrente).
     }
   ],
   "projection": {
-    "days_elapsed": 15,
+    "days_elapsed": 14,
     "days_in_month": 31,
-    "cost_so_far_usd": 8.88,
-    "daily_average_usd": 0.592,
-    "projected_month_total_usd": 18.35
+    "cost_so_far_usd": 21.40,
+    "daily_average_usd": 1.529,
+    "projected_month_total_usd": 47.39
   },
   "budget_target_usd": 250.0,
   "warning": null
@@ -465,10 +495,15 @@ def get_budget(
        chaves via _group_keys(group_by, event, real_tables); guarda a
        linha bruta de CostlyQuery.
     5. groups ordenado por custo desc; top_queries desc, cortado em `limit`.
-    6. Projeção (run-rate mensal): daily_average = custo_da_janela /
-       lookback_days; days_in_month via calendar.monthrange();
-       projected_month_total = daily_average × days_in_month. `days_elapsed`
-       da resposta = lookback_days (a "janela analisada").
+    6. Projeção (month-to-date real, independente de lookback_days/
+       from/to): custo_do_mes_corrente = soma dos mesmos eventos
+       filtrados por [dia 1 do mês, hoje] em vez de [start_date,
+       end_date]; days_elapsed_in_month = hoje.day; daily_average =
+       custo_do_mes_corrente / days_elapsed_in_month; days_in_month via
+       calendar.monthrange(); projected_month_total = daily_average ×
+       days_in_month. `days_elapsed` da resposta = days_elapsed_in_month
+       (calendário) — a "janela analisada" das outras 3 visões é
+       `BudgetResponse.lookback_days`.
     """
 ```
 

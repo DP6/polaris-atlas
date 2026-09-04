@@ -345,6 +345,10 @@ def get_budget(
     period_start = datetime.combine(start_date, datetime.min.time(), tzinfo=UTC)
     period_end = datetime.combine(end_date, datetime.min.time(), tzinfo=UTC)
 
+    today = now.date()
+    month_start = today.replace(day=1)
+    days_elapsed_in_month = (today - month_start).days + 1
+
     # Fonte é o mesmo cache de ~30 dias de scan_partition_candidates; o
     # recorte pra janela sai do filtro de start_date/end_date abaixo.
     events, cache_updated_at, quota_warning = _scan_events_or_quota_warning(
@@ -355,12 +359,19 @@ def get_budget(
     group_jobs: dict[str, int] = {}
     queries: list[CostlyQuery] = []
     total_billed_bytes = 0
+    # A projeção mensal é sempre month-to-date real (dia 1 do mês corrente
+    # até hoje) — independente da janela lookback_days/from-to escolhida
+    # pro resto da resposta (groups/top_queries/total_cost_usd). Antes a
+    # projeção reusava a janela escolhida como base, e como lookback_days
+    # (default 30) e days_in_month (28-31) ficavam sempre próximos,
+    # projected_month_total_usd colapsava pra ≈ cost_so_far (ver
+    # CHANGELOG "finops-overview-date-range"). Cabe sempre no cache de
+    # _FINOPS_CACHE_MAX_DAYS porque nenhum mês tem mais de 31 dias
+    # (ASM-001 em docs/specs/finops-budget.md).
+    month_to_date_billed_bytes = 0
 
     for event in events:
         if event.timestamp is None:
-            continue
-        event_date = event.timestamp.date()
-        if event_date < start_date or event_date > end_date:
             continue
         if event.total_billed_bytes <= 0:
             continue
@@ -372,6 +383,14 @@ def get_budget(
             # não é atividade de dado real deste projeto, não entra em
             # nenhuma agregação de budget (ver docs/specs/finops-budget.md,
             # "Casos de borda").
+            continue
+
+        event_date = event.timestamp.date()
+
+        if month_start <= event_date <= today:
+            month_to_date_billed_bytes += event.total_billed_bytes
+
+        if event_date < start_date or event_date > end_date:
             continue
 
         total_billed_bytes += event.total_billed_bytes
@@ -409,14 +428,16 @@ def get_budget(
     top_queries = sorted(queries, key=lambda q: q.cost_usd, reverse=True)[:limit]
 
     total_cost_usd = _estimate_query_cost_usd(total_billed_bytes)
-    daily_average = total_cost_usd / lookback_days if lookback_days else 0.0
-    # Projeção mensal a partir da média diária da janela escolhida (não é
-    # mais "resto do mês corrente" — a janela pode nem ser o mês).
+
+    # Projeção mensal month-to-date: média diária do gasto já acumulado
+    # no mês corrente (dia 1 até hoje), extrapolada pros dias restantes.
+    cost_so_far_usd = _estimate_query_cost_usd(month_to_date_billed_bytes)
+    daily_average = cost_so_far_usd / days_elapsed_in_month if days_elapsed_in_month else 0.0
     days_in_month = calendar.monthrange(now.year, now.month)[1]
     projection = CostProjection(
-        days_elapsed=lookback_days,
+        days_elapsed=days_elapsed_in_month,
         days_in_month=days_in_month,
-        cost_so_far_usd=total_cost_usd,
+        cost_so_far_usd=cost_so_far_usd,
         daily_average_usd=round(daily_average, 6),
         projected_month_total_usd=round(daily_average * days_in_month, 6),
     )
