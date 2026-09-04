@@ -197,7 +197,7 @@ export function BudgetPage() {
               },
               {
                 label: 'Janela analisada',
-                value: `${data.projection.days_elapsed} dias`,
+                value: `${data.lookback_days} dias`,
                 icon: <Calendar size={14} />,
               },
             ].map((item) => (

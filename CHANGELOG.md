@@ -136,6 +136,32 @@ barras verticais sempre visíveis.
 - `AppLayout`: `<main>` de `p-6` → `px-6 pt-6 pb-16` — respiro no fim de toda página
   (cards/ícones/texto não encostavam na borda inferior ao rolar até o fim).
 
+### finops-projection-days-elapsed — `fix/finops-projection-days-elapsed` (backend + front-end)
+
+Aplica a decisão do usuário deixada em aberto por `finops-overview-date-range`
+logo abaixo: separar `days_elapsed_in_month` (calendário) de `lookback_days`
+(janela de dados) na projeção mensal do Budget.
+
+- **Backend:** `get_budget` (`domains/finops/service.py`) agora calcula a
+  projeção mensal como **month-to-date real**, independente da janela
+  `lookback_days`/`from`/`to` escolhida pro resto da resposta
+  (`groups`/`top_queries`/`total_cost_usd`). `cost_so_far_usd`/
+  `daily_average_usd` somam só os eventos do dia 1 do mês corrente até
+  hoje (reaproveita o mesmo cache de 31 dias já escaneado, sem query
+  nova — cabe sempre porque nenhum mês tem mais de 31 dias, ASM-001);
+  `projection.days_elapsed` passou a ser `days_elapsed_in_month`
+  (`hoje.day`), não mais `lookback_days`. Antes, com `lookback_days`
+  default (30) sempre próximo de `days_in_month` (28-31),
+  `projected_month_total_usd` colapsava pra ≈ `cost_so_far_usd` — a
+  "projeção" não projetava nada. `finops-budget.md` → v1.10. 2 testes
+  novos/reescritos (`test_get_budget_computes_projection`,
+  `test_get_budget_projection_is_independent_of_lookback_days`),
+  `uv run pytest tests/unit` = 839 ok.
+- **Frontend:** `BudgetPage` — o badge "Janela analisada" trocou de
+  `projection.days_elapsed` (agora significa outra coisa) pra
+  `lookback_days` (topo da resposta, sem mudança de valor exibido pro
+  usuário). `pnpm lint` verde.
+
 ### finops-overview-date-range — `feat/finops-overview-date-range` (backend + front-end)
 
 Revisão pedida pelo usuário sobre a Visão Geral do FinOps: investigar a projeção mensal,

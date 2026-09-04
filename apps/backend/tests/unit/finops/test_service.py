@@ -619,7 +619,11 @@ def test_get_budget_computes_projection(monkeypatch):
 
     result = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj")
 
-    assert result.projection.days_elapsed == result.lookback_days
+    # days_elapsed é calendário (dia do mês corrente), não a janela
+    # lookback_days/from-to escolhida pro resto da resposta — ver
+    # docs/specs/finops-budget.md e CHANGELOG "finops-overview-date-range".
+    today = datetime.now(UTC).date()
+    assert result.projection.days_elapsed == today.day
     assert result.projection.days_in_month >= result.projection.days_elapsed
     assert result.projection.cost_so_far_usd > 0
     assert result.projection.daily_average_usd == round(
@@ -633,6 +637,25 @@ def test_get_budget_computes_projection(monkeypatch):
         result.projection.daily_average_usd * result.projection.days_in_month, abs=1e-4
     )
     assert result.projection.projected_month_total_usd >= result.projection.cost_so_far_usd
+
+
+def test_get_budget_projection_is_independent_of_lookback_days(monkeypatch):
+    # Evento "hoje" entra tanto na janela lookback estreita quanto na
+    # larga — antes do fix, daily_average (= total_cost_usd / lookback_days)
+    # mudava de valor só por causa do denominador, mesmo com o mesmo custo
+    # month-to-date. Depois do fix, a projeção é month-to-date real e não
+    # deve se mover com lookback_days.
+    events = [_event([("proj", "RAW", "a")], _now(), total_billed_bytes=10**12)]
+    _stub_budget_events(monkeypatch, events)
+
+    narrow = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj", lookback_days=1)
+    wide = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj", lookback_days=30)
+
+    assert narrow.lookback_days != wide.lookback_days
+    assert narrow.projection.days_elapsed == wide.projection.days_elapsed
+    assert narrow.projection.cost_so_far_usd == wide.projection.cost_so_far_usd
+    assert narrow.projection.daily_average_usd == wide.projection.daily_average_usd
+    assert narrow.projection.projected_month_total_usd == wide.projection.projected_month_total_usd
 
 
 def test_get_budget_sets_warning_when_no_events(monkeypatch):
