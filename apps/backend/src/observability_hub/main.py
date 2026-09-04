@@ -13,6 +13,7 @@ from observability_hub.api.v1 import (
     freshness,
     history,
     lineage,
+    metadata,
     pii,
     profiling,
     project_admins,
@@ -24,6 +25,7 @@ from observability_hub.core.config import settings
 from observability_hub.core.exceptions import (
     AccessRequestNotFoundError,
     AdminAccessRequiredError,
+    ColumnNotFoundError,
     DatasetNotFoundError,
     EventCacheNotReadyError,
     FolderAccessDeniedError,
@@ -77,6 +79,7 @@ app.include_router(finops.router)
 app.include_router(admin.router)
 app.include_router(access_requests.router)
 app.include_router(storage.router)
+app.include_router(metadata.router)
 
 
 @app.get("/health")
@@ -231,6 +234,14 @@ def handle_table_not_found(request: Request, exc: TableNotFoundError) -> JSONRes
     return JSONResponse(
         status_code=404,
         content={"error": "table_not_found", "message": str(exc)},
+    )
+
+
+@app.exception_handler(ColumnNotFoundError)
+def handle_column_not_found(request: Request, exc: ColumnNotFoundError) -> JSONResponse:
+    return JSONResponse(
+        status_code=404,
+        content={"error": "column_not_found", "message": str(exc)},
     )
 
 

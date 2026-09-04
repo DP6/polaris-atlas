@@ -7,6 +7,7 @@ from observability_hub.domains.freshness import service
 from observability_hub.domains.freshness.schemas import (
     FreshnessDatasetResponse,
     FreshnessProjectResponse,
+    TableFreshness,
 )
 
 router = APIRouter(
@@ -31,3 +32,16 @@ def get_dataset_freshness(
     client: bigquery.Client = Depends(get_client),
 ) -> FreshnessDatasetResponse:
     return service.get_dataset_freshness(client, project_id, dataset_id)
+
+
+@router.get(
+    "/{project_id}/{dataset_id}/{table_id}",
+    response_model=TableFreshness,
+)
+def get_table_freshness(
+    project_id: str,
+    dataset_id: str,
+    table_id: str,
+    client: bigquery.Client = Depends(get_client),
+) -> TableFreshness:
+    return service.get_table_freshness(client, project_id, dataset_id, table_id)

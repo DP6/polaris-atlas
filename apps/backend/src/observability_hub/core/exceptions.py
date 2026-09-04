@@ -91,6 +91,22 @@ class TableNotFoundError(Exception):
         super().__init__(f"Tabela '{table_id}' não encontrada em '{project_id}.{dataset_id}'.")
 
 
+class ColumnNotFoundError(Exception):
+    """Levantada por domains/metadata/service.py::upsert_column_metadata —
+    coluna não existe na tabela REAL (checado via core/bigquery.py::
+    get_table_cached, não contra o doc de metadados), ex: dropada no BQ
+    depois de documentada. Ver docs/specs/metadata.md, AC-META-005."""
+
+    def __init__(self, project_id: str, dataset_id: str, table_id: str, column_name: str) -> None:
+        self.project_id = project_id
+        self.dataset_id = dataset_id
+        self.table_id = table_id
+        self.column_name = column_name
+        super().__init__(
+            f"Coluna '{column_name}' não encontrada em '{project_id}.{dataset_id}.{table_id}'."
+        )
+
+
 class TableNotPartitionedError(Exception):
     def __init__(self, project_id: str, dataset_id: str, table_id: str) -> None:
         self.project_id = project_id
