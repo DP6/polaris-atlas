@@ -9,9 +9,11 @@ usuário, como parte do escopo do novo papel "Admin de projeto"
 (`docs/specs/admin.md` v1.11: metadados + budget). Leitura continua
 aberta a qualquer um com acesso ao projeto; escrita
 (`PUT`/`DELETE .../budgets`) passa a exigir `require_project_admin` em
-vez de só `get_current_user`. **Precisa de decisão de migração dos
-budgets pessoais já existentes antes da implementação** — ver Q-xxx na
-seção pendente, ainda aberta.)
+vez de só `get_current_user`. Migração dos budgets pessoais já
+existentes: **apagados** (Q-003, respondida 2026-09-05) — sem migração
+automática, cada projeto começa sem budget compartilhado até um Admin de
+projeto recadastrar. Implementação desbloqueada, ver "Budget
+compartilhado por projeto — pendente".)
 v1.12 (2026-09-04 — fusão "Detalhamento de custo", branch
 `feat/finops-cost-detail`: `GET /finops/{p}/budget` ganha
 `include_storage` [bool, default `false`] — quando `true` e `group_by` é
@@ -1047,14 +1049,27 @@ completo — esta seção só rastreia critérios de aceite, suposições,
 
 ### Pergunta em aberto — migração dos budgets pessoais existentes
 
-| ID | Pergunta | Status |
-|---|---|---|
-| Q-003 | Quando a v1.13 for implementada, o que acontece com os budgets **já cadastrados** em `users/{email}/budgets` (produção, dado real)? Três caminhos possíveis: **(a)** apagar tudo, projeto começa sem budget compartilhado até um Admin de projeto recadastrar; **(b)** migração automática — mas cada projeto pode ter budgets de **vários usuários diferentes** pro mesmo `scope`, sem uma regra óbvia de qual vira o valor do projeto (mais recente por `updated_at`? maior valor? pedir pro usuário escolher por projeto?); **(c)** os dois modelos coexistem por um tempo (pessoal continua de leitura/histórico, projeto é o novo "oficial" exibido nos cards) — mais complexo de implementar e de explicar na UI. | **aberta — bloqueia a implementação da v1.13**, não só um detalhe a ajustar depois. Precisa de decisão explícita do usuário antes de qualquer código; nenhuma das três opções foi escolhida como padrão nesta spec. |
+| ID | Pergunta | Status | Resposta |
+|---|---|---|---|
+| Q-003 | Quando a v1.13 for implementada, o que acontece com os budgets **já cadastrados** em `users/{email}/budgets` (produção, dado real)? Três caminhos possíveis: **(a)** apagar tudo, projeto começa sem budget compartilhado até um Admin de projeto recadastrar; **(b)** migração automática — mas cada projeto pode ter budgets de **vários usuários diferentes** pro mesmo `scope`, sem uma regra óbvia de qual vira o valor do projeto; **(c)** os dois modelos coexistem por um tempo. | respondida | **(a)** — apagar. Decisão do usuário, 2026-09-05: quando `PUT`/`DELETE /finops/{p}/budgets` passar a exigir `require_project_admin`, todos os docs de `users/{email}/budgets` (qualquer usuário, qualquer projeto) são apagados como parte do deploy da v1.13. Sem migração automática pro budget do projeto — cada projeto começa **sem** budget compartilhado até um Admin de projeto (ou superadmin) recadastrar manualmente. Coerente com "leitura de tudo" da persona usuário comum: ninguém perde acesso de leitura, só o dado pessoal antigo deixa de existir. |
 
-**Status (2026-09-05): estrutura aprovada, prosa desta seção escrita,
-implementação bloqueada pela Q-003.** Diferente do resto desta spec — as
-outras seções pendentes (`cost-history`, `include_storage`) não tinham
-uma decisão de produto pendente que afetasse dado real já em produção;
-esta tem. Não implementar `PUT`/`DELETE /finops/{p}/budgets` com o gate
-novo nem migrar/apagar nada de `users/{email}/budgets` antes de Q-003
-virar "respondida".
+**Mecanismo da migração**: script one-off, mesmo padrão de
+`scripts/seed_admin.py` (rodado manualmente pelo operador via
+`gcloud auth application-default login`, não pela SA de runtime, não
+automático no deploy) — `scripts/delete_legacy_personal_budgets.py`,
+roda uma vez em dev, valida, só depois em prod, no mesmo PR/janela em
+que `PUT`/`DELETE /finops/{p}/budgets` trocam de gate. **Ordem
+importa**: rodar o script **antes** de trocar o gate pra
+`require_project_admin` não faz diferença de segurança (o script só
+apaga a coleção antiga, que já para de ser lida assim que o código novo
+sobe), mas rodar **depois** deixaria uma janela em que o endpoint novo
+já rejeita escrita de usuário comum enquanto o dado antigo (agora morto,
+nunca mais lido) ainda ocupa espaço — sem risco real, só desorganizado.
+Preferência: script primeiro, deploy do código depois.
+
+**Status (2026-09-05): spec aprovada, Q-003 respondida — implementação
+desbloqueada.** Falta escrever/rodar `scripts/delete_legacy_personal_budgets.py`,
+trocar o gate de `PUT`/`DELETE /finops/{p}/budgets`, mover
+`domains/budget/repository.py` de `users/{email}/budgets` pra
+`hub_projects/{project_id}/budgets`, e atualizar `GET .../budget` pra
+não injetar mais `budget_target_usd` a partir de `user.email`.
