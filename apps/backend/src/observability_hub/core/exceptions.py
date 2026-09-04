@@ -233,3 +233,20 @@ class FolderAccessDeniedError(Exception):
     def __init__(self, folder_id: str) -> None:
         self.folder_id = folder_id
         super().__init__(f"Você não tem acesso à pasta de profiling '{folder_id}'.")
+
+
+class ProjectAdminRequiredError(Exception):
+    """Levantada por core/auth.py::require_project_admin — usuário não é
+    superadmin (hub_users.is_admin, sempre bypassa) nem tem doc em
+    hub_projects/{project_id}/project_admins/{email} cujo `datasets`
+    seja null (projeto inteiro) ou contenha o dataset_id pedido.
+    Distinta de AdminAccessRequiredError: aquela é superadmin global do
+    Hub inteiro; esta é um papel delegável, escopado por projeto/dataset
+    (ver docs/specs/admin.md, "Admin de projeto")."""
+
+    def __init__(self, project_id: str) -> None:
+        self.project_id = project_id
+        super().__init__(
+            f"Esta ação requer o papel de Admin de projeto em '{project_id}'. "
+            "Peça a um Admin de projeto ou a um administrador do Hub para conceder acesso."
+        )

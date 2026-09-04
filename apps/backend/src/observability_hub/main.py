@@ -15,6 +15,7 @@ from observability_hub.api.v1 import (
     lineage,
     pii,
     profiling,
+    project_admins,
     projects,
     quality,
     storage,
@@ -39,6 +40,7 @@ from observability_hub.core.exceptions import (
     PiiScanTimeoutError,
     ProfilingTimeoutError,
     ProjectAccessDeniedError,
+    ProjectAdminRequiredError,
     ProjectNotAuthorizedError,
     ProjectNotFoundError,
     StorageAccessDeniedError,
@@ -60,6 +62,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(projects.router)
+app.include_router(project_admins.router)
 app.include_router(catalog.router)
 app.include_router(freshness.router)
 app.include_router(profiling.router)
@@ -322,6 +325,14 @@ def handle_admin_access_required(request: Request, exc: AdminAccessRequiredError
     return JSONResponse(
         status_code=403,
         content={"error": "admin_access_required", "message": str(exc)},
+    )
+
+
+@app.exception_handler(ProjectAdminRequiredError)
+def handle_project_admin_required(request: Request, exc: ProjectAdminRequiredError) -> JSONResponse:
+    return JSONResponse(
+        status_code=403,
+        content={"error": "project_admin_required", "message": str(exc)},
     )
 
 
