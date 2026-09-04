@@ -1,7 +1,8 @@
 # Spec — Domínio: FinOps — Budget de custo
 
-**Versão:** 1.13 (2026-09-05 — planejada, ver "Budget compartilhado por
-projeto — pendente": budget deixa de ser por usuário
+**Versão:** 1.13 (2026-09-05 — implementada, script de migração ainda
+não rodado em nenhum ambiente; ver "Budget compartilhado por projeto —
+pendente": budget deixa de ser por usuário
 (`users/{email}/budgets`) e vira recurso do **projeto**
 (`hub_projects/{project_id}/budgets/{doc_id}`) — reverte a decisão da
 v1.5/ASM-FIN-RV-02 ("sem compartilhamento entre usuários"), a pedido do
@@ -1067,9 +1068,18 @@ já rejeita escrita de usuário comum enquanto o dado antigo (agora morto,
 nunca mais lido) ainda ocupa espaço — sem risco real, só desorganizado.
 Preferência: script primeiro, deploy do código depois.
 
-**Status (2026-09-05): spec aprovada, Q-003 respondida — implementação
-desbloqueada.** Falta escrever/rodar `scripts/delete_legacy_personal_budgets.py`,
-trocar o gate de `PUT`/`DELETE /finops/{p}/budgets`, mover
-`domains/budget/repository.py` de `users/{email}/budgets` pra
-`hub_projects/{project_id}/budgets`, e atualizar `GET .../budget` pra
-não injetar mais `budget_target_usd` a partir de `user.email`.
+**Status (2026-09-05): implementado.** `domains/budget/repository.py`
+migrado pra `hub_projects/{project_id}/budgets` (`_budget_doc_id` sem
+segmento de projeto, `_project` fixo pra `scope=project`); `upsert`/
+`remove_budget` (`domains/budget/service.py`) exigem
+`admin_service.is_admin` ou `admin_service.is_project_admin` (checado
+contra o `dataset_id` do próprio request — `None` em `scope=project` só
+passa pra grant `datasets: null`); `GET .../budget` injeta
+`budget_target_usd` incondicionalmente (não depende mais de
+`user_email`). `scripts/delete_legacy_personal_budgets.py` escrito
+(dry-run por default, `--confirm` apaga) — **ainda não rodado** em
+nenhum ambiente; rodar antes do primeiro deploy desta versão, dev
+primeiro. Frontend: `BudgetConfigDialog` trava os campos pra quem não é
+Admin de projeto no escopo selecionado (`useCanManageProject`,
+compartilhado com a UI de metadados). 903 testes de backend passando,
+`pnpm lint`/`tsc -b`/`vite build` limpos no frontend.

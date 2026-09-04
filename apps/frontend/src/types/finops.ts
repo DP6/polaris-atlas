@@ -133,9 +133,13 @@ export interface BudgetEntry {
   table_id: string | null
   amount_usd: number
   period: string
+  // Quem criou o registro pela primeira vez — não é mais "dono" desde
+  // que o budget virou compartilhado por projeto (v1.13).
   created_by: string
   created_at: string
   updated_at: string
+  // Quem fez a última edição (v1.13).
+  updated_by: string
 }
 
 export interface BudgetListResponse {

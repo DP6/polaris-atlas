@@ -20,7 +20,7 @@ import { useBudgets } from '@/features/finops/hooks'
 import { useTableFreshness } from '@/features/freshness/hooks'
 import { ColumnMetadataTable } from '@/features/metadata/ColumnMetadataTable'
 import {
-  useCanManageMetadata,
+  useCanManageProject,
   useMetadataHistory,
   useTableMetadata,
   useUpsertTableMetadata,
@@ -48,7 +48,7 @@ export function MetadataAnalysisPage() {
 
   const metadataQuery = useTableMetadata(projectId, datasetId, tableId)
   const historyQuery = useMetadataHistory(projectId, datasetId, tableId)
-  const { canManage } = useCanManageMetadata(projectId, datasetId)
+  const { canManage } = useCanManageProject(projectId, datasetId)
   const freshnessQuery = useTableFreshness(projectId, datasetId, tableId)
   const budgetsQuery = useBudgets(projectId)
   const upsertTable = useUpsertTableMetadata(projectId, datasetId, tableId)

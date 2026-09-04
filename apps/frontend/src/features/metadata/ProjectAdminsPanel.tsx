@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
-  useCanManageMetadata,
+  useCanManageProject,
   useGrantProjectAdmin,
   useProjectAdmins,
   useRevokeProjectAdmin,
@@ -19,7 +19,7 @@ import {
 // revogação só aparecem pra quem já é Admin de projeto/superadmin.
 export function ProjectAdminsPanel({ projectId }: { projectId: string }) {
   const adminsQuery = useProjectAdmins(projectId)
-  const { canManage } = useCanManageMetadata(projectId, undefined)
+  const { canManage } = useCanManageProject(projectId, undefined)
   const grantMutation = useGrantProjectAdmin(projectId)
   const revokeMutation = useRevokeProjectAdmin(projectId)
   const [email, setEmail] = useState('')

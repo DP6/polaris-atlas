@@ -412,7 +412,6 @@ def get_budget(
     lookback_days: int = _BUDGET_DEFAULT_LOOKBACK_DAYS,
     from_date: date | None = None,
     to_date: date | None = None,
-    user_email: str | None = None,
     client: bigquery.Client | None = None,
     include_storage: bool = False,
 ) -> BudgetResponse:
@@ -543,11 +542,9 @@ def get_budget(
         warning_parts.append(storage_warning)
     warning = " ".join(warning_parts) or None
 
-    budget_target_usd = (
-        budget_repository.get_project_budget_amount(firestore_client, user_email, project_id)
-        if user_email
-        else None
-    )
+    # Compartilhado por projeto (v1.13) — não depende mais de quem está
+    # logado (era `if user_email` antes; agora sempre consultado).
+    budget_target_usd = budget_repository.get_project_budget_amount(firestore_client, project_id)
 
     return BudgetResponse(
         project_id=project_id,

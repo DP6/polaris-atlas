@@ -162,8 +162,11 @@ export function useRevokeProjectAdmin(projectId: string | undefined) {
 // (datasets=null cobre qualquer um) — mesma regra de
 // core/auth.py::require_project_admin, replicada aqui só pra UX (mostrar/
 // esconder controles de edição sem esperar um 403). A escrita real
-// sempre é validada de novo no backend.
-export function useCanManageMetadata(
+// sempre é validada de novo no backend. Nome genérico (não
+// "...Metadata") porque o escopo do papel Admin de projeto cobre
+// metadados **e** budget (docs/specs/admin.md v1.11) — reaproveitado
+// por features/finops/BudgetConfigDialog.tsx também.
+export function useCanManageProject(
   projectId: string | undefined,
   datasetId: string | undefined,
 ): { canManage: boolean; isLoading: boolean } {
