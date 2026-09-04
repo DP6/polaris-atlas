@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, Query
 from google.cloud import bigquery, firestore, run_v2, storage
 from google.cloud import logging as cloud_logging
@@ -188,9 +190,11 @@ def deny_access_request(
 @router.get("/analytics/logins", response_model=LoginAnalyticsResponse)
 def login_analytics(
     lookback_days: int = Query(default=90, ge=1, le=365),
+    from_date: date | None = Query(default=None, alias="from"),
+    to_date: date | None = Query(default=None, alias="to"),
     client: firestore.Client = Depends(get_firestore_client),
 ) -> LoginAnalyticsResponse:
-    return analytics_service.get_login_analytics(client, lookback_days)
+    return analytics_service.get_login_analytics(client, lookback_days, from_date, to_date)
 
 
 @router.get("/analytics/favorites", response_model=FavoritesAnalyticsResponse)

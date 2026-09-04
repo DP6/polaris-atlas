@@ -1,12 +1,22 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, Query
 from google.cloud import bigquery, firestore, storage
 from google.cloud import logging as cloud_logging
 
-from observability_hub.core.auth import require_project_access
+from observability_hub.core.auth import get_current_user, require_project_access
 from observability_hub.core.bigquery import get_client
 from observability_hub.core.firestore import get_firestore_client
 from observability_hub.core.logging_client import get_logging_client
 from observability_hub.core.storage_client import get_storage_client
+from observability_hub.domains.auth.schemas import UserInfo
+from observability_hub.domains.budget import service as budget_service
+from observability_hub.domains.budget.schemas import (
+    BudgetEntry,
+    BudgetListResponse,
+    BudgetScope,
+    BudgetUpsertRequest,
+)
 from observability_hub.domains.finops import service
 from observability_hub.domains.finops.schemas import (
     BudgetGroupBy,
@@ -14,7 +24,11 @@ from observability_hub.domains.finops.schemas import (
     ColumnTypeEstimateResponse,
     ColumnTypeScanRequest,
     ColumnTypeSuggestionsResponse,
+    CostSeriesGranularity,
+    CostSeriesResponse,
+    CostType,
     PartitionCandidatesResponse,
+    TableScoresResponse,
 )
 
 router = APIRouter(
@@ -48,12 +62,115 @@ def get_budget(
     project_id: str,
     group_by: BudgetGroupBy = Query(default=BudgetGroupBy.TABLE),
     limit: int = Query(default=10, ge=1, le=50),
+    lookback_days: int = Query(default=30, ge=1, le=31),
+    from_date: date | None = Query(default=None, alias="from"),
+    to_date: date | None = Query(default=None, alias="to"),
+    user: UserInfo = Depends(get_current_user),
     logging_client: cloud_logging.Client = Depends(get_logging_client),
     storage_client: storage.Client = Depends(get_storage_client),
     firestore_client: firestore.Client = Depends(get_firestore_client),
 ) -> BudgetResponse:
     return service.get_budget(
-        logging_client, storage_client, firestore_client, project_id, group_by=group_by, limit=limit
+        logging_client,
+        storage_client,
+        firestore_client,
+        project_id,
+        group_by=group_by,
+        limit=limit,
+        lookback_days=lookback_days,
+        from_date=from_date,
+        to_date=to_date,
+        user_email=user.email,
+    )
+
+
+@router.get("/{project_id}/cost-series", response_model=CostSeriesResponse)
+def get_cost_series(
+    project_id: str,
+    granularity: CostSeriesGranularity = Query(default=CostSeriesGranularity.DAY),
+    cost_type: CostType = Query(default=CostType.ALL),
+    lookback_days: int = Query(default=30, ge=1, le=31),
+    from_date: date | None = Query(default=None, alias="from"),
+    to_date: date | None = Query(default=None, alias="to"),
+    datasets: list[str] | None = Query(default=None),
+    tables: list[str] | None = Query(default=None),
+    client: bigquery.Client = Depends(get_client),
+    logging_client: cloud_logging.Client = Depends(get_logging_client),
+    storage_client: storage.Client = Depends(get_storage_client),
+    firestore_client: firestore.Client = Depends(get_firestore_client),
+) -> CostSeriesResponse:
+    return service.get_cost_series(
+        client,
+        logging_client,
+        storage_client,
+        firestore_client,
+        project_id,
+        granularity=granularity,
+        cost_type=cost_type,
+        lookback_days=lookback_days,
+        from_date=from_date,
+        to_date=to_date,
+        datasets=datasets,
+        tables=tables,
+    )
+
+
+@router.get("/{project_id}/table-scores", response_model=TableScoresResponse)
+def get_table_scores(
+    project_id: str,
+    datasets: list[str] | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    client: bigquery.Client = Depends(get_client),
+    logging_client: cloud_logging.Client = Depends(get_logging_client),
+    storage_client: storage.Client = Depends(get_storage_client),
+    firestore_client: firestore.Client = Depends(get_firestore_client),
+) -> TableScoresResponse:
+    return service.compute_table_scores(
+        client,
+        logging_client,
+        storage_client,
+        firestore_client,
+        project_id,
+        datasets=datasets,
+        limit=limit,
+    )
+
+
+@router.get("/{project_id}/budgets", response_model=BudgetListResponse)
+def list_budgets(
+    project_id: str,
+    user: UserInfo = Depends(get_current_user),
+    firestore_client: firestore.Client = Depends(get_firestore_client),
+) -> BudgetListResponse:
+    return budget_service.list_budgets(firestore_client, user.email, project_id)
+
+
+@router.put("/{project_id}/budgets", response_model=BudgetEntry)
+def upsert_budget(
+    project_id: str,
+    request: BudgetUpsertRequest,
+    user: UserInfo = Depends(get_current_user),
+    firestore_client: firestore.Client = Depends(get_firestore_client),
+) -> BudgetEntry:
+    return budget_service.upsert_budget(firestore_client, user.email, project_id, request)
+
+
+@router.delete("/{project_id}/budgets", status_code=204)
+def remove_budget(
+    project_id: str,
+    scope: BudgetScope = Query(...),
+    dataset_id: str | None = Query(default=None),
+    table_id: str | None = Query(default=None),
+    user: UserInfo = Depends(get_current_user),
+    firestore_client: firestore.Client = Depends(get_firestore_client),
+) -> None:
+    budget_service.remove_budget(
+        firestore_client,
+        user.email,
+        project_id,
+        scope,
+        dataset_id=dataset_id,
+        table_id=table_id,
     )
 
 

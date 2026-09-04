@@ -281,13 +281,19 @@ datasets (`analytics_<id>`) recebendo tabelas `events_YYYYMMDD` diariamente
 
 **Parâmetros:**
 - `q` (query, obrigatório) — termo de busca, mínimo 1 caractere
-- `mode` (query, default `exact`) — `exact`, `contains` ou `not_contains`
+- `mode` (query, default `exact`) — `exact`, `contains`, `not_contains` ou
+  `not_exact`
 
 | Mode | Lógica |
 |---|---|
 | `exact` | `table_name = q`, em todas as regiões do projeto |
 | `contains` | `table_name LIKE '%q%'` |
+| `not_exact` | `table_name != q` — lista toda tabela do projeto cujo nome não é exatamente `q` (fan-out por região igual a `exact`/`contains`). `datasets_without_match` fica **vazio** (não há "ausente" com sentido). Refresh visual rodada 2 — "diferente a". |
 | `not_contains` | Inverte a pergunta: retorna os datasets onde **nenhuma** tabela contém `q` (não lista tabelas individuais) |
+
+Todos os modos são query só-metadado sobre `INFORMATION_SCHEMA.TABLES`
+(`$0` — não varre dado de tabela). `not_exact` tem exatamente a mesma
+forma de `exact`/`contains`, trocando o operador — sem custo novo.
 
 **Response 200** (`mode=exact`, tabela existe em alguns datasets, ausente
 em outros da mesma série):
@@ -506,6 +512,84 @@ apps/frontend/src/
 | `/partitions` numa tabela não particionada | HTTP 400 `table_not_partitioned` |
 | `/search` sem sufixo numérico em `q` | `datasets_without_match` vazio (exact/contains) — não há série pra comparar |
 | `/search?mode=not_contains` | `datasets_with_match` sempre vazio; `datasets_without_match` lista todo dataset sem tabela contendo `q` |
+
+---
+
+## Visão geral do Catálogo de Dados (rota `/`) — refresh visual 2026-09
+
+Contexto: brief `docs/specs/frontend-visual-refresh.md` + plano
+`frontend-visual-refresh-plan.md` (PR 6). A rota índice `/`
+(`features/catalog/CatalogOverviewPage.tsx`) deixa de ser um `EmptyState`
+"selecione um dataset" e passa a ser a **tela de overview do domínio** —
+princípio do brief "clicar num item de nível 1 abre uma tela de
+opções/overview". A `DatasetSidebar` continua com a lista de datasets pra
+navegação direta (a IA da sidebar em si não muda neste PR — ver plano
+§4 "carve-out").
+
+Sem endpoint novo: consome `GET /catalog/{project}/datasets` (já existe) +
+`GET /freshness/{project}` (já existe) e cruza por `dataset_id` no cliente.
+
+### Critérios de aceite
+
+| ID | Comportamento | Teste |
+|---|---|---|
+| AC-CAT-OV-01 | `/` renderiza `PageHeader` "Catálogo de Dados" + KPIs (nº de datasets, nº de tabelas somado) + um card por dataset, mesmo sem dataset selecionado na sidebar. | `test_catalog_overview_renders_cards` |
+| AC-CAT-OV-02 | Cada card mostra: ícone, `dataset_id` (link pra `/datasets/:id`), contagem de tabelas/views, tamanho, região e a `SlaDistributionBar` (distribuição das tabelas do dataset por faixa de SLA de freshness). | `test_dataset_overview_card_fields` |
+| AC-CAT-OV-03 | O filtro "Navegar por dataset" filtra os cards por substring de `dataset_id`. | `test_catalog_overview_filter_by_dataset` |
+| AC-CAT-OV-04 | Dataset sem dados de freshness correspondentes → card renderiza sem a barra (nunca quebra). | `test_dataset_overview_card_without_freshness` |
+| AC-CAT-OV-05 | Card mostra `dataset.description` (`line-clamp-2`); `description` null → texto fixo "Sem descrição cadastrada no BigQuery" (ver AC-CAT-DESC-*). | `test_dataset_overview_card_description` |
+| AC-CAT-OV-06 | A overview tem um bloco **"Buscar tabela no projeto"** (`<TableSearchPanel>`, dentro de um `<Panel>`) — busca global de tabela com modo `Igual a` / `Contém` / `Não contém` / `Diferente de` (`exact`/`contains`/`not_contains`/`not_exact`), resultado em `datasets_with_match` / `datasets_without_match`. O mesmo componente é a rota `/search`. (Refresh visual rodada 2 — resolve o bug "só dá pra buscar dataset na overview".) | `test_catalog_overview_table_search_panel` |
+
+### Suposições
+
+- **ASM-CAT-01** (resolvida — refresh visual rodada 2) — a "busca cruzada
+  dataset + tabela" do brief virou: filtro inline de `dataset_id` +
+  bloco `<TableSearchPanel>` (busca global de tabela com 4 modos) na
+  mesma tela. `/search` continua existindo (linkado da sidebar +
+  histórico), agora só um `PageHeader` + o mesmo `<TableSearchPanel>`.
+- **ASM-CAT-02** (confirmada) — o mini-gráfico do card = distribuição de
+  SLA de freshness (Q-003 do brief), **não** um sparkline histórico
+  (não há série temporal barata no `INFORMATION_SCHEMA`).
+
+### Fora do escopo (deste PR / desta fatia)
+
+- Mudar a IA da `DatasetSidebar` (dataset como item que dá drill-down
+  direto continua existindo) — carve-out `feat/nav-overview-screens`.
+- `description` de dataset no card (PR 7, ver abaixo).
+
+---
+
+## `description` de dataset — PR 7 do refresh visual (parcial — leitura revertida)
+
+`DatasetSummary` (`domains/catalog/schemas.py`) ganhou
+`description: str | None = None` e o frontend já trata o campo. **A
+leitura do valor do BigQuery está pendente.**
+
+- **Frontend (feito):** `DatasetOverviewCard` mostra `dataset.description`
+  (`line-clamp-2`) quando presente; senão o texto fixo "Sem descrição
+  cadastrada no BigQuery". `types/catalog.ts::DatasetSummary.description:
+  string | null`.
+- **Backend (revertido):** a 1ª tentativa foi um `LEFT JOIN` com
+  `INFORMATION_SCHEMA.SCHEMATA_OPTIONS` + `SAFE.JSON_VALUE(option_value)`
+  dentro da "Query 2 — Resumo de datasets". **Quebrou `GET
+  /projects/{id}/validate` em `dev`** ("Failed to fetch" ao selecionar um
+  projeto) — os testes unitários mockam o BigQuery, então não pegaram: a
+  forma `region-{region}.INFORMATION_SCHEMA.SCHEMATA_OPTIONS` (region-
+  qualified) e/ou `SAFE.JSON_VALUE` não é confiável naquele contexto.
+  `get_datasets_summary` voltou à query original; o dict devolve
+  `description: None` fixo.
+- **Repopular** só com um caminho **testado contra um projeto BQ real**
+  (`tests/integration/`, não só mock): provavelmente `client.get_dataset(
+  ref).description` em paralelo (N chamadas de metadado, $0), ou
+  confirmar a sintaxe de `SCHEMATA_OPTIONS` num dataset real antes.
+
+### Critério de aceite
+
+| ID | Comportamento | Estado | Teste |
+|---|---|---|---|
+| AC-CAT-DESC-01 | `GET /catalog/{project}/datasets` **pode** retornar `description` (string ou `null`) por dataset; o service repassa o que o repository der. | schema/contrato ok; repository devolve `null` | `test_list_datasets_builds_response` |
+| AC-CAT-DESC-02 | `description` null → card mostra o texto fixo. | ok | `test_get_datasets_summary_description_is_none_for_now`, `test_dataset_summary_matches_spec_example` |
+| AC-CAT-DESC-03 | (pendente) repository popula `description` de um projeto BQ real, com teste de integração. | **pendente** | `tests/integration/...` |
 
 ---
 

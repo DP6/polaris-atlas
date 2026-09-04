@@ -5,6 +5,8 @@ export interface DatasetSummary {
   location: string
   creation_time: string
   last_modified_time: string
+  // description do dataset no BigQuery — null quando não cadastrada.
+  description: string | null
   total_tables: number
   total_views: number
   total_size_bytes: number
@@ -74,7 +76,7 @@ export interface TablePartitionsResponse {
   partitions: PartitionRow[]
 }
 
-export type SearchMode = 'exact' | 'contains' | 'not_contains'
+export type SearchMode = 'exact' | 'contains' | 'not_contains' | 'not_exact'
 
 export interface DatasetWithMatch {
   dataset_id: string

@@ -58,6 +58,28 @@ def test_get_datasets_summary_runs_one_query_per_region_and_computes_gb(monkeypa
     assert result[0]["total_size_gb"] == 0.0021
 
 
+def test_get_datasets_summary_description_is_none_for_now(monkeypatch):
+    """O campo `description` existe no dict (schema opcional) mas ainda NÃO
+    é populado — a leitura de SCHEMATA_OPTIONS foi revertida por quebrar
+    /validate em dev. Ver docs/specs/catalog.md AC-CAT-DESC-*."""
+    monkeypatch.setattr(repository, "_datasets_summary_cache", {})
+    rows = [
+        _row(
+            dataset_id="RAW",
+            location="US",
+            creation_time="2026-06-03T19:40:00Z",
+            last_modified_time="2026-06-08T18:38:00Z",
+            total_tables=1,
+            total_views=0,
+            total_size_bytes=10,
+            total_rows=1,
+        )
+    ]
+    result = repository.get_datasets_summary(_client_returning([rows]), "proj", ["US"])
+
+    assert result[0]["description"] is None
+
+
 def test_get_datasets_summary_empty_regions_skips_query(monkeypatch):
     monkeypatch.setattr(repository, "_datasets_summary_cache", {})
     client = MagicMock()
@@ -76,6 +98,7 @@ def test_get_datasets_summary_caches_by_project_and_regions(monkeypatch):
             location="US",
             creation_time="2026-06-03T19:40:00Z",
             last_modified_time="2026-06-08T18:38:00Z",
+            description=None,
             total_tables=3,
             total_views=0,
             total_size_bytes=1000,
@@ -544,6 +567,27 @@ def test_search_tables_contains_mode_uses_like_wildcard():
     sql, param_value = captured[0]
     assert "table_name LIKE @q" in sql
     assert param_value == "%events%"
+
+
+def test_search_tables_not_exact_mode_uses_inequality_param():
+    """mode="not_exact" ("diferente a") → `table_name != @q`, param cru
+    (sem `%`), mesma query só-metadado dos outros modos ($0)."""
+    captured = []
+
+    def fake_query(sql, job_config=None):
+        captured.append((sql, job_config.query_parameters[0].value))
+        job = MagicMock()
+        job.result.return_value = []
+        return job
+
+    client = MagicMock()
+    client.query.side_effect = fake_query
+
+    repository.search_tables(client, "proj", ["US"], "events", "not_exact")
+
+    sql, param_value = captured[0]
+    assert "table_name != @q" in sql
+    assert param_value == "events"
 
 
 def test_search_tables_aggregates_regions_and_sorts_by_dataset_then_table():

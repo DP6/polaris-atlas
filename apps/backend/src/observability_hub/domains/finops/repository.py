@@ -22,7 +22,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
 
-from google.api_core.exceptions import Forbidden
+from google.api_core.exceptions import Forbidden, GoogleAPICallError
 from google.cloud import bigquery, firestore, storage
 from google.cloud import logging as cloud_logging
 
@@ -298,6 +298,84 @@ def list_all_table_refs(
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         results = list(pool.map(_list_region, regions))
     return [ref for region_refs in results for ref in region_refs]
+
+
+def _short_error(exc: BaseException) -> str:
+    """Primeira linha da mensagem da exceção, sem stack — o suficiente pra
+    distinguir 403 (permissão) de 404 (view/região) de 400 (coluna) no
+    warning que sobe pra UI."""
+    text = str(exc).strip().splitlines()[0] if str(exc).strip() else exc.__class__.__name__
+    return text[:180]
+
+
+def get_current_storage_bytes(
+    client: bigquery.Client,
+    project_id: str,
+    regions: list[str],
+    datasets: list[str] | None = None,
+    tables: list[str] | None = None,
+    max_workers: int = 8,
+) -> tuple[int | None, str | None]:
+    """Total de bytes lógicos de storage AGORA, somado sobre as tabelas do
+    projeto (opcionalmente filtradas por dataset ou `dataset.table`), de
+    `INFORMATION_SCHEMA.TABLE_STORAGE` — view de metadado ($0, mesma base
+    de list_all_table_refs). Fan-out por região; qualificador em minúscula
+    (`region-us`).
+
+    Usa o snapshot atual, não a timeline histórica: a família
+    `TABLE_STORAGE_USAGE_TIMELINE_*` tem schema de coluna instável entre
+    versões (o Hub bateu em `400 Unrecognized name` em dev) e, numa janela
+    de ~30 dias, o storage praticamente não varia — uma linha plana no
+    nível atual é suficiente pro gráfico de custo do mês. `total_logical_bytes`
+    é coluna estável e documentada de `TABLE_STORAGE`.
+
+    Retorna `(bytes, None)` se ao menos uma região respondeu; `(None,
+    motivo)` se **nenhuma** respondeu — `motivo` é a 1ª linha do erro do
+    BigQuery (403/404/400…), propagado pro warning. Nunca 500; região que
+    falha sozinha é ignorada."""
+    if not regions:
+        return None, "nenhuma região com dataset no projeto"
+
+    filters: list[str] = []
+    params: list[bigquery.ArrayQueryParameter] = []
+    if datasets:
+        filters.append("table_schema IN UNNEST(@datasets)")
+        params.append(bigquery.ArrayQueryParameter("datasets", "STRING", datasets))
+    if tables:
+        filters.append("CONCAT(table_schema, '.', table_name) IN UNNEST(@tables)")
+        params.append(bigquery.ArrayQueryParameter("tables", "STRING", tables))
+    where = f"WHERE {' AND '.join(filters)}" if filters else ""
+
+    def _query_region(region: str) -> tuple[int | None, str | None]:
+        sql = f"""
+            SELECT SUM(COALESCE(total_logical_bytes, 0)) AS logical_bytes
+            FROM `{project_id}.region-{region.lower()}.INFORMATION_SCHEMA.TABLE_STORAGE`
+            {where}
+        """
+        try:
+            rows = list(
+                client.query(
+                    sql, job_config=bigquery.QueryJobConfig(query_parameters=params)
+                ).result()
+            )
+        except (GoogleAPICallError, ValueError) as exc:
+            reason = _short_error(exc)
+            logger.warning(
+                "Storage snapshot indisponível em region-%s de %s: %s",
+                region.lower(),
+                project_id,
+                reason,
+            )
+            return None, reason
+        return (int(rows[0].logical_bytes or 0) if rows else 0), None
+
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        per_region = list(pool.map(_query_region, regions))
+
+    if all(byte_total is None for byte_total, _reason in per_region):
+        reasons = sorted({reason for _b, reason in per_region if reason})
+        return None, "; ".join(reasons) or "erro desconhecido"
+    return sum(byte_total for byte_total, _r in per_region if byte_total is not None), None
 
 
 def get_date_like_columns(

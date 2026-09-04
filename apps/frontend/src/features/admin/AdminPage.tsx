@@ -23,7 +23,7 @@ export function AdminPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        back={{ to: '/', label: 'Voltar ao catálogo' }}
+        back={{ to: '/', label: 'Voltar ao Catálogo de Dados' }}
         title="Administração — usuários e acesso"
         description="Controla quem é administrador do Hub e a quais projetos GCP cada usuário tem acesso. O login em si continua controlado pela allowlist do OAuth (fora daqui) — isto aqui só controla acesso a projeto dentro do Hub."
       />

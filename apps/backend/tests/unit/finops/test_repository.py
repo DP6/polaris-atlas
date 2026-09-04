@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-from google.api_core.exceptions import Forbidden
+from google.api_core.exceptions import Forbidden, GoogleAPICallError
 
 from observability_hub.core.exceptions import (
     EventCacheNotReadyError,
@@ -365,6 +365,94 @@ def test_list_all_table_refs_no_filter_when_datasets_not_provided():
     called_sql, called_kwargs = client.query.call_args
     assert "WHERE" not in called_sql[0]
     assert called_kwargs["job_config"] is None
+
+
+# --- get_current_storage_bytes -----------------------------------------------
+
+
+def _bytes_row(logical_bytes):
+    return SimpleNamespace(logical_bytes=logical_bytes)
+
+
+def test_get_current_storage_bytes_returns_reason_for_no_regions():
+    total, reason = repository.get_current_storage_bytes(MagicMock(), "proj", [])
+    assert total is None
+    assert reason is not None
+
+
+def test_get_current_storage_bytes_uses_lowercase_region_and_table_storage_view():
+    client = MagicMock()
+    result = MagicMock()
+    result.result.return_value = [_bytes_row(10)]
+    client.query.return_value = result
+
+    repository.get_current_storage_bytes(client, "proj", ["US"])
+
+    called_sql = client.query.call_args[0][0]
+    assert "region-us.INFORMATION_SCHEMA.TABLE_STORAGE`" in called_sql
+    assert "region-US" not in called_sql
+    assert "total_logical_bytes" in called_sql
+
+
+def test_get_current_storage_bytes_sums_across_regions():
+    client = MagicMock()
+
+    def _query(sql, job_config=None):
+        result = MagicMock()
+        result.result.return_value = [_bytes_row(100 if "region-us." in sql else 25)]
+        return result
+
+    client.query.side_effect = _query
+
+    total, reason = repository.get_current_storage_bytes(client, "proj", ["US", "EU"])
+
+    assert total == 125
+    assert reason is None
+
+
+def test_get_current_storage_bytes_returns_reason_when_all_regions_fail():
+    client = MagicMock()
+    client.query.side_effect = GoogleAPICallError("400 Unrecognized name: foo")
+
+    total, reason = repository.get_current_storage_bytes(client, "proj", ["US", "EU"])
+
+    assert total is None
+    assert "Unrecognized name" in reason
+
+
+def test_get_current_storage_bytes_tolerates_one_failing_region():
+    client = MagicMock()
+
+    def _query(sql, job_config=None):
+        if "region-eu." in sql:
+            raise GoogleAPICallError("boom")
+        result = MagicMock()
+        result.result.return_value = [_bytes_row(7)]
+        return result
+
+    client.query.side_effect = _query
+
+    total, reason = repository.get_current_storage_bytes(client, "proj", ["US", "EU"])
+
+    assert total == 7
+    assert reason is None
+
+
+def test_get_current_storage_bytes_passes_dataset_and_table_filters_as_params():
+    client = MagicMock()
+    result = MagicMock()
+    result.result.return_value = [_bytes_row(0)]
+    client.query.return_value = result
+
+    repository.get_current_storage_bytes(
+        client, "proj", ["US"], datasets=["RAW"], tables=["RAW.events"]
+    )
+
+    called_sql, called_kwargs = client.query.call_args
+    assert "table_schema IN UNNEST(@datasets)" in called_sql[0]
+    assert "CONCAT(table_schema, '.', table_name) IN UNNEST(@tables)" in called_sql[0]
+    param_names = {p.name for p in called_kwargs["job_config"].query_parameters}
+    assert param_names == {"datasets", "tables"}
 
 
 # --- get_date_like_columns -------------------------------------------------------

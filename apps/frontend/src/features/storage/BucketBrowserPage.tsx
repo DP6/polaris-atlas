@@ -4,6 +4,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { LoadingState } from '@/components/LoadingState'
 import { PageHeader } from '@/components/PageHeader'
+import { Panel } from '@/components/Panel'
 import { RefreshButton } from '@/components/RefreshButton'
 import { Button } from '@/components/ui/button'
 import {
@@ -86,7 +87,7 @@ export function BucketBrowserPage() {
         aria-label="Trilha de navegação"
         className="-mt-3 flex flex-wrap items-center gap-1 text-muted-foreground text-sm"
       >
-        <Link to="/storage" className={linkClass}>
+        <Link to="/storage/buckets" className={linkClass}>
           Buckets
         </Link>
         <ChevronRight size={12} aria-hidden="true" />
@@ -107,57 +108,61 @@ export function BucketBrowserPage() {
         ))}
       </nav>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Nome</TableHead>
-            <TableHead className="text-right">Tamanho</TableHead>
-            <TableHead>Storage class</TableHead>
-            <TableHead>Modificado em</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {data.prefixes.map((childPrefix) => (
-            <TableRow
-              key={childPrefix}
-              className="cursor-pointer"
-              onClick={() => navigateToPrefix(childPrefix)}
-            >
-              <TableCell className="font-medium">
-                <span className="flex items-center gap-2">
-                  <Folder size={14} className="text-muted-foreground" />
-                  {relativeName(childPrefix, prefix)}
-                </span>
-              </TableCell>
-              <TableCell className="text-right text-muted-foreground">—</TableCell>
-              <TableCell className="text-muted-foreground">—</TableCell>
-              <TableCell className="text-muted-foreground">—</TableCell>
-            </TableRow>
-          ))}
-          {data.objects.map((object) => (
-            <TableRow key={object.name}>
-              <TableCell className="font-medium">
-                <span className="flex items-center gap-2">
-                  <File size={14} className="text-muted-foreground" />
-                  {relativeName(object.name, prefix)}
-                </span>
-              </TableCell>
-              <TableCell className="text-right text-muted-foreground">
-                {formatBytes(object.size_bytes)}
-              </TableCell>
-              <TableCell className="text-muted-foreground">{object.storage_class}</TableCell>
-              <TableCell className="text-muted-foreground">{formatDate(object.updated)}</TableCell>
-            </TableRow>
-          ))}
-          {data.prefixes.length === 0 && data.objects.length === 0 && (
+      <Panel>
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={4} className="text-center text-muted-foreground">
-                Nada encontrado neste caminho.
-              </TableCell>
+              <TableHead>Nome</TableHead>
+              <TableHead className="text-right">Tamanho</TableHead>
+              <TableHead>Storage class</TableHead>
+              <TableHead>Modificado em</TableHead>
             </TableRow>
-          )}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {data.prefixes.map((childPrefix) => (
+              <TableRow
+                key={childPrefix}
+                className="cursor-pointer"
+                onClick={() => navigateToPrefix(childPrefix)}
+              >
+                <TableCell className="font-medium">
+                  <span className="flex items-center gap-2">
+                    <Folder size={14} className="text-muted-foreground" />
+                    {relativeName(childPrefix, prefix)}
+                  </span>
+                </TableCell>
+                <TableCell className="text-right text-muted-foreground">—</TableCell>
+                <TableCell className="text-muted-foreground">—</TableCell>
+                <TableCell className="text-muted-foreground">—</TableCell>
+              </TableRow>
+            ))}
+            {data.objects.map((object) => (
+              <TableRow key={object.name}>
+                <TableCell className="font-medium">
+                  <span className="flex items-center gap-2">
+                    <File size={14} className="text-muted-foreground" />
+                    {relativeName(object.name, prefix)}
+                  </span>
+                </TableCell>
+                <TableCell className="text-right text-muted-foreground">
+                  {formatBytes(object.size_bytes)}
+                </TableCell>
+                <TableCell className="text-muted-foreground">{object.storage_class}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  {formatDate(object.updated)}
+                </TableCell>
+              </TableRow>
+            ))}
+            {data.prefixes.length === 0 && data.objects.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center text-muted-foreground">
+                  Nada encontrado neste caminho.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </Panel>
 
       {(pageTokenStack.length > 1 || data.next_page_token) && (
         <div className="flex items-center gap-2">

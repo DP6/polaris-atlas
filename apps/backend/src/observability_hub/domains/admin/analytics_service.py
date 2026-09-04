@@ -6,7 +6,7 @@ estas funções. CLAUDE.md proíbe lógica de negócio em api/.
 
 import logging
 from collections import defaultdict
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 
 from google.cloud import firestore
 
@@ -75,10 +75,24 @@ def _bucket_events(events: list[dict], granularity: str) -> list[LoginCountBucke
 
 
 def get_login_analytics(
-    client: firestore.Client, lookback_days: int = 90
+    client: firestore.Client,
+    lookback_days: int = 90,
+    from_date: date | None = None,
+    to_date: date | None = None,
 ) -> LoginAnalyticsResponse:
-    since = datetime.now(UTC) - timedelta(days=lookback_days)
+    """Janela padrão = últimos `lookback_days`. `from_date`/`to_date`
+    (refresh visual rodada 2, AC-ADM-RV-03) sobrescrevem: `from_date` vira
+    o `since` da busca no Firestore, `to_date` filtra o limite superior
+    (inclusivo, fim do dia UTC) depois."""
+    if from_date is not None:
+        since = datetime.combine(from_date, time.min, tzinfo=UTC)
+    else:
+        since = datetime.now(UTC) - timedelta(days=lookback_days)
     events = repository.list_login_events(client, since)
+
+    if to_date is not None:
+        until = datetime.combine(to_date, time.max, tzinfo=UTC)
+        events = [e for e in events if e["logged_in_at"] <= until]
 
     return LoginAnalyticsResponse(
         daily=_bucket_events(events, "daily"),

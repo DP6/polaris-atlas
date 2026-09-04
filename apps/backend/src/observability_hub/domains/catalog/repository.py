@@ -108,6 +108,15 @@ def get_datasets_summary(
                 "location": row.location,
                 "creation_time": row.creation_time,
                 "last_modified_time": row.last_modified_time,
+                # description do dataset: campo existe no schema (opcional) mas
+                # ainda NÃO é populado. A tentativa de ler de
+                # INFORMATION_SCHEMA.SCHEMATA_OPTIONS + SAFE.JSON_VALUE numa
+                # query só-metadado quebrou /validate em dev (o JOIN
+                # region-qualified com SCHEMATA_OPTIONS não é confiável) —
+                # revertida. Repopular só com um caminho testado contra BQ
+                # real (ver docs/specs/catalog.md, AC-CAT-DESC-*, e o plano
+                # do refresh visual §5). O card já trata `null`.
+                "description": None,
                 "total_tables": row.total_tables,
                 "total_views": row.total_views,
                 "total_size_bytes": row.total_size_bytes,
@@ -149,16 +158,20 @@ def search_tables(
     mode: str,
     max_workers: int = 8,
 ) -> list[dict]:
-    """Busca table_name = query (mode="exact") ou table_name LIKE '%query%'
-    (mode="contains") em INFORMATION_SCHEMA.TABLES de todas as regiões do
-    projeto, uma query por região em paralelo (mesma técnica de
-    core.bigquery.discover_regions)."""
+    """Busca table_name = query (mode="exact"), != query (mode="not_exact")
+    ou LIKE '%query%' (mode="contains") em INFORMATION_SCHEMA.TABLES de
+    todas as regiões do projeto, uma query por região em paralelo (mesma
+    técnica de core.bigquery.discover_regions). mode="not_contains" nunca
+    chega aqui — é tratado à parte no service."""
     if not regions:
         return []
 
     def _search_region(region: str) -> list[dict]:
         if mode == "exact":
             where = "table_name = @q"
+            params = [bigquery.ScalarQueryParameter("q", "STRING", query)]
+        elif mode == "not_exact":
+            where = "table_name != @q"
             params = [bigquery.ScalarQueryParameter("q", "STRING", query)]
         else:
             where = "table_name LIKE @q"

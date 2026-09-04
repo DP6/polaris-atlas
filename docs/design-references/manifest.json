@@ -1,0 +1,328 @@
+{
+  "generatedAt": "2026-08-31T20:53:59.424Z",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "captures": [
+    {
+      "site": "thebrandtechgroup",
+      "label": "The Brandtech Group",
+      "slug": "home",
+      "url": "https://thebrandtechgroup.com/",
+      "title": "The Brandtech Group",
+      "capturedAt": "2026-08-31T20:54:10.473Z",
+      "files": [
+        "captures/thebrandtechgroup/home--desktop.png",
+        "captures/thebrandtechgroup/home--desktop.fullpage.jpg"
+      ]
+    },
+    {
+      "site": "thebrandtechgroup",
+      "label": "The Brandtech Group",
+      "slug": "section-our-group",
+      "url": "https://thebrandtechgroup.com/#group",
+      "title": "The Brandtech Group",
+      "capturedAt": "2026-08-31T20:54:12.526Z",
+      "files": [
+        "captures/thebrandtechgroup/section-our-group--desktop.png"
+      ]
+    },
+    {
+      "site": "thebrandtechgroup",
+      "label": "The Brandtech Group",
+      "slug": "section-leadership",
+      "url": "https://thebrandtechgroup.com/#leadership",
+      "title": "The Brandtech Group",
+      "capturedAt": "2026-08-31T20:54:14.828Z",
+      "files": [
+        "captures/thebrandtechgroup/section-leadership--desktop.png"
+      ]
+    },
+    {
+      "site": "thebrandtechgroup",
+      "label": "The Brandtech Group",
+      "slug": "section-news",
+      "url": "https://thebrandtechgroup.com/#news",
+      "title": "The Brandtech Group",
+      "capturedAt": "2026-08-31T20:54:16.792Z",
+      "files": [
+        "captures/thebrandtechgroup/section-news--desktop.png"
+      ]
+    },
+    {
+      "site": "thebrandtechgroup",
+      "label": "The Brandtech Group",
+      "slug": "section-one-young-world",
+      "url": "https://thebrandtechgroup.com/#oneyoungworld",
+      "title": "The Brandtech Group",
+      "capturedAt": "2026-08-31T20:54:21.160Z",
+      "files": [
+        "captures/thebrandtechgroup/section-one-young-world--desktop.png"
+      ]
+    },
+    {
+      "site": "thebrandtechgroup",
+      "label": "The Brandtech Group",
+      "slug": "section-contact",
+      "url": "https://thebrandtechgroup.com/#contact",
+      "title": "The Brandtech Group",
+      "capturedAt": "2026-08-31T20:54:23.285Z",
+      "files": [
+        "captures/thebrandtechgroup/section-contact--desktop.png"
+      ]
+    },
+    {
+      "site": "thebrandtechgroup",
+      "label": "The Brandtech Group",
+      "slug": "letter",
+      "url": "https://thebrandtechgroup.com/letter/",
+      "title": "A letter from our founder and CEO, David Jones – The Brandtech Group",
+      "capturedAt": "2026-08-31T20:54:31.055Z",
+      "files": [
+        "captures/thebrandtechgroup/letter--desktop.png",
+        "captures/thebrandtechgroup/letter--desktop.fullpage.jpg"
+      ]
+    },
+    {
+      "site": "thebrandtechgroup",
+      "label": "The Brandtech Group",
+      "slug": "join-us",
+      "url": "https://thebrandtechgroup.com/join-us/",
+      "title": "Join Us – The Brandtech Group",
+      "capturedAt": "2026-08-31T20:54:34.742Z",
+      "files": [
+        "captures/thebrandtechgroup/join-us--desktop.png",
+        "captures/thebrandtechgroup/join-us--desktop.fullpage.jpg"
+      ]
+    },
+    {
+      "site": "thebrandtechgroup",
+      "label": "The Brandtech Group",
+      "slug": "pencil-demo",
+      "url": "https://thebrandtechgroup.com/pencil-demo/",
+      "title": "Book a pencil demo – The Brandtech Group",
+      "capturedAt": "2026-08-31T20:54:39.404Z",
+      "files": [
+        "captures/thebrandtechgroup/pencil-demo--desktop.png",
+        "captures/thebrandtechgroup/pencil-demo--desktop.fullpage.jpg"
+      ]
+    },
+    {
+      "site": "thebrandtechgroup",
+      "label": "The Brandtech Group",
+      "slug": "pledge-parental-leave",
+      "url": "https://thebrandtechgroup.com/pledge-parental-leave/",
+      "title": "Pledge Parental Leave – The Brandtech Group",
+      "capturedAt": "2026-08-31T20:54:42.713Z",
+      "files": [
+        "captures/thebrandtechgroup/pledge-parental-leave--desktop.png",
+        "captures/thebrandtechgroup/pledge-parental-leave--desktop.fullpage.jpg"
+      ]
+    },
+    {
+      "site": "thebrandtechgroup",
+      "label": "The Brandtech Group",
+      "slug": "anti-slavery",
+      "url": "https://thebrandtechgroup.com/anti-slavery/",
+      "title": "Modern Slavery Act – The Brandtech Group",
+      "capturedAt": "2026-08-31T20:54:46.135Z",
+      "files": [
+        "captures/thebrandtechgroup/anti-slavery--desktop.png",
+        "captures/thebrandtechgroup/anti-slavery--desktop.fullpage.jpg"
+      ]
+    },
+    {
+      "site": "thebrandtechgroup",
+      "label": "The Brandtech Group",
+      "slug": "privacy-policy",
+      "url": "https://thebrandtechgroup.com/privacy-policy/",
+      "title": "Privacy Policy – The Brandtech Group",
+      "capturedAt": "2026-08-31T20:54:51.628Z",
+      "files": [
+        "captures/thebrandtechgroup/privacy-policy--desktop.png",
+        "captures/thebrandtechgroup/privacy-policy--desktop.fullpage.jpg"
+      ]
+    },
+    {
+      "site": "jellyfish",
+      "label": "Jellyfish",
+      "slug": "home",
+      "url": "https://www.jellyfish.com/en-us/",
+      "title": "Jellyfish | Move. Faster. Smarter. Together.",
+      "capturedAt": "2026-08-31T20:59:23.390Z",
+      "files": [
+        "captures/jellyfish/home--desktop.png",
+        "captures/jellyfish/home--desktop.fullpage.jpg"
+      ]
+    },
+    {
+      "site": "jellyfish",
+      "label": "Jellyfish",
+      "slug": "about-us",
+      "url": "https://www.jellyfish.com/en-us/about-us/",
+      "title": "We're Jellyfish: An Integrated Global Digital Marketing business - Jellyfish",
+      "capturedAt": "2026-08-31T20:59:30.573Z",
+      "files": [
+        "captures/jellyfish/about-us--desktop.png",
+        "captures/jellyfish/about-us--desktop.fullpage.jpg"
+      ]
+    },
+    {
+      "site": "jellyfish",
+      "label": "Jellyfish",
+      "slug": "expertise",
+      "url": "https://www.jellyfish.com/en-us/expertise/",
+      "title": "Our Expertise - Jellyfish",
+      "capturedAt": "2026-08-31T20:59:39.121Z",
+      "files": [
+        "captures/jellyfish/expertise--desktop.png",
+        "captures/jellyfish/expertise--desktop.fullpage.jpg"
+      ]
+    },
+    {
+      "site": "jellyfish",
+      "label": "Jellyfish",
+      "slug": "expertise-ai",
+      "url": "https://www.jellyfish.com/en-us/expertise/ai/",
+      "title": "Jellyfish | Move. Faster. Smarter. Together.",
+      "capturedAt": "2026-08-31T20:59:47.674Z",
+      "files": [
+        "captures/jellyfish/expertise-ai--desktop.png",
+        "captures/jellyfish/expertise-ai--desktop.fullpage.jpg"
+      ]
+    },
+    {
+      "site": "jellyfish",
+      "label": "Jellyfish",
+      "slug": "expertise-creative",
+      "url": "https://www.jellyfish.com/en-us/expertise/creative/",
+      "title": "Creative | Our Expertise | Jellyfish",
+      "capturedAt": "2026-08-31T20:59:54.430Z",
+      "files": [
+        "captures/jellyfish/expertise-creative--desktop.png",
+        "captures/jellyfish/expertise-creative--desktop.fullpage.jpg"
+      ]
+    },
+    {
+      "site": "jellyfish",
+      "label": "Jellyfish",
+      "slug": "expertise-data",
+      "url": "https://www.jellyfish.com/en-us/expertise/data/",
+      "title": "Data - Our Expertise - Jellyfish",
+      "capturedAt": "2026-08-31T21:00:01.268Z",
+      "files": [
+        "captures/jellyfish/expertise-data--desktop.png",
+        "captures/jellyfish/expertise-data--desktop.fullpage.jpg"
+      ]
+    },
+    {
+      "site": "jellyfish",
+      "label": "Jellyfish",
+      "slug": "expertise-media",
+      "url": "https://www.jellyfish.com/en-us/expertise/media/",
+      "title": "Media - Our Expertise - Jellyfish",
+      "capturedAt": "2026-08-31T21:00:07.741Z",
+      "files": [
+        "captures/jellyfish/expertise-media--desktop.png",
+        "captures/jellyfish/expertise-media--desktop.fullpage.jpg"
+      ]
+    },
+    {
+      "site": "jellyfish",
+      "label": "Jellyfish",
+      "slug": "expertise-media-paid-search",
+      "url": "https://www.jellyfish.com/en-us/expertise/media/paid-search/",
+      "title": "Paid Search - Our Expertise - Jellyfish",
+      "capturedAt": "2026-08-31T21:00:17.796Z",
+      "files": [
+        "captures/jellyfish/expertise-media-paid-search--desktop.png",
+        "captures/jellyfish/expertise-media-paid-search--desktop.fullpage.jpg"
+      ]
+    },
+    {
+      "site": "jellyfish",
+      "label": "Jellyfish",
+      "slug": "expertise-technology",
+      "url": "https://www.jellyfish.com/en-us/expertise/technology/",
+      "title": "Technology - Our Expertise - Jellyfish",
+      "capturedAt": "2026-08-31T21:00:24.428Z",
+      "files": [
+        "captures/jellyfish/expertise-technology--desktop.png",
+        "captures/jellyfish/expertise-technology--desktop.fullpage.jpg"
+      ]
+    },
+    {
+      "site": "jellyfish",
+      "label": "Jellyfish",
+      "slug": "genai",
+      "url": "https://www.jellyfish.com/en-us/genai/",
+      "title": "Unlocking the full potential of GenAI will define the next era of brands",
+      "capturedAt": "2026-08-31T21:00:33.437Z",
+      "files": [
+        "captures/jellyfish/genai--desktop.png",
+        "captures/jellyfish/genai--desktop.fullpage.jpg"
+      ]
+    },
+    {
+      "site": "jellyfish",
+      "label": "Jellyfish",
+      "slug": "success",
+      "url": "https://www.jellyfish.com/en-us/success/",
+      "title": "Our Best Success Stories - Jellyfish",
+      "capturedAt": "2026-08-31T21:00:44.415Z",
+      "files": [
+        "captures/jellyfish/success--desktop.png",
+        "captures/jellyfish/success--desktop.fullpage.jpg"
+      ]
+    },
+    {
+      "site": "jellyfish",
+      "label": "Jellyfish",
+      "slug": "blog",
+      "url": "https://www.jellyfish.com/en-us/blog/",
+      "title": "Blog - Marketing Performance for Digital Platforms - Jellyfish US",
+      "capturedAt": "2026-08-31T21:00:55.972Z",
+      "files": [
+        "captures/jellyfish/blog--desktop.png",
+        "captures/jellyfish/blog--desktop.fullpage.jpg"
+      ]
+    },
+    {
+      "site": "jellyfish",
+      "label": "Jellyfish",
+      "slug": "blog-post-martech-stack",
+      "url": "https://www.jellyfish.com/en-us/blog/your-martech-stack-is-already-broken.-genai-is-about-to-prove-it/",
+      "title": "Your Martech stack is already broken. GenAI is about to prove it",
+      "capturedAt": "2026-08-31T21:01:03.308Z",
+      "files": [
+        "captures/jellyfish/blog-post-martech-stack--desktop.png",
+        "captures/jellyfish/blog-post-martech-stack--desktop.fullpage.jpg"
+      ]
+    },
+    {
+      "site": "jellyfish",
+      "label": "Jellyfish",
+      "slug": "careers",
+      "url": "https://www.jellyfish.com/en-us/careers/",
+      "title": "Jellyfish | Move. Faster. Smarter. Together.",
+      "capturedAt": "2026-08-31T21:01:12.652Z",
+      "files": [
+        "captures/jellyfish/careers--desktop.png",
+        "captures/jellyfish/careers--desktop.fullpage.jpg"
+      ]
+    },
+    {
+      "site": "jellyfish",
+      "label": "Jellyfish",
+      "slug": "contact",
+      "url": "https://www.jellyfish.com/en-us/contact/",
+      "title": "Contact Us - Jellyfish",
+      "capturedAt": "2026-08-31T21:01:19.890Z",
+      "files": [
+        "captures/jellyfish/contact--desktop.png",
+        "captures/jellyfish/contact--desktop.fullpage.jpg"
+      ]
+    }
+  ]
+}

@@ -1,10 +1,12 @@
 import {
+  Boxes,
   ChevronDown,
   Clock,
   Container,
   Database,
   DollarSign,
   FolderKanban,
+  Gauge,
   HardDrive,
   History,
   PiggyBank,
@@ -41,10 +43,15 @@ interface DatasetSidebarProps {
   projectId: string
 }
 
+// Item de nav: ativo = barra de acento à esquerda + fundo em gradiente +
+// ícone em primary (Q-001 do refresh visual, utilitárias `.dp6-nav-*` em
+// index.css). Não mais o bloco amarelo chapado.
 const NAV_LINK_CLASS = ({ isActive }: { isActive: boolean }) =>
   cn(
-    'flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors',
-    isActive ? 'bg-primary font-bold text-primary-foreground' : 'text-foreground hover:bg-muted',
+    'dp6-nav-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm',
+    isActive
+      ? 'dp6-nav-active font-medium text-foreground [&_svg]:text-primary'
+      : 'text-foreground hover:bg-muted',
   )
 
 const SECTION_LABEL_CLASS =
@@ -69,24 +76,54 @@ function formatAssetCounts(totalTables: number, totalViews: number): string {
 function SidebarServiceGroup({
   icon,
   label,
+  to,
   open,
   onOpenChange,
   children,
 }: {
   icon: ReactNode
   label: string
+  // Quando presente, o nome/ícone vira um NavLink pra tela de overview do
+  // serviço; o chevron continua sendo só o disclosure do drill-down.
+  to?: string
   open: boolean
   onOpenChange: (open: boolean) => void
   children: ReactNode
 }) {
+  const rowClass =
+    'dp6-nav-item mb-2 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-bold text-foreground hover:bg-muted'
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
-      <CollapsibleTrigger className="mb-2 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-bold text-foreground transition-colors hover:bg-muted">
-        {icon}
-        <span className="flex-1 text-left">{label}</span>
-        <ChevronDown size={14} className={cn('transition-transform', !open && '-rotate-90')} />
-      </CollapsibleTrigger>
-      <CollapsibleContent className="flex flex-col gap-3 border-border border-l pl-2">
+      {to ? (
+        <div className={cn(rowClass, 'p-0')}>
+          <NavLink
+            to={to}
+            end
+            className={({ isActive }) =>
+              cn(
+                'flex flex-1 items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-muted',
+                isActive && 'dp6-nav-active text-foreground',
+              )
+            }
+          >
+            <span className="text-primary">{icon}</span>
+            <span className="flex-1 text-left">{label}</span>
+          </NavLink>
+          <CollapsibleTrigger
+            aria-label={open ? `Recolher ${label}` : `Expandir ${label}`}
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+          >
+            <ChevronDown size={14} className={cn('transition-transform', !open && '-rotate-90')} />
+          </CollapsibleTrigger>
+        </div>
+      ) : (
+        <CollapsibleTrigger className={rowClass}>
+          <span className="text-primary">{icon}</span>
+          <span className="flex-1 text-left">{label}</span>
+          <ChevronDown size={14} className={cn('transition-transform', !open && '-rotate-90')} />
+        </CollapsibleTrigger>
+      )}
+      <CollapsibleContent className="flex flex-col gap-4 border-border border-l pl-2">
         {children}
       </CollapsibleContent>
     </Collapsible>
@@ -99,7 +136,7 @@ function SidebarServiceGroup({
 // usado em AssetsTable.tsx/LineageGraph.tsx pra linha/nó desabilitado.
 function SidebarServiceGroupPlaceholder({ icon, label }: { icon: ReactNode; label: string }) {
   return (
-    <div className="mb-2 flex cursor-not-allowed items-center gap-2 rounded-md px-2 py-1.5 text-muted-foreground text-sm opacity-50">
+    <div className="mb-2 flex cursor-not-allowed items-center gap-2 rounded-lg px-2 py-1.5 text-muted-foreground text-sm opacity-50">
       {icon}
       <span className="flex-1 text-left font-bold">{label}</span>
       <Badge variant="outline" className="text-[10px]">
@@ -137,28 +174,57 @@ function QuantityPicker({
   )
 }
 
-// Subseção dentro de um serviço (Governança, FinOps, Catálogo,
+// Subseção dentro de um serviço (Governança, FinOps, Catálogo de Dados,
 // Favoritos, Análises de qualidade, Recentes) — todas recolhidas por padrão
 // (`open` vem de fora, sempre iniciado em `false` no componente pai).
 function SidebarSection({
   label,
+  to,
   open,
   onOpenChange,
   children,
 }: {
   label: string
+  // Quando presente, o nome vira um NavLink pra tela de overview do grupo;
+  // o chevron continua sendo só o disclosure do drill-down (decisão do
+  // usuário — refresh visual rodada 2).
+  to?: string
   open: boolean
   onOpenChange: (open: boolean) => void
   children: ReactNode
 }) {
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
-      <CollapsibleTrigger
-        className={cn(SECTION_LABEL_CLASS, 'mb-2 flex w-full items-center justify-between')}
-      >
-        {label}
-        <ChevronDown size={14} className={cn('transition-transform', !open && '-rotate-90')} />
-      </CollapsibleTrigger>
+      {to ? (
+        <div className="mb-2 flex items-center gap-1">
+          <NavLink
+            to={to}
+            end
+            className={({ isActive }) =>
+              cn(
+                SECTION_LABEL_CLASS,
+                'dp6-nav-item flex flex-1 rounded-lg py-1',
+                isActive && 'dp6-nav-active text-foreground',
+              )
+            }
+          >
+            {label}
+          </NavLink>
+          <CollapsibleTrigger
+            aria-label={open ? `Recolher ${label}` : `Expandir ${label}`}
+            className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+          >
+            <ChevronDown size={14} className={cn('transition-transform', !open && '-rotate-90')} />
+          </CollapsibleTrigger>
+        </div>
+      ) : (
+        <CollapsibleTrigger
+          className={cn(SECTION_LABEL_CLASS, 'mb-2 flex w-full items-center justify-between')}
+        >
+          {label}
+          <ChevronDown size={14} className={cn('transition-transform', !open && '-rotate-90')} />
+        </CollapsibleTrigger>
+      )}
       <CollapsibleContent>{children}</CollapsibleContent>
     </Collapsible>
   )
@@ -203,14 +269,19 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
   )
 
   return (
-    <aside className="w-60 shrink-0 overflow-y-auto border-r border-border bg-card p-4">
+    <aside className="w-60 shrink-0 space-y-4 overflow-y-auto border-r border-border bg-card p-4">
       <SidebarServiceGroup
         icon={<Database size={16} />}
         label="BigQuery"
         open={bigQueryOpen}
         onOpenChange={setBigQueryOpen}
       >
-        <SidebarSection label="Governança" open={governanceOpen} onOpenChange={setGovernanceOpen}>
+        <SidebarSection
+          label="Governança"
+          to="/governanca"
+          open={governanceOpen}
+          onOpenChange={setGovernanceOpen}
+        >
           <nav className="flex flex-col gap-0.5">
             <NavLink to="/freshness" className={NAV_LINK_CLASS}>
               <Clock size={16} />
@@ -223,9 +294,13 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
           </nav>
         </SidebarSection>
 
-        <SidebarSection label="FinOps" open={finopsOpen} onOpenChange={setFinopsOpen}>
+        <SidebarSection label="FinOps" to="/finops" open={finopsOpen} onOpenChange={setFinopsOpen}>
           <nav className="flex flex-col gap-0.5">
             <NavLink to="/finops" end className={NAV_LINK_CLASS}>
+              <Gauge size={16} />
+              Visão geral
+            </NavLink>
+            <NavLink to="/finops/scanner" className={NAV_LINK_CLASS}>
               <PiggyBank size={16} />
               Scanner de desperdício
             </NavLink>
@@ -236,7 +311,12 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
           </nav>
         </SidebarSection>
 
-        <SidebarSection label="Catálogo" open={catalogOpen} onOpenChange={setCatalogOpen}>
+        <SidebarSection
+          label="Catálogo de Dados"
+          to="/"
+          open={catalogOpen}
+          onOpenChange={setCatalogOpen}
+        >
           <NavLink to="/search" className={NAV_LINK_CLASS}>
             <Search size={16} />
             Buscar tabelas
@@ -278,15 +358,18 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
                     to={`/datasets/${dataset.dataset_id}`}
                     className={({ isActive }) =>
                       cn(
-                        'flex min-w-0 flex-1 items-center justify-between rounded-md px-3 py-2 text-sm transition-colors',
+                        'dp6-nav-item flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm',
                         isActive
-                          ? 'bg-primary font-bold text-primary-foreground'
+                          ? 'dp6-nav-active font-medium text-foreground'
                           : 'text-foreground hover:bg-muted',
                       )
                     }
                   >
-                    <span className="truncate" title={dataset.dataset_id}>
-                      {dataset.dataset_id}
+                    <span className="flex min-w-0 items-center gap-2">
+                      <Boxes size={14} className="shrink-0 opacity-70" aria-hidden="true" />
+                      <span className="truncate" title={dataset.dataset_id}>
+                        {dataset.dataset_id}
+                      </span>
                     </span>
                     <span className="shrink-0 text-xs opacity-70">
                       [{formatAssetCounts(dataset.total_tables, dataset.total_views)}]
@@ -321,7 +404,12 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
           </nav>
         </SidebarSection>
 
-        <SidebarSection label="Favoritos" open={favoritesOpen} onOpenChange={setFavoritesOpen}>
+        <SidebarSection
+          label="Favoritos"
+          to="/favoritos"
+          open={favoritesOpen}
+          onOpenChange={setFavoritesOpen}
+        >
           <div className="flex flex-col gap-3">
             {projectFavorites && projectFavorites.length > 0 ? (
               <QuantityPicker value={favoritesLimit} onChange={setFavoritesLimit} />
@@ -341,7 +429,7 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
                   {visibleTableFavorites.map((favorite) => (
                     <div
                       key={`${favorite.dataset_id}.${favorite.table_id}`}
-                      className="group flex flex-col gap-0.5 rounded-md px-3 py-2 transition-colors hover:bg-muted"
+                      className="dp6-nav-item group flex flex-col gap-0.5 rounded-lg px-3 py-2 hover:bg-muted"
                     >
                       <Link
                         to={`/datasets/${favorite.dataset_id}`}
@@ -382,7 +470,7 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
                   {visibleDatasetFavorites.map((favorite) => (
                     <div
                       key={favorite.dataset_id}
-                      className="group flex flex-col gap-0.5 rounded-md px-3 py-2 transition-colors hover:bg-muted"
+                      className="dp6-nav-item group flex flex-col gap-0.5 rounded-lg px-3 py-2 hover:bg-muted"
                     >
                       <Link
                         to={`/datasets/${favorite.dataset_id}`}
@@ -414,6 +502,7 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
 
         <SidebarSection
           label="Análises de qualidade"
+          to="/quality"
           open={dqAnalysesOpen}
           onOpenChange={setDqAnalysesOpen}
         >
@@ -425,36 +514,48 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
           </nav>
         </SidebarSection>
 
-        {recentTables && recentTables.length > 0 && (
-          <SidebarSection label="Recentes" open={recentOpen} onOpenChange={setRecentOpen}>
-            <QuantityPicker value={recentLimit} onChange={setRecentLimit} />
-            <nav className="flex flex-col gap-0.5">
-              {recentTables.map((view) => (
-                <Link
-                  key={`${view.dataset_id}.${view.table_id}.${view.viewed_at}`}
-                  to={`/datasets/${view.dataset_id}`}
-                  state={{ highlightTable: view.table_id }}
-                  className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
-                >
-                  <History size={12} className="shrink-0 text-muted-foreground" />
-                  <span className="truncate" title={`${view.dataset_id}.${view.table_id}`}>
-                    {view.dataset_id}.{view.table_id}
-                  </span>
-                </Link>
-              ))}
-            </nav>
-          </SidebarSection>
-        )}
+        <SidebarSection
+          label="Recentes"
+          to="/recentes"
+          open={recentOpen}
+          onOpenChange={setRecentOpen}
+        >
+          {recentTables && recentTables.length > 0 ? (
+            <>
+              <QuantityPicker value={recentLimit} onChange={setRecentLimit} />
+              <nav className="flex flex-col gap-0.5">
+                {recentTables.map((view) => (
+                  <Link
+                    key={`${view.dataset_id}.${view.table_id}.${view.viewed_at}`}
+                    to={`/datasets/${view.dataset_id}`}
+                    state={{ highlightTable: view.table_id }}
+                    className="dp6-nav-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-foreground hover:bg-muted"
+                  >
+                    <History size={12} className="shrink-0 text-muted-foreground" />
+                    <span className="truncate" title={`${view.dataset_id}.${view.table_id}`}>
+                      {view.dataset_id}.{view.table_id}
+                    </span>
+                  </Link>
+                ))}
+              </nav>
+            </>
+          ) : (
+            <p className="px-3 text-sm text-muted-foreground">
+              Nenhuma tabela aberta recentemente.
+            </p>
+          )}
+        </SidebarSection>
       </SidebarServiceGroup>
 
       <SidebarServiceGroup
         icon={<HardDrive size={16} />}
         label="Cloud Storage"
+        to="/storage"
         open={cloudStorageOpen}
         onOpenChange={setCloudStorageOpen}
       >
         <nav className="flex flex-col gap-0.5">
-          <NavLink to="/storage" end className={NAV_LINK_CLASS}>
+          <NavLink to="/storage/buckets" className={NAV_LINK_CLASS}>
             <HardDrive size={16} />
             Buckets
           </NavLink>

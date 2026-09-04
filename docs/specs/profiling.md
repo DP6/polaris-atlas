@@ -425,3 +425,34 @@ apps/backend/src/observability_hub/
 - Detecção de PII (Fase 3)
 - Validação de constraints de negócio (fase futura)
 - Exportação de relatório (fase futura)
+
+
+---
+
+## Refresh visual - pendente (2026-09) — FEITO (R2-7)
+
+Implementado na rodada 2 (R2-7). O `ProfilingDialog` foi **deletado**;
+o fluxo virou a subárvore de rotas `/analyze/:datasetId/:tableId/*` —
+ver **`docs/specs/quality.md`** (AC-QUAL-RV-01..04). A aba "Análise de
+qualidade" virou `QualityAnalysisPanel` + `QualityAnalysisPage`, com
+`CompositeScoreRing` (Quality Score) e `HBarList` (cardinalidade por
+coluna, barra horizontal + `ChartTooltip`).
+
+### ACs originais
+
+
+Pedidos do brief `frontend-visual-refresh.md` (sec. "Analises de qualidade") -
+o modulo sai do dialog pequeno e vira submodulo em tela cheia. Feature de
+UX/dataviz nova; branch propria depois do review. Ver
+`frontend-visual-refresh-plan.md` sec.5.
+
+| ID | Comportamento | Teste |
+|---|---|---|
+| AC-QUAL-RV-01 | O fluxo de profiling deixa de ser `ProfilingDialog` (modal) e passa a ser rota/tela cheia. | `test_profiling_is_full_screen_route` |
+| AC-QUAL-RV-02 | "Analisar" (no Catalogo de Dados **e** na lista propria de Qualidade) abre uma **tela de escolha de tipo de analise**: cards (icone + descricao) para Schema, Analise de qualidade, PII, Tipos de coluna, Historico, Acesso. Cada card abre o modulo correspondente em tela cheia. | `test_analyze_opens_analysis_type_chooser` |
+| AC-QUAL-RV-03 | "Analise de qualidade" em tela cheia: cardinalidade por coluna em **barra horizontal + `ChartTooltip`** no hover (substitui os gauges pequenos onde fizer sentido; `CompletenessBar` continua pra completude). | `test_quality_cardinality_horizontal_bars` |
+| AC-QUAL-RV-04 | Lista de tabelas disponiveis para analise no padrao de tabela do refresh (hover gradiente + barra - ja e regra global). | (visual) |
+
+Suposicao **ASM-QUAL-RV-01** (aberta): "chegar por Catalogo (dataset ->
+Analisar) ou pela lista de Qualidade (funcao -> tabela) leva ao mesmo
+modulo" - confirmar rota/estado compartilhado na implementacao.

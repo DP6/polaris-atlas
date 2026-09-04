@@ -760,6 +760,13 @@ Filtra silenciosamente projetos já acessíveis ou com pedido pendente
 duplicado — ver "Solicitação de acesso" acima.
 
 ### GET /api/v1/admin/analytics/logins?lookback_days=90
+
+Params opcionais (refresh visual rodada 2, AC-ADM-RV-03): `from` e `to`
+(datas `YYYY-MM-DD`). Quando `from` é dado, ele vira o `since` da busca no
+Firestore (no lugar de `lookback_days`); `to` filtra o limite superior
+(fim do dia UTC, inclusivo) depois. Sem `from`/`to` → comportamento antigo
+(`lookback_days`). ASM-ADM-RV-01 resolvida.
+
 ### GET /api/v1/admin/analytics/favorites
 ### GET /api/v1/admin/analytics/profiling?limit=200
 Ver "Analytics de uso (v1.2)" acima.
@@ -976,3 +983,24 @@ apps/frontend/src/
 - **Notificação por e-mail** ao aprovar/negar uma solicitação — só
   reflete dentro do Hub (badge de pendentes some da visão do admin; o
   solicitante percebe na próxima vez que tentar acessar o projeto).
+
+
+---
+
+## Refresh visual - pendente (2026-09)
+
+Ver brief `frontend-visual-refresh.md` (sec. Administracao) e
+`frontend-visual-refresh-plan.md` sec.5.
+
+| ID | Comportamento | Teste |
+|---|---|---|
+| AC-ADM-RV-01 | ✅ (R2-5) "Acessos ao Hub" = `<ComboChart>` coluna + linha; `<ChoiceToggle>` "Coluna: Acumulado / Período" troca qual série é coluna e qual é linha (eixo Y duplo). | `LoginAnalyticsSection` — visual |
+| AC-ADM-RV-02 | ✅ (R2-5) `<ChoiceToggle>` "Granularidade: Dia / Mês" — usa os buckets `daily`/`monthly` que a resposta já traz. | `LoginAnalyticsSection` — visual |
+| AC-ADM-RV-03 | ✅ (R2-5) dois `<DateField>` "De"/"Até" → `?from=&to=` no endpoint (backend B7). Sem eles, janela `lookback_days=90`. | `test_get_login_analytics_from_to_window` |
+| AC-ADM-RV-04 | ✅ (R2-5; reescrito na rodada 3) `<Funnel>` = barras horizontais **centradas** afunilando de cima pra baixo (largura ∝ contagem), rótulo + valor + % **acima** de cada barra. A versão R2-5 usava `<polygon>` SVG esticado, que distorcia dentro do container de altura fixa (`h-56`) — trocado por `<div>`s com `width: %` + `mx-auto`. `role="img"` + `aria-label` + `<table>` sr-only. | `Funnel` — visual |
+
+Suposicao **ASM-ADM-RV-01** (resolvida — R2-5): AC-ADM-RV-03 exigiu sim
+parametro novo no endpoint (`?from=&to=`) — implementado (B7). Layout:
+`AdminUsageTab` deixou de ser `flex-col gap-8` de `CollapsibleSection` e
+virou blocos — combo de acessos full-width, funil + heatmap numa linha
+2-col, seções de tabela empilhadas.

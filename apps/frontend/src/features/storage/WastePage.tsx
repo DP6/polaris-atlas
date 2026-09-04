@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { LoadingState } from '@/components/LoadingState'
 import { PageHeader } from '@/components/PageHeader'
+import { Panel } from '@/components/Panel'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { Badge } from '@/components/ui/badge'
@@ -197,87 +198,93 @@ export function WastePage() {
 
       {data.usage_check_warning && <WarningCallout>{data.usage_check_warning}</WarningCallout>}
 
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-muted-foreground">
-          Objetos STANDARD sem modificação há pelo menos
-        </span>
-        <MinDaysPicker value={minDaysUnused} onChange={setMinDaysUnused} />
-      </div>
-
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <SortableTableHead
-              label="Bucket"
-              active={sortKey === 'bucket_name'}
-              direction={sortDir}
-              onClick={() => toggleSort('bucket_name')}
-            />
-            <SortableTableHead
-              label="Objetos elegíveis"
-              active={sortKey === 'eligible_object_count'}
-              direction={sortDir}
-              onClick={() => toggleSort('eligible_object_count')}
-              align="right"
-            />
-            <SortableTableHead
-              label="Tamanho"
-              active={sortKey === 'eligible_size_bytes'}
-              direction={sortDir}
-              onClick={() => toggleSort('eligible_size_bytes')}
-              align="right"
-            />
-            <SortableTableHead
-              label="Objeto mais antigo"
-              active={sortKey === 'oldest_object_age_days'}
-              direction={sortDir}
-              onClick={() => toggleSort('oldest_object_age_days')}
-              align="right"
-            />
-            <SortableTableHead
-              label="Economia estimada/mês"
-              active={sortKey === 'estimated_savings_usd_month_min'}
-              direction={sortDir}
-              onClick={() => toggleSort('estimated_savings_usd_month_min')}
-              align="right"
-            />
-            <SortableTableHead
-              label="Confiança"
-              active={sortKey === 'confidence'}
-              direction={sortDir}
-              onClick={() => toggleSort('confidence')}
-            />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {visibleCandidates.map((candidate) => (
-            <TableRow key={candidate.bucket_name}>
-              <TableCell className="font-medium">{candidate.bucket_name}</TableCell>
-              <TableCell className="text-right">
-                {formatNumber(candidate.eligible_object_count)}
-              </TableCell>
-              <TableCell className="text-right">
-                {formatBytes(candidate.eligible_size_bytes)}
-              </TableCell>
-              <TableCell className="text-right">{candidate.oldest_object_age_days} dias</TableCell>
-              <TableCell className="text-right" title={data.savings_disclaimer}>
-                {formatUsd(candidate.estimated_savings_usd_month_min)} –{' '}
-                {formatUsd(candidate.estimated_savings_usd_month_max)}
-              </TableCell>
-              <TableCell>
-                <ConfidenceBadge candidate={candidate} />
-              </TableCell>
-            </TableRow>
-          ))}
-          {visibleCandidates.length === 0 && (
+      <Panel
+        filterRow={
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">
+              Objetos STANDARD sem modificação há pelo menos
+            </span>
+            <MinDaysPicker value={minDaysUnused} onChange={setMinDaysUnused} />
+          </div>
+        }
+      >
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={6} className="text-center text-muted-foreground">
-                Nenhum bucket candidato encontrado com esse threshold.
-              </TableCell>
+              <SortableTableHead
+                label="Bucket"
+                active={sortKey === 'bucket_name'}
+                direction={sortDir}
+                onClick={() => toggleSort('bucket_name')}
+              />
+              <SortableTableHead
+                label="Objetos elegíveis"
+                active={sortKey === 'eligible_object_count'}
+                direction={sortDir}
+                onClick={() => toggleSort('eligible_object_count')}
+                align="right"
+              />
+              <SortableTableHead
+                label="Tamanho"
+                active={sortKey === 'eligible_size_bytes'}
+                direction={sortDir}
+                onClick={() => toggleSort('eligible_size_bytes')}
+                align="right"
+              />
+              <SortableTableHead
+                label="Objeto mais antigo"
+                active={sortKey === 'oldest_object_age_days'}
+                direction={sortDir}
+                onClick={() => toggleSort('oldest_object_age_days')}
+                align="right"
+              />
+              <SortableTableHead
+                label="Economia estimada/mês"
+                active={sortKey === 'estimated_savings_usd_month_min'}
+                direction={sortDir}
+                onClick={() => toggleSort('estimated_savings_usd_month_min')}
+                align="right"
+              />
+              <SortableTableHead
+                label="Confiança"
+                active={sortKey === 'confidence'}
+                direction={sortDir}
+                onClick={() => toggleSort('confidence')}
+              />
             </TableRow>
-          )}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {visibleCandidates.map((candidate) => (
+              <TableRow key={candidate.bucket_name}>
+                <TableCell className="font-medium">{candidate.bucket_name}</TableCell>
+                <TableCell className="text-right">
+                  {formatNumber(candidate.eligible_object_count)}
+                </TableCell>
+                <TableCell className="text-right">
+                  {formatBytes(candidate.eligible_size_bytes)}
+                </TableCell>
+                <TableCell className="text-right">
+                  {candidate.oldest_object_age_days} dias
+                </TableCell>
+                <TableCell className="text-right" title={data.savings_disclaimer}>
+                  {formatUsd(candidate.estimated_savings_usd_month_min)} –{' '}
+                  {formatUsd(candidate.estimated_savings_usd_month_max)}
+                </TableCell>
+                <TableCell>
+                  <ConfidenceBadge candidate={candidate} />
+                </TableCell>
+              </TableRow>
+            ))}
+            {visibleCandidates.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                  Nenhum bucket candidato encontrado com esse threshold.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </Panel>
     </div>
   )
 }

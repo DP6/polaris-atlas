@@ -104,6 +104,7 @@ export function ColumnTypeSuggestionsTab({
             {estimateMutation.isPending ? 'Estimando…' : 'Estimar custo'}
           </Button>
           <Button
+            className="dp6-gradient-primary"
             disabled={runMutation.isPending || isView}
             onClick={() => runMutation.mutate({ projectId, samplePercent, tables })}
           >

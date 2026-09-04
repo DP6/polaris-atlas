@@ -10,7 +10,7 @@ proíbe lógica de negócio em api/.
 import calendar
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from google.cloud import bigquery, firestore, storage
 from google.cloud import logging as cloud_logging
@@ -26,6 +26,7 @@ from observability_hub.core.exceptions import (
     InvalidSamplePercentError,
     LoggingQuotaExceededError,
 )
+from observability_hub.domains.budget import repository as budget_repository
 from observability_hub.domains.finops import repository, sql_builder
 from observability_hub.domains.finops.repository import ScanEvent, TableRefTuple
 from observability_hub.domains.finops.schemas import (
@@ -39,9 +40,16 @@ from observability_hub.domains.finops.schemas import (
     CostGroup,
     CostlyQuery,
     CostProjection,
+    CostSeriesGranularity,
+    CostSeriesPoint,
+    CostSeriesResponse,
+    CostType,
     PartitionCandidate,
     PartitionCandidatesResponse,
     SuggestedColumnType,
+    TableScore,
+    TableScoreFactor,
+    TableScoresResponse,
 )
 
 _PARTITION_CANDIDATE_LOOKBACK_DAYS = repository.LOOKBACK_DAYS
@@ -49,6 +57,14 @@ _MIN_TABLE_SIZE_BYTES_FOR_PARTITION_CANDIDATE = 1_073_741_824  # 1 GB
 _CONSERVATIVE_REDUCTION = 0.30
 _OPTIMISTIC_REDUCTION = 0.70
 _BUDGET_TOP_N_DEFAULT = 10
+# Teto de retenção do cache de audit log — nem "últimos N dias" nem um
+# filtro de data explícito (from/to) conseguem alcançar mais que isso.
+# Era duas constantes (uma por endpoint); unificada porque é o mesmo
+# limite físico dos dois (_resolve_date_window).
+_FINOPS_CACHE_MAX_DAYS = 31
+# Janela default do budget quando nenhum filtro é passado: "últimos N
+# dias", N = 30 (comportamento próximo do mês corrente).
+_BUDGET_DEFAULT_LOOKBACK_DAYS = 30
 _COLUMN_TYPE_SCAN_TIMEOUT_SECONDS = 120.0
 _COLUMN_TYPE_SCAN_MAX_WORKERS = 4
 _STORAGE_BYTES_OVERHEAD = (
@@ -134,10 +150,6 @@ def _human_bytes(num_bytes: int) -> str:
 def _estimate_query_cost_usd(num_bytes: int) -> float:
     tib = num_bytes / (1024**4)
     return round(tib * settings.bigquery_price_usd_per_tib, 6)
-
-
-def _month_start(now: datetime) -> datetime:
-    return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
 
 def scan_partition_candidates(
@@ -259,6 +271,61 @@ def _group_keys(
     return [str(event.timestamp.year)]  # YEAR
 
 
+def _resolve_date_window(
+    now: datetime,
+    lookback_days: int,
+    from_date: date | None,
+    to_date: date | None,
+) -> tuple[date, date, int, str | None]:
+    """Resolve a janela efetiva de dados pra get_budget/get_cost_series —
+    dois modos:
+
+    - Legado (from_date/to_date ambos None): "últimos N dias" a partir de
+      hoje, N = lookback_days clampado em 1.._FINOPS_CACHE_MAX_DAYS.
+    - Filtro de data explícito (rodada 3, AC-FIN-RV-02): to_date clampado
+      pra não ficar no futuro; from_date clampado pro piso do cache (hoje
+      - (_FINOPS_CACHE_MAX_DAYS - 1) dias); se invertido depois dos
+      clamps, troca defensivamente — nunca 422, mesma filosofia do
+      lookback_days de hoje (o service resolve, não empurra erro pro
+      chamador por um parâmetro fora do alcance).
+
+    Retorna (start, end, lookback_days_efetivo, warning|None) — warning só
+    quando algum clamp mudou o que foi pedido; nunca trunca em silêncio.
+    """
+    today = now.date()
+    cache_floor = today - timedelta(days=_FINOPS_CACHE_MAX_DAYS - 1)
+
+    if from_date is None and to_date is None:
+        lookback_days = max(1, min(lookback_days, _FINOPS_CACHE_MAX_DAYS))
+        end = today
+        start = end - timedelta(days=lookback_days - 1)
+        return start, end, lookback_days, None
+
+    warnings: list[str] = []
+
+    end = to_date or today
+    if end > today:
+        warnings.append(
+            f"Data final pedida ({end.isoformat()}) é no futuro — ajustada para hoje "
+            f"({today.isoformat()})."
+        )
+        end = today
+
+    start = from_date or cache_floor
+    if start < cache_floor:
+        warnings.append(
+            f"Data inicial pedida ({start.isoformat()}) é anterior ao que o cache de "
+            f"audit log guarda ({_FINOPS_CACHE_MAX_DAYS} dias) — ajustada para "
+            f"{cache_floor.isoformat()}."
+        )
+        start = cache_floor
+
+    if start > end:
+        start, end = end, start
+
+    return start, end, (end - start).days + 1, (" ".join(warnings) or None)
+
+
 def get_budget(
     logging_client: cloud_logging.Client,
     storage_client: storage.Client,
@@ -266,16 +333,20 @@ def get_budget(
     project_id: str,
     group_by: BudgetGroupBy = BudgetGroupBy.TABLE,
     limit: int = _BUDGET_TOP_N_DEFAULT,
+    lookback_days: int = _BUDGET_DEFAULT_LOOKBACK_DAYS,
+    from_date: date | None = None,
+    to_date: date | None = None,
+    user_email: str | None = None,
 ) -> BudgetResponse:
     now = datetime.now(UTC)
-    month_start = _month_start(now)
-    lookback_days = (now - month_start).days + 1
+    start_date, end_date, lookback_days, clamp_warning = _resolve_date_window(
+        now, lookback_days, from_date, to_date
+    )
+    period_start = datetime.combine(start_date, datetime.min.time(), tzinfo=UTC)
+    period_end = datetime.combine(end_date, datetime.min.time(), tzinfo=UTC)
 
-    # Fonte é o mesmo cache de 30 dias de scan_partition_candidates; o
-    # recorte pro mês corrente sai do filtro `event.timestamp < month_start`
-    # abaixo. Nos ~1 dia/ano em que lookback_days passa de 30 (fim de mês
-    # de 31 dias), o começo do mês pode faltar — já coberto pelo
-    # _BUDGET_RETENTION_CAVEAT, comportamento pré-existente.
+    # Fonte é o mesmo cache de ~30 dias de scan_partition_candidates; o
+    # recorte pra janela sai do filtro de start_date/end_date abaixo.
     events, cache_updated_at, quota_warning = _scan_events_or_quota_warning(
         logging_client, storage_client, firestore_client, project_id
     )
@@ -286,7 +357,10 @@ def get_budget(
     total_billed_bytes = 0
 
     for event in events:
-        if event.timestamp is None or event.timestamp < month_start:
+        if event.timestamp is None:
+            continue
+        event_date = event.timestamp.date()
+        if event_date < start_date or event_date > end_date:
             continue
         if event.total_billed_bytes <= 0:
             continue
@@ -336,6 +410,8 @@ def get_budget(
 
     total_cost_usd = _estimate_query_cost_usd(total_billed_bytes)
     daily_average = total_cost_usd / lookback_days if lookback_days else 0.0
+    # Projeção mensal a partir da média diária da janela escolhida (não é
+    # mais "resto do mês corrente" — a janela pode nem ser o mês).
     days_in_month = calendar.monthrange(now.year, now.month)[1]
     projection = CostProjection(
         days_elapsed=lookback_days,
@@ -345,26 +421,384 @@ def get_budget(
         projected_month_total_usd=round(daily_average * days_in_month, 6),
     )
 
+    warning_parts = [w for w in (clamp_warning,) if w]
     if quota_warning is not None:
-        warning = quota_warning
+        warning_parts.append(quota_warning)
     elif not events:
-        warning = _EMPTY_RESULT_WARNING.format(days=lookback_days, project_id=project_id)
+        warning_parts.append(
+            _EMPTY_RESULT_WARNING.format(days=lookback_days, project_id=project_id)
+        )
     elif lookback_days > 30:
-        warning = _BUDGET_RETENTION_CAVEAT.format(days=lookback_days)
-    else:
-        warning = None
+        warning_parts.append(_BUDGET_RETENTION_CAVEAT.format(days=lookback_days))
+    warning = " ".join(warning_parts) or None
+
+    budget_target_usd = (
+        budget_repository.get_project_budget_amount(firestore_client, user_email, project_id)
+        if user_email
+        else None
+    )
 
     return BudgetResponse(
         project_id=project_id,
-        period_start=month_start,
+        period_start=period_start,
+        period_end=period_end,
         lookback_days=lookback_days,
         group_by=group_by,
         groups=groups,
         total_cost_usd=total_cost_usd,
         top_queries=top_queries,
         projection=projection,
+        budget_target_usd=budget_target_usd,
         cache_updated_at=cache_updated_at,
         warning=warning,
+    )
+
+
+_STORAGE_UNAVAILABLE_WARNING = (
+    "A linha de custo de storage não pôde ser montada: "
+    "INFORMATION_SCHEMA.TABLE_STORAGE não respondeu no projeto "
+    "'{project_id}'. A linha de custo de query continua válida."
+)
+
+
+def _period_key(d: date, granularity: CostSeriesGranularity) -> str:
+    if granularity == CostSeriesGranularity.MONTH:
+        return d.strftime("%Y-%m")
+    return d.isoformat()
+
+
+def _iter_periods(start: date, end: date, granularity: CostSeriesGranularity) -> list[str]:
+    """Lista contígua de chaves de período de start a end (inclusive) — o
+    gráfico precisa de pontos sem buraco mesmo em dias/meses sem custo."""
+    keys: list[str] = []
+    seen: set[str] = set()
+    cursor = start
+    while cursor <= end:
+        key = _period_key(cursor, granularity)
+        if key not in seen:
+            seen.add(key)
+            keys.append(key)
+        cursor += timedelta(days=1)
+    return keys
+
+
+def _storage_cost_for_day(logical_bytes: int, day: date) -> float:
+    """Custo de storage *incorrido naquele dia* = custo mensal daquele
+    volume dividido pelos dias do mês. Usa a tarifa `active` (ignora o
+    desconto de long-term → a linha de storage é um teto suave) e assume
+    cobrança lógica/on-demand, mesma premissa do resto do Hub (ver
+    docs/specs/finops-budget.md, 'É uma estimativa')."""
+    gb = logical_bytes / (1024**3)
+    days_in_month = calendar.monthrange(day.year, day.month)[1]
+    monthly = gb * settings.bigquery_storage_price_usd_per_gb_month_active
+    return monthly / days_in_month
+
+
+def get_cost_series(
+    client: bigquery.Client,
+    logging_client: cloud_logging.Client,
+    storage_client: storage.Client,
+    firestore_client: firestore.Client,
+    project_id: str,
+    granularity: CostSeriesGranularity = CostSeriesGranularity.DAY,
+    cost_type: CostType = CostType.ALL,
+    lookback_days: int = 30,
+    from_date: date | None = None,
+    to_date: date | None = None,
+    datasets: list[str] | None = None,
+    tables: list[str] | None = None,
+) -> CostSeriesResponse:
+    """Série temporal de custo (query + storage) pro gráfico combo da
+    visão geral de FinOps (AC-FIN-RV-02). Custo de query vem do mesmo
+    cache de audit log de get_budget (nenhum scan novo); custo de storage
+    é uma linha plana no nível atual, de INFORMATION_SCHEMA.TABLE_STORAGE
+    (metadado, $0), que degrada pra `storage_available=False` se
+    indisponível — nunca 500."""
+    now = datetime.now(UTC)
+    start_date, end_date, _lookback_days, clamp_warning = _resolve_date_window(
+        now, lookback_days, from_date, to_date
+    )
+
+    want_query = cost_type in (CostType.ALL, CostType.QUERY)
+    want_storage = cost_type in (CostType.ALL, CostType.STORAGE)
+
+    dataset_filter = set(datasets) if datasets else None
+    table_filter = set(tables) if tables else None
+
+    # --- custo de query, do cache de audit log ------------------------------
+    query_cost_by_period: dict[str, float] = {}
+    cache_updated_at: datetime | None = None
+    warning: str | None = clamp_warning
+    if want_query:
+        events, cache_updated_at, quota_warning = _scan_events_or_quota_warning(
+            logging_client, storage_client, firestore_client, project_id
+        )
+        if quota_warning:
+            warning = f"{warning} {quota_warning}".strip() if warning else quota_warning
+        for event in events:
+            if event.timestamp is None:
+                continue
+            event_date = event.timestamp.date()
+            if event_date < start_date or event_date > end_date:
+                continue
+            if event.total_billed_bytes <= 0:
+                continue
+            real_tables = [ref for ref in event.referenced_tables if ref[0] == project_id]
+            if not real_tables:
+                continue
+            if dataset_filter is not None and not any(
+                d in dataset_filter for _p, d, _t in real_tables
+            ):
+                continue
+            if table_filter is not None and not any(
+                f"{d}.{t}" in table_filter for _p, d, t in real_tables
+            ):
+                continue
+            key = _period_key(event.timestamp.date(), granularity)
+            cost = _estimate_query_cost_usd(event.total_billed_bytes)
+            query_cost_by_period[key] = query_cost_by_period.get(key, 0.0) + cost
+
+    # --- custo de storage: linha plana no nível ATUAL --------------------
+    # (não a timeline histórica — schema de coluna instável; em ~30 dias o
+    # storage quase não varia, ver repository.get_current_storage_bytes.)
+    storage_cost_by_period: dict[str, float] = {}
+    storage_available = True
+    if want_storage:
+        # discover_regions propaga ProjectNotFound/AccessDenied igual aos
+        # outros endpoints de finops (scan_partition_candidates) — se a SA
+        # não alcança o projeto, é 404/403, não série vazia silenciosa.
+        regions = discover_regions(project_id, client=client)
+        current_bytes, storage_reason = repository.get_current_storage_bytes(
+            client, project_id, regions, datasets=datasets, tables=tables
+        )
+        if current_bytes is None:
+            storage_available = False
+            storage_warning = _STORAGE_UNAVAILABLE_WARNING.format(project_id=project_id)
+            if storage_reason:
+                storage_warning = f"{storage_warning} Motivo do BigQuery: {storage_reason}."
+            warning = f"{warning} {storage_warning}".strip() if warning else storage_warning
+        else:
+            cursor = start_date
+            while cursor <= end_date:
+                key = _period_key(cursor, granularity)
+                storage_cost_by_period[key] = storage_cost_by_period.get(
+                    key, 0.0
+                ) + _storage_cost_for_day(current_bytes, cursor)
+                cursor += timedelta(days=1)
+    else:
+        storage_available = False
+
+    points = [
+        CostSeriesPoint(
+            period=key,
+            query_cost_usd=round(query_cost_by_period.get(key, 0.0), 6),
+            storage_cost_usd=round(storage_cost_by_period.get(key, 0.0), 6),
+            total_cost_usd=round(
+                query_cost_by_period.get(key, 0.0) + storage_cost_by_period.get(key, 0.0), 6
+            ),
+        )
+        for key in _iter_periods(start_date, end_date, granularity)
+    ]
+
+    return CostSeriesResponse(
+        project_id=project_id,
+        granularity=granularity,
+        cost_type=cost_type,
+        period_start=datetime.combine(start_date, datetime.min.time(), tzinfo=UTC),
+        period_end=datetime.combine(end_date, datetime.min.time(), tzinfo=UTC),
+        points=points,
+        storage_available=storage_available,
+        cache_updated_at=cache_updated_at,
+        warning=warning,
+    )
+
+
+# --- Score de eficiência de custo por tabela (AC-FIN-RV-03 / AC-WASTE-RV-01)
+#
+# Fórmula PROVISÓRIA — os pesos e os fatores são um ponto de partida a
+# calibrar no review (ver docs/specs/finops-budget.md Q-002). Só usa
+# sinais que o próprio domínio finops já tem: nada de "drift de schema"
+# (domains/quality) nem "é órfã" (domains/lineage) — domínios são
+# isolados (CLAUDE.md). Quando esses sinais forem desejados, entram por
+# um campo novo alimentado por um job que cruza os domínios, não por
+# import cross-domain aqui.
+_SCORE_WEIGHT_PARTITION = 0.45
+_SCORE_WEIGHT_UTILIZATION = 0.30
+_SCORE_WEIGHT_SCAN_EFFICIENCY = 0.25
+# Tabela nunca escaneada em 30d perde utilização proporcionalmente ao
+# tamanho: zera em >= este limite (paga storage sem retorno nenhum).
+_SCORE_UNUSED_ZERO_AT_GB = 100.0
+# scan_efficiency: escanear a tabela N vezes o próprio tamanho em 30d.
+# Meia nota quando N == este valor.
+_SCORE_SCAN_RATIO_HALF_LIFE = 10.0
+# scan_efficiency é neutro (1.0) pra tabelas abaixo deste tamanho — mesma
+# linha de "não vale a pena otimizar" do candidato a particionamento
+# (_MIN_TABLE_SIZE_BYTES_FOR_PARTITION_CANDIDATE): re-scan de tabela
+# pequena custa centavos, não é sinal de desperdício.
+_SCORE_SCAN_MIN_SIZE_BYTES = _MIN_TABLE_SIZE_BYTES_FOR_PARTITION_CANDIDATE
+
+
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, value))
+
+
+def _table_efficiency_score(
+    size_bytes: int,
+    is_partitioned: bool,
+    billed_bytes_30d: int,
+    partition_savings_usd: float,
+    observed_cost_usd_30d: float,
+) -> tuple[int, list[TableScoreFactor]]:
+    """Score 0..100 (maior = mais eficiente) + a decomposição em fatores
+    pro drill-down. Função pura — testada direto, sem I/O."""
+    size_gb = size_bytes / (1024**3)
+
+    # 1. Particionamento: quanto do custo observado dá pra economizar
+    #    particionando (só faz sentido se há economia estimada > 0).
+    if is_partitioned or partition_savings_usd <= 0 or observed_cost_usd_30d <= 0:
+        partition_value = 1.0
+        partition_detail = (
+            "Particionada" if is_partitioned else "Sem oportunidade de particionamento detectada"
+        )
+    else:
+        partition_value = _clamp01(1 - partition_savings_usd / observed_cost_usd_30d)
+        partition_detail = (
+            f"Economia estimada de US$ {partition_savings_usd:.2f} sobre US$ "
+            f"{observed_cost_usd_30d:.2f} de scan observado em 30d se particionada"
+        )
+
+    # 2. Utilização: escaneada ao menos uma vez em 30d? Se não, penaliza
+    #    proporcional ao tamanho (storage pago sem uso).
+    if billed_bytes_30d > 0:
+        utilization_value = 1.0
+        utilization_detail = "Consultada nos últimos 30 dias"
+    else:
+        utilization_value = _clamp01(1 - size_gb / _SCORE_UNUSED_ZERO_AT_GB)
+        utilization_detail = f"Sem nenhuma consulta em 30d; {size_gb:.1f} GB de storage sem retorno"
+
+    # 3. Eficiência de scan: quantas vezes o próprio tamanho foi escaneado
+    #    em 30d — re-scan repetido de tabela inteira (sem pruning/cache).
+    #    Tabela pequena (< 1 GB) não entra nessa conta.
+    if size_bytes < _SCORE_SCAN_MIN_SIZE_BYTES or billed_bytes_30d <= 0:
+        scan_value = 1.0
+        scan_detail = (
+            "Tabela pequena (< 1 GB) — re-scan não é material"
+            if 0 < size_bytes < _SCORE_SCAN_MIN_SIZE_BYTES
+            else "Sem scans onerosos em 30d"
+        )
+    else:
+        ratio = billed_bytes_30d / size_bytes
+        scan_value = _clamp01(1 / (1 + ratio / _SCORE_SCAN_RATIO_HALF_LIFE))
+        scan_detail = f"Bytes escaneados em 30d = {ratio:.1f}× o tamanho da tabela"
+
+    factors = [
+        TableScoreFactor(
+            name="partitioning",
+            value=round(partition_value, 4),
+            weight=_SCORE_WEIGHT_PARTITION,
+            detail=partition_detail,
+        ),
+        TableScoreFactor(
+            name="utilization",
+            value=round(utilization_value, 4),
+            weight=_SCORE_WEIGHT_UTILIZATION,
+            detail=utilization_detail,
+        ),
+        TableScoreFactor(
+            name="scan_efficiency",
+            value=round(scan_value, 4),
+            weight=_SCORE_WEIGHT_SCAN_EFFICIENCY,
+            detail=scan_detail,
+        ),
+    ]
+    score = round(100 * sum(f.value * f.weight for f in factors))
+    return score, factors
+
+
+def compute_table_scores(
+    client: bigquery.Client,
+    logging_client: cloud_logging.Client,
+    storage_client: storage.Client,
+    firestore_client: firestore.Client,
+    project_id: str,
+    datasets: list[str] | None = None,
+    limit: int = 100,
+) -> TableScoresResponse:
+    """Score de eficiência de custo por tabela + agregado do projeto
+    (AC-FIN-RV-03). Reaproveita scan_partition_candidates pro sinal de
+    particionamento; todo o resto vem de metadado ($0) e do cache de
+    audit log — nenhuma query BQ nova."""
+    regions = discover_regions(project_id, client=client)
+    all_tables = repository.list_all_table_refs(client, project_id, regions, datasets=datasets)
+    table_refs = [f"{project_id}.{d}.{t}" for d, t in all_tables]
+    metadata = get_tables_metadata(client, table_refs)
+
+    events, cache_updated_at, warning = _scan_events_or_quota_warning(
+        logging_client, storage_client, firestore_client, project_id
+    )
+    billed_bytes_by_table: dict[tuple[str, str], int] = {}
+    for event in events:
+        if event.timestamp is None:
+            continue
+        for ref in event.referenced_tables:
+            if ref[0] != project_id:
+                continue
+            key = ref[1:]
+            billed_bytes_by_table[key] = (
+                billed_bytes_by_table.get(key, 0) + event.total_billed_bytes
+            )
+
+    pc_response = scan_partition_candidates(
+        client, logging_client, storage_client, firestore_client, project_id, datasets=datasets
+    )
+    candidate_by_key = {(c.dataset_id, c.table_id): c for c in pc_response.candidates}
+
+    scored: list[TableScore] = []
+    for dataset_id, table_id in all_tables:
+        bq_table = metadata.get(f"{project_id}.{dataset_id}.{table_id}")
+        if bq_table is None:
+            continue
+        size_bytes = bq_table.num_bytes or 0
+        is_partitioned = (
+            bq_table.time_partitioning is not None or bq_table.range_partitioning is not None
+        )
+        billed_30d = billed_bytes_by_table.get((dataset_id, table_id), 0)
+        cand = candidate_by_key.get((dataset_id, table_id))
+        savings = (cand.estimated_savings_usd_optimistic or 0.0) if cand else 0.0
+        observed_cost = cand.observed_cost_usd_30d if cand else _estimate_query_cost_usd(billed_30d)
+
+        score, factors = _table_efficiency_score(
+            size_bytes, is_partitioned, billed_30d, savings, observed_cost
+        )
+        scored.append(
+            TableScore(
+                dataset_id=dataset_id,
+                table_id=table_id,
+                score=score,
+                size_bytes=size_bytes,
+                observed_cost_usd_30d=round(observed_cost, 6),
+                is_partitioned=is_partitioned,
+                factors=factors,
+            )
+        )
+
+    total_size = sum(t.size_bytes for t in scored)
+    if scored and total_size > 0:
+        project_score = round(sum(t.score * t.size_bytes for t in scored) / total_size)
+    elif scored:
+        project_score = round(sum(t.score for t in scored) / len(scored))
+    else:
+        project_score = 100
+
+    scored.sort(key=lambda t: (t.score, -t.size_bytes))
+
+    return TableScoresResponse(
+        project_id=project_id,
+        lookback_days=_PARTITION_CANDIDATE_LOOKBACK_DAYS,
+        project_efficiency_score=project_score,
+        tables=scored[:limit],
+        cache_updated_at=cache_updated_at or pc_response.cache_updated_at,
+        warning=warning or pc_response.warning,
     )
 
 

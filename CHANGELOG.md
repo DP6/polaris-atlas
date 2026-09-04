@@ -5,6 +5,459 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+## Refresh visual do Hub — rodada 3 (ajustes de UI, 2026-09)
+
+Terceira leva de ajustes finos após validação visual do usuário em `dev`. Sem
+funcionalidade nova. Plano em `~/.claude/plans/gere-um-plano-altera-es-unified-wilkes.md`
+(11 branches R3-*, empilhadas sobre a ponta da rodada 2). Decisões travadas: voltar global
+por histórico no `PageHeader`; período do Budget = preset 7/15/30 dias (teto do cache);
+scanner de desperdício vira overview de 2 cards → sub-rotas; distribuição de freshness = 3
+barras verticais sempre visíveis.
+
+### R3-tokens — `feat/r3-tokens` (só front-end)
+
+- **Raio 10px → 5px:** `--radius` de `0.625rem` → `0.3125rem` em `:root` e `.dark`
+  (`index.css`). Escala derivada (`--radius-sm…4xl`) segue via `calc()`.
+- **Menos gradiente grande:** `.dp6-headline-glow` (wash amarelo atrás de todo `<h1>`) e
+  `.dp6-brand-bars` (+ componente `BrandBars` + prop `showBrandBars` do `PageHeader` + 4
+  call sites) **removidos**. `.dp6-hoverable:hover` e `.dp6-opt-card:hover` perderam o
+  `--shadow-glow` (agora contorno fino / `--shadow-elevation-1`). Hover de linha de tabela
+  de `primary 9%` → `6%`. `--glow` cru só sobrevive em `.dp6-gradient-primary` /
+  `.dp6-nav-active` / `.dp6-lineage`.
+- **Cards com cor de base única:** `OptionCard` perdeu o prop `featured` + `.dp6-opt-card-featured`
+  (fundo amarelo) — removido dos 3 call sites (Governança, AnalysisChooser, QualityOverview).
+- **Big number sem hover:** `MetricTile` e o `BigNumber` da FinOps overview perderam
+  `.dp6-hoverable` (não são clicáveis).
+- Doc-sync: `docs/frontend/design-system.md` (§Raio, §Vida, tabela de componentes),
+  `docs/frontend/ui-ux-rules.md` (§Identidade). `pnpm lint` + `pnpm build` verdes.
+
+### R3-back — `feat/r3-back` (só front-end)
+
+- **Voltar padronizado:** `PageHeader` sempre renderiza um controle "Voltar" no
+  topo-esquerdo (exceto na home `/`). Com `back={{to,label}}` → `<Link>` semântico
+  (comportamento das 11 telas que já tinham); sem o prop → `<button>` genérico que faz
+  `navigate(-1)` (fallback `navigate('/')` quando não há histórico). As ~16 telas com
+  `PageHeader` sem `back` ganham o voltar automaticamente.
+- Doc-sync: `docs/frontend/patterns.md` §Cabeçalho de rota, `ui-ux-rules.md`.
+
+### R3-catalog-volume — `feat/r3-catalog-volume` (só front-end)
+
+- Catálogo de Dados (`/`): 3º big number **"Volume"** (`formatBytes` do
+  `Σ dataset.total_size_bytes` — campo já existe em `DatasetSummary`, vem de
+  `TABLE_STORAGE` no backend, sem agregação nova). Ícone `HardDrive`.
+
+### R3-freshness — `feat/r3-freshness` (só front-end)
+
+- `SlaDistributionBar` reescrito: **3 barras verticais** (verde/amarelo/
+  vermelho — as 6 faixas de SLA colapsadas em `SLA_SEVERITY`) no lugar da
+  barra horizontal empilhada. As 3 **sempre presentes**; varia só a altura
+  (∝ contagem, altura mínima 6% pra faixa com 0). Prop `height` = classe
+  do container. Call sites: `SlaRow` `h-12`, `DatasetFreshnessTable` `h-8`,
+  `DatasetOverviewCard` default `h-10`. `TableFreshnessTable` não usa o
+  componente — sem mudança.
+- Doc-sync: `design-system.md`, `docs/specs/freshness.md`.
+
+### R3-finops-overview — `feat/r3-finops-overview` (só front-end)
+
+- `DatasetSidebar`: NavLink **"Visão geral"** (`Gauge`, `to="/finops" end`) como 1º filho
+  do grupo FinOps.
+- `FinOpsOverviewPage`: o `OptionCardGrid` (Scanner / Budget / Configurar budget) subiu
+  pra logo após o `PageHeader`, antes dos big numbers.
+
+### R3-finops-scanner-cards — `feat/r3-finops-scanner-cards` (só front-end)
+
+- `/finops/scanner` deixou de ser 2 abas e virou **overview de 2 cards** (`ScannerOverviewPage`)
+  → sub-rotas `/finops/scanner/particionamento` (`PartitionCandidatesPage`) e
+  `/finops/scanner/tipos-coluna` (`ColumnTypesPage`), cada uma com `PageHeader` + voltar.
+- `FinOpsPage.tsx` → renomeado `scannerTabs.tsx`; os dois corpos (`PartitionCandidatesTab`,
+  `ColumnTypesTab`) agora são `export`, o wrapper `FinOpsPage` + `<Tabs>` foram removidos.
+- `router.tsx`: 3 rotas no lugar de 1. Doc-sync: `finops-column-types.md`.
+
+### R3-finops-budget-period — `feat/r3-finops-budget-period` (backend + front-end)
+
+- **Backend:** `GET /finops/{p}/budget` ganhou `lookback_days` (`1`–`31`, default `30`,
+  clampado no service). A janela deixou de ser fixa no mês corrente
+  (`period_start = now - lookback_days`); `_month_start` removido. A projeção virou
+  **run-rate mensal** (`média_da_janela × dias_do_mês`) e `projection.days_elapsed` = a
+  janela. `finops-budget.md` → v1.8. `uv run pytest tests/unit` = 825 ok.
+- **Frontend:** novo `components/LookbackPicker.tsx` (extraído de `OrphansPage`, agora com
+  props `options`/`label`/`max`) — `OrphansPage` refatorado pra usá-lo. `BudgetPage`: gate
+  com `LookbackPicker` (presets 7/15/30, teto 31); `useBudget`/`finopsApi.getBudget`
+  passam `lookback_days`; copies "mês corrente" → "período" / "Janela analisada".
+- `pnpm lint` + `pnpm build` verdes.
+
+### R3-fav-recent — `feat/r3-fav-recent` (só front-end)
+
+- Novas rotas `/favoritos` (`FavoritesPage`) e `/recentes` (`RecentsPage`) — a lista
+  completa no `<main>`, reusando `useFavorites`/`useUpdateFavoriteNickname`/`useHistory`,
+  `Panel`, `EmptyState`, `FavoriteNickname`.
+- `DatasetSidebar`: as `SidebarSection` "Favoritos" e "Recentes" ganharam `to=` (nome →
+  página; chevron continua abrindo a lista inline). "Recentes" deixou de ser escondida
+  quando vazia (mostra um aviso).
+- `pnpm lint` + `pnpm build` verdes.
+
+### R3-quality — `feat/r3-quality` (só front-end)
+
+- `OptionCard` ganhou `layout="wide"` (ícone à esquerda, card retangular baixo);
+  `OptionCardGrid` ganhou `columns` (2/3/4 — máximo por linha). `AnalysisChooserPage`
+  (`/analyze/:d/:t`): 7 cards agora `layout="wide"` + `columns={4}`.
+- `/quality` (clique em "Análises de qualidade" na sidebar) virou **redirect →
+  `/quality/folders`** — o card "Analisar uma tabela" saiu do overview; `QualityOverviewPage`
+  deletado. `/quality/tables` segue alcançável pelo botão "Analisar" do `AssetsTable`.
+- Doc-sync: `design-system.md`, `nav-overview-screens.md`. `pnpm lint` + `pnpm build` verdes.
+
+### R3-storage — `feat/r3-storage` (só front-end)
+
+- Novo `StorageOverviewPage` na rota `/storage` (padrão Governança) — 2 `OptionCard`:
+  "Buckets" (`/storage/buckets`) e "Scanner de desperdício" (`/storage/waste`). A lista de
+  buckets moveu de `/storage` → `/storage/buckets`.
+- `DatasetSidebar`: NavLink "Buckets" agora `to="/storage/buckets"` (o label do grupo cai
+  na overview). `BucketBrowserPage` breadcrumb → `/storage/buckets`.
+- Doc-sync: `nav-overview-screens.md`. `pnpm lint` + `pnpm build` verdes.
+
+### R3-admin — `feat/r3-admin` (só front-end)
+
+- **Funil de retenção reescrito** (`components/Funnel.tsx`): barras horizontais centradas
+  afunilando de cima pra baixo (largura ∝ contagem) + rótulo/valor/% acima de cada barra +
+  `<table>` sr-only. A versão R2-5 (`<polygon>` SVG com `preserveAspectRatio="none"`)
+  distorcia dentro do `h-56`.
+- **Todas as seções da aba "Uso do Hub" viram bloco:** `AdminUsageTab` embrulha
+  `FavoritesAnalyticsSection`, `ProfilingActivitySection`, `AccessRequestAnalyticsSection`,
+  `NavigationAnalyticsSection`, `PiiScanActivitySection` em `<Panel>` (as que ainda usam
+  `CollapsibleSection` por dentro ganham a moldura pelo wrapper).
+- **Combobox `Command` no dark:** `CommandItem` ganhou `data-selected:bg-primary/10` +
+  `data-[checked=true]:bg-primary/15 font-medium` — o item destacado/escolhido pinta um
+  fundo amarelo suave (antes `bg-muted` sumia no dark). Vale pra todo combobox
+  (ProjectSelector, pickers do Admin, SaveRunToFolderDialog).
+- Doc-sync: `design-system.md`, `docs/specs/admin.md`. `pnpm lint` + `pnpm build` verdes.
+
+### R3-page-bottom-space — `feat/r3-page-bottom-space` (só front-end)
+
+- `AppLayout`: `<main>` de `p-6` → `px-6 pt-6 pb-16` — respiro no fim de toda página
+  (cards/ícones/texto não encostavam na borda inferior ao rolar até o fim).
+
+### finops-overview-date-range — `feat/finops-overview-date-range` (backend + front-end)
+
+Revisão pedida pelo usuário sobre a Visão Geral do FinOps: investigar a projeção mensal,
+implementar filtro de data + teto no gráfico, debater onde colocar comparação de budget por
+dataset/tabela. Só a 2ª frente virou código aqui — a 1ª foi investigação (achado abaixo,
+correção não aplicada) e a 3ª ficou como opções levantadas pro usuário decidir.
+
+- **Investigado (sem fix):** `projected_month_total_usd` colapsa pra `≈ cost_so_far_usd` o
+  tempo todo com o `lookback_days` default (30) — não é caso de borda de fim de mês.
+  Causa: `R3-finops-budget-period` trocou `lookback_days` de "dias decorridos do mês
+  corrente" pra uma janela rolante configurável, mas a fórmula da projeção
+  (`daily_average × days_in_month`) continua assumindo a semântica antiga; como
+  `lookback_days` (30) e `days_in_month` (28–31) ficam sempre próximos, o resultado é
+  quase sempre igual ao gasto atual. Fix conceitual (não aplicado): separar
+  `days_elapsed_in_month` (calendário) de `lookback_days` (janela de dados) — decisão do
+  usuário, fora deste PR.
+- **Backend:** `_resolve_date_window` (helper puro, `domains/finops/service.py`) resolve a
+  janela efetiva de `get_budget`/`get_cost_series` — modo legado (`lookback_days`,
+  comportamento inalterado) ou filtro de data explícito (`from`/`to`, `YYYY-MM-DD`, alias
+  do FastAPI, mesmo padrão de `admin/analytics/logins`), clampado no piso do cache (~31
+  dias) e num fim de janela nunca no futuro; troca `from`/`to` invertidos em vez de 422.
+  Todo clamp vira `warning` explícito. `BudgetResponse` ganha `period_end`.
+  `_BUDGET_MAX_LOOKBACK_DAYS`/`_COST_SERIES_MAX_LOOKBACK_DAYS` unificados em
+  `_FINOPS_CACHE_MAX_DAYS`. `finops-budget.md` → v1.9. 13 testes novos,
+  `uv run pytest tests/unit` = 838 ok.
+- **Frontend:** `FinOpsOverviewPage` ganha um filtro de período real — atalhos "Mês
+  atual"/"Tudo" (`ChoiceToggle`) + dois `DateField` ("De"/"Até", já existente no design
+  system — sem instalar shadcn `Calendar` novo). O teto de budget (`refLine` do
+  `ComboChart`, já existia) só desenha quando a janela efetiva tem ≥ 20 dias
+  (`MIN_RANGE_DAYS_FOR_BUDGET_REF_LINE`) — comparar um intervalo curto contra uma meta
+  mensal inteira enganaria. `useBudget`/`useCostSeries`/`finopsApi.getBudget`/
+  `getCostSeries` ganham `from`/`to` opcionais, sem quebrar os call sites existentes
+  (`BudgetPage`, que fica como está — continua com seu próprio `LookbackPicker`).
+- `pnpm lint` + `pnpm build` verdes.
+
+## Refresh visual do Hub — rodada 2 (2026-09)
+
+Segunda rodada, sobre as lacunas que a rodada 1 marcou como "especificado,
+implementação pendente" (`docs/specs/frontend-visual-refresh-plan.md` §5) +
+1 bug. Plano completo em
+`~/.claude/plans/gere-um-plano-altera-es-unified-wilkes.md` (fatiado em
+~13 branches R2-*, empilhadas sobre a ponta da rodada 1). Decisões
+travadas com o usuário: chooser de análise com os 7 módulos ativos em
+tela cheia; cabeçalho de grupo da sidebar = chevron abre lista + label
+abre overview; escopo de backend completo (budget CRUD, score por tabela,
+4º modo de busca, filtro de/até no Admin, `table_type` no lineage); funil
+de retenção em trapézios com rótulo por fora.
+
+### R2-1 — `feat/r2-pageheader-brandbars` (só front-end)
+
+- `.dp6-headline-glow` reworkada: elipse suave `at 78% 25%` no lugar do
+  wash duro `at 100% 0%` (o usuário leu o antigo como "degradê" colado no
+  canto). Continua `background` na box, sem `::before` vazando.
+- `.dp6-brand-bars` nova: motivo de 3 barras diagonais `skewX(-18deg)` (1
+  preenchida + glow) no canto direito, auto-contido (`overflow:hidden` +
+  `mask` + `z-index:-1`). Novo `components/BrandBars.tsx`.
+- `PageHeader` ganhou `showBrandBars?: boolean` (opt-in; `relative
+  isolate` só quando ligado). `design-system.md` §Vida + tabela de
+  componentes + `ui-ux-rules.md` §Identidade atualizados no mesmo PR.
+
+### R2-2 — `feat/r2-panel-component` (só front-end)
+
+- Novo `components/Panel.tsx` — "bloco" da plataforma (protótipo `.panel`):
+  container 10px com `border` + `bg-card` + borda-gradiente `.dp6-panel`
+  (`::after` mascarado). Props `title`/`subtitle`/`actions`/`as`/`filterRow`
+  (filtros DENTRO do painel, não soltos antes da `<Table>`)/`hoverable`/`glass`.
+- `.dp6-panel` nova no `index.css`. `AssetsTable` (tabela de tabelas de um
+  dataset) é o primeiro adotante — vira `<Panel title="Ativos" subtitle=…
+  filterRow=…>`. Roll pras outras ~20 tabelas soltas na R2-3.
+- `design-system.md` (linha do componente + `.dp6-panel` implícito em §Vida).
+
+### R2-3 — `feat/r2-panel-rollout` (só front-end)
+
+- `<Panel>` nas tabelas soltas de Storage (`BucketsPage`, `WastePage`,
+  `BucketBrowserPage`), Freshness (`DatasetFreshnessTable`,
+  `TableFreshnessTable`) e Governança (`OrphansPage`). Filtro vai pro
+  slot `filterRow` (dentro do painel). Sem `index.css`.
+- Admin (`AdminUsageTab`/seções) fica pra R2-5 e FinOps
+  (`FinOpsPage`/`BudgetPage`) pra R2-12 — essas telas são reescritas lá e
+  já nascem em `Panel`. `QualityFolderComparisonPage` não entrou: já é
+  bloco estruturado (chart em box + tabela sob um `<h3>` real).
+
+### R2-4 — `feat/r2-catalog-table-search` (backend + front-end)
+
+Resolve o bug: na overview do Catálogo só dava pra filtrar dataset por
+nome; a busca global de tabela era só um link pra `/search`.
+
+- **Backend (B5):** 4º modo de busca `not_exact` ("diferente a") —
+  `SearchMode.NOT_EXACT`, branch `table_name != @q` em
+  `repository.search_tables` (mesmo fan-out por região), service pula a
+  busca secundária de prefixo pra esse modo. Query só-metadado ($0,
+  mesma forma de `exact`/`contains`). `catalog.md` + testes (74 catalog,
+  785 unit no total).
+- **Front-end:** novo `features/catalog/TableSearchPanel.tsx` autocontido
+  (state + `useSearchTables` + `SearchMatchesTable`/`SearchAbsentTable`),
+  modo via `ChoiceToggle` de 4 opções, dentro de um `<Panel>`.
+  `CatalogOverviewPage` monta o painel (+ mantém o filtro inline de
+  dataset, agora rotulado "Navegar por dataset"). `SearchPage` vira só
+  `PageHeader` + `<TableSearchPanel>`. `types/catalog.ts` SearchMode +1.
+  ASM-CAT-01 resolvida; AC-CAT-OV-06 novo em `catalog.md`.
+
+### R2-5 — `feat/r2-admin-usage-blocks` (backend + front-end)
+
+- Novos `components/ComboChart.tsx` (coluna+linha recharts, eixo Y duplo,
+  extraído do ComposedChart de BudgetPage) e `components/Funnel.tsx`
+  (trapézios `<polygon>` afunilando, rótulo/valor/% por FORA, `role=img`).
+- `LoginAnalyticsSection`: `LineChart` → `ComboChart` + `ChoiceToggle` de
+  troca de métrica (coluna = Acumulado/Período) + toggle Dia/Mês (buckets
+  daily/monthly) + `DateField` De/Até. Vira `<Panel>`.
+- `RetentionFunnelSection`: `BarChart` → `<Funnel>`. Vira `<Panel>`.
+- `AdminUsageTab`: `flex-col gap-8` de `CollapsibleSection` → blocos —
+  combo full-width, funil+heatmap 2-col, tabelas empilhadas.
+- **Backend (B7):** `?from=&to=` no `GET /admin/analytics/logins` — `from`
+  vira o `since`, `to` filtra o topo (fim do dia UTC). Sem eles,
+  `lookback_days` como antes. `admin.md` + teste. pytest 786 ok.
+  ACs AC-ADM-RV-01..04 marcados ✅, ASM-ADM-RV-01 resolvida.
+
+### R2-6 — `feat/r2-nav-overview-screens` (só front-end)
+
+- Carve-out do brief "nível 1 abre overview". Novos `components/OptionCard.tsx`
+  (`OptionCard` + `OptionCardGrid`) + `.dp6-opt-card`/`.dp6-opt-card-featured`.
+- Páginas `GovernanceOverviewPage` (`/governanca`), `QualityOverviewPage`
+  (`/quality`), `QualityTablesPage` (`/quality/tables` — select de dataset
+  → tabela → `/analyze/:d/:t`). Rotas no `router.tsx`.
+- `DatasetSidebar`: `SidebarSection`/`SidebarServiceGroup` ganharam prop
+  `to` — nome vira `NavLink` (Governança→/governanca, FinOps→/finops,
+  Análises de qualidade→/quality, Catálogo de Dados→/, Cloud Storage→/storage),
+  chevron isola o disclosure.
+- `docs/specs/nav-overview-screens.md` novo (AC-NAV-OV-01..03).
+  `design-system.md` + `ui-ux-rules.md` no mesmo PR.
+
+## Refresh visual do Hub — fundação de tokens (2026-09)
+
+Primeira fatia do refresh visual (brief:
+`docs/specs/frontend-visual-refresh.md`; plano fatiado em 13 PRs:
+`docs/specs/frontend-visual-refresh-plan.md`). Decisões de design tomadas
+sobre um protótipo (`~/polaris-hub-mockup/`) levadas ao app real — dev
+primeiro, prod só com aprovação explícita do usuário.
+
+### O que foi feito (PR `feat/fe-refresh-foundation`)
+
+- **Raio "quase quadrado":** `--radius` 8px → **10px** nos dois temas.
+  Escala derivada achatada de propósito — `--radius-xl == --radius-lg ==
+  --radius` — pra card (`rounded-xl`) e botão/input (`rounded-lg`) caírem
+  os dois em 10px. Pill (`--radius-pill`, badge/toggle/avatar) intocado.
+- **Tokens novos** (`index.css`): `--primary-2`/`--color-primary-2`
+  (`#ffca45`, topo de gradiente), `--glow` (rgba tintado, por tema),
+  `--shadow-glow` (classe `shadow-glow`), `--ease-dp6` (`ease-dp6`).
+- **Utilitárias plain-CSS:** `.dp6-hoverable` (glow + contorno fino em
+  `--primary` + `translateY(-2px)` gated em `no-preference`),
+  `.dp6-glass`, `.dp6-headline-glow`, `.dp6-gradient-primary`.
+- **Componentes compartilhados:** `MetricTile` ganhou prop `icon` (chip
+  acima do rótulo) + `.dp6-hoverable` embutido; `PageHeader` ganhou o
+  glow radial contido atrás do `<h1>`; novo `components/ChartTooltip.tsx`
+  (+ `useChartTooltip`) — tooltip flutuante de gráfico via portal.
+- **Harness atualizado no mesmo PR** (regra do próprio harness):
+  `design-system.md` §Raio + §Vida (nova) + §Catálogo; `ui-ux-rules.md`
+  §Identidade visual (relaxada) + §Movimento (teto ≤300ms).
+
+### Decisão de arquitetura
+
+- A regra "flat, sem gradiente/sombra" foi **relaxada, não abolida**: só
+  o que o protótipo usa em `.panel`/`.kpi`/`.btn.primary`. Os efeitos de
+  fundo de tela cheia do protótipo (constelação, aurora, grain,
+  scanlines, sweep, parallax) **não** foram adotados — o princípio
+  "ferramenta densa, rapidez > espetáculo" continua. Registrado como
+  ASM-006/007 no brief.
+- Botão primário com gradiente é **opt-in via `className`
+  (`.dp6-gradient-primary`)**, não override global de `ui/button` — a
+  primitiva shadcn é read-only (regra do design-system).
+- `--radius-xl == --radius-lg` quebra a monotonicidade da escala shadcn
+  de propósito; documentado em `design-system.md` §Raio.
+
+### Perguntas em aberto resolvidas por decisão (reconfirmar no review)
+
+Q-001 (item ativo da sidebar), Q-002 (onde vive o score por tabela do
+FinOps), Q-003 (fonte do mini-gráfico dos cards de dataset) — respondidas
+em `frontend-visual-refresh-plan.md` §1, usuário ausente até o review.
+Checagem de backend: `description` de dataset **é** mudança de backend
+(`DatasetSummary` não tem o campo) — sliced como PR 7.
+
+### Fatias seguintes (uma branch por PR, empilhadas — plano §4/§5)
+
+- **`feat/fe-refresh-rename-catalogo`** (PR 3): "Catálogo" → "Catálogo de
+  Dados" na UI + `docs/site`. Sem mudança de comportamento.
+- **`feat/fe-refresh-sidebar`** (PR 4): item ativo da sidebar no novo
+  tratamento (Q-001 — `.dp6-nav-active`: barra de acento + gradiente, não
+  mais bloco amarelo); hover com dica de glow (`.dp6-nav-item`); ícone
+  `Boxes` nos datasets; ícone do serviço em `--primary`; mais respiro
+  entre grupos (`space-y-4`, `gap-4`). `index.css` +2 utilitárias →
+  `design-system.md` §Vida atualizado no mesmo PR.
+- **`feat/fe-refresh-tables`** (PR 5): hover de linha de tabela no novo
+  tratamento — regra global em `index.css` (`[data-slot=table-body]
+  [data-slot=table-row]:hover` → gradiente amarelo + barra lateral `inset
+  3px`), substitui o `hover:bg-muted` uniforme do `ui/table`. Zero
+  arquivo de feature tocado. `design-system.md` §Vida + `ui-ux-rules.md`
+  §Tabelas no mesmo PR.
+- **`feat/catalogo-de-dados-overview`** (PR 6): rota `/` deixa de ser um
+  `EmptyState` e vira a tela de overview do domínio — `PageHeader` +
+  KPIs (com ícone) + grade de `DatasetOverviewCard` (ícone, contagem,
+  tamanho, região, `SlaDistributionBar`) + busca por dataset + link pra
+  `/search`. Novo `components/SlaDistributionBar.tsx` (barra empilhada
+  compartilhada, consome `FreshnessCounts`, sem query nova — Q-003).
+  `KpiCards` ganhou `icon`. ACs novos em `catalog.md` (overview +
+  `description` como PR 7) e `freshness.md` (componente compartilhado).
+- **`feat/catalog-dataset-description`** (PR 7, **mexe no backend**):
+  `DatasetSummary.description: str | None`. "Query 2 — Resumo de datasets"
+  ganhou `LEFT JOIN INFORMATION_SCHEMA.SCHEMATA_OPTIONS` (`option_name =
+  'description'`) + `SAFE.JSON_VALUE` — uma query por região, metadado
+  ($0), dentro do cache de 5min. Frontend: `DatasetOverviewCard` mostra
+  a descrição real (`line-clamp-2`), fallback pro texto fixo. Sem role
+  IAM nova (mesma permissão de metadado já usada pra SCHEMATA/TABLES).
+  ACs AC-CAT-DESC-01/02 em `catalog.md`. `pytest tests/unit` 783 ok.
+- **`feat/fe-refresh-freshness`** (PR 8): `SlaRow` (totais de projeto e
+  de dataset) ganhou a `SlaDistributionBar` agregada abaixo dos números;
+  `DatasetFreshnessTable` ganhou coluna "Distribuição" por linha. As
+  colunas de contagem por faixa (ordenáveis) continuam — a barra é
+  adicional. Fecha a história de "mesmo componente nos dois lados" com
+  o Catálogo de Dados. Cosmético (sem AC novo).
+- **`feat/fe-refresh-kpi-icons`** (PR 9): ícone no chip de cada KPI
+  (`MetricTile.icon`, mapeamento do brief) — `CatalogDatasetPage`
+  (Região/Tabelas/Views/Tamanho/Linhas/Freshness), `BudgetPage`,
+  `ProfilingDialog`, `LoginAnalyticsSection`, `AccessRequestAnalyticsSection`.
+  As mini-stat rows à mão de `PiiTab`/`FinOpsPage` (readout de dry-run,
+  não usam `MetricTile`) ficaram fora — converter é refactor à parte.
+- **`feat/fe-refresh-primary-cta`** (PR 10): `.dp6-gradient-primary`
+  (gradiente + inset ring + glow) nos CTAs herói dos fluxos
+  config→executar→resultado: `DatasetScopeGate` (cobre OrphansPage etc.),
+  `ProfilingDialog` "Executar profile", `ColumnTypeSuggestionsTab`
+  "Escanear", `FinOpsPage` "Executar". Opt-in via `className` — a
+  primitiva `ui/button` continua intocada.
+- **`docs/fe-refresh-deferred-specs`** (PR 11, docs): ACs de "refresh
+  visual — pendente" nas specs de lineage/quality/finops/storage/admin +
+  `frontend-visual-refresh-plan.md` §5 (estado real).
+- **`fix/catalog-description-safe`** (PR 12): reverte a leitura de
+  `description` da PR 7 — ver "Erros cometidos e aprendizados".
+
+### Erros cometidos e aprendizados
+
+- **PR 7 quebrou `GET /projects/{id}/validate` em `dev` ("Failed to
+  fetch" ao selecionar um projeto).** O `LEFT JOIN` com
+  `region-{region}.INFORMATION_SCHEMA.SCHEMATA_OPTIONS` +
+  `SAFE.JSON_VALUE` era SQL que os testes unitários **não exercitam** (o
+  `bigquery.Client` é mockado — `client.query().result()` devolve rows
+  fixas), então `pytest` passou com a query inválida. Em runtime, o
+  `BadRequest` do BigQuery virou um 500 **não tratado** → como o
+  `ServerErrorMiddleware` do Starlette fica por fora do `CORSMiddleware`,
+  a resposta de erro saiu **sem `Access-Control-Allow-Origin`** → o
+  browser reporta `TypeError: Failed to fetch`, não o 500 real. Reverti
+  a query (`get_datasets_summary` volta ao original, `description: None`
+  fixo). Aprendizados: (1) query BQ nova **exige** teste de integração
+  contra um projeto real antes de subir — mock de client não é
+  suficiente pra validar SQL; (2) `INFORMATION_SCHEMA.SCHEMATA_OPTIONS`
+  region-qualified e `SAFE.JSON_VALUE` precisam ser confirmados num
+  dataset real; (3) sintoma "Failed to fetch" (não o erro real) =
+  provável 500 sem CORS por exceção não tratada — olhar o handler de
+  exceção antes de assumir rede/cold start.
+
+---
+
+## Harness de front-end (`docs/skills/frontend.md` → `docs/frontend/`)
+
+Toda a orientação de front-end vivia num arquivo só, `docs/skills/frontend.md`
+(~305 linhas), acumulando quatro responsabilidades: design system,
+catálogo de componentes, regras de UI/UX + acessibilidade, e mockups
+ASCII de tela.
+
+### Problema
+
+- **Desatualização**: os mockups ASCII (Topbar, Sidebar, modal de
+  profiling) e os snippets CSS (`.btn-primary`, `.card`) predatam a
+  implementação shadcn e divergiram; o doc citava a escala tipográfica
+  antiga (`--text-xs`) já substituída pela semântica.
+- **Cobertura incompleta**: 7 componentes compartilhados
+  (`CacheStalenessBadge`, `CollapsibleSection`, `DatasetScopeGate`,
+  `PaginationBar`, `RefreshButton`, `SqlPreview`, `ThemeToggle`) fora do
+  catálogo.
+- **Sem camada de patterns nem de behaviors**: composições recorrentes
+  (tabela filtrável, fluxo de análise, gate de escopo) e padrões de
+  loading/erro/vazio não documentados.
+- **Racional de design difuso**: as decisões da auditoria de
+  acessibilidade viviam só neste CHANGELOG e na memória.
+- **CLAUDE.md**: front-end referenciado em duas seções com sobreposição;
+  árvore de pastas sem listar `docs/skills/`, `docs/specs/`,
+  `docs/design-references/`.
+
+### O que foi feito
+
+- **`docs/frontend/`** — harness com 8 arquivos, um por responsabilidade:
+  `README.md` (índice + roteiro "tarefa → o que ler"), `design-system.md`
+  (espelho de `apps/frontend/src/index.css` + catálogo completo dos ~18
+  componentes de `src/components/` + regra dos primitivos shadcn),
+  `ui-ux-rules.md` (regras normativas + porquê), `accessibility.md`
+  (WCAG 2.1 AA acionável + como verificar), `patterns.md` (8 composições
+  recorrentes com arquivo canônico), `behaviors.md` (data fetching,
+  estados, feedback, formatação, tema, localStorage), `references.md`
+  (telas canônicas internas + `docs/design-references/`), `CHECKLIST.md`
+  (entrega, fonte única).
+- **`docs/skills/frontend.md`** virou tombstone com tabela de "seção →
+  para onde foi". Removido após uma release.
+- **CLAUDE.md**: árvore de pastas atualizada; "Convenções — Frontend"
+  ganhou ponteiro pro harness + ressalva de que Vitest/RTL é planejado
+  (não há setup nem `vitest` no `package.json`); "Contexto: Frontend"
+  troca "ler a skill" por "ler `docs/frontend/README.md`", checklist vira
+  ponteiro pra `docs/frontend/CHECKLIST.md`.
+- Comentários de código com o caminho antigo atualizados
+  (`apps/frontend/src/index.css` ×4, `hooks/useTheme.ts`,
+  `features/quality/QualityFolderComparisonPage.tsx`).
+- `docs/design-references/README.md` ganhou back-link pro harness.
+
+### Decisão de arquitetura
+
+O **código é a fonte de verdade dos valores** (tokens em `index.css`,
+componentes em `src/components/`); o harness é a fonte de verdade das
+**decisões e do porquê**. `design-system.md` e `index.css` mudam **no
+mesmo PR** — a regra de sincronização está no topo do arquivo. Os três
+eixos (design system, regras, referências) ficam em arquivos separados
+porque têm dono e taxa de mudança diferentes. Nada de token/componente
+real foi alterado — o harness documenta o estado atual.
+
+---
+
 ## Listas de projeto seguem só o registro do ADM (`hub_projects`)
 
 Bug reportado pelo usuário: `bigquery-public-data` aparecia na tela
@@ -2735,3 +3188,185 @@ implementação**
 | — | Admin ACL v1.0–v1.3 (controle de acesso usuário×projeto, projetos públicos, solicitação de acesso, painel "Uso do Hub") | ✅ Concluída |
 | — | Documentação para cliente (2 playbooks operacionais + 2 manuais voltados a cliente final) | ✅ Concluída |
 | Fase 5 | Storage (Cloud Storage): catálogo, scanner de desperdício (config + uso real), extensão do lineage | ✅ Concluída — validada em dev, mergeada em `main` e deployada em prod (PR #25) |
+
+
+### R2-7 — `feat/r2-analysis-routes` (só front-end)
+
+- **`ProfilingDialog.tsx` deletado.** O fluxo de análise virou a subárvore
+  `/analyze/:datasetId/:tableId/*`: `AnalysisLayout` (provê contexto +
+  `<Outlet/>`), `AnalysisChooserPage` (7 cards `OptionCard`, todos ativos),
+  e 6 páginas de módulo liftando cada corpo de aba (`SchemaTable`,
+  `PiiTab`, `ColumnTypeSuggestionsTab`, `HistoryTab`, `AccessTab`; Lineage
+  → `/lineage/:d/:t` da R2-8).
+- `QualityAnalysisPanel` extraído da antiga aba "Análise de qualidade" +
+  novos `components/HBarList.tsx` (cardinalidade em barra horizontal +
+  `ChartTooltip` — 1º consumidor real dele) e `components/CompositeScoreRing.tsx`
+  (anel de score, SVG à mão). `QualityAnalysisPage` monta os dois +
+  `ColumnResultsTable`.
+- `AssetsTable` "Analisar" → `navigate('/analyze/:d/:t', { state:{ from } })`.
+- `docs/specs/quality.md` novo (AC-QUAL-RV-01..04). `profiling.md` §pendente
+  marcada feita. `design-system.md` (HBarList, CompositeScoreRing).
+
+### R2-8 — `feat/r2-lineage-fullscreen` (backend + front-end)
+
+- `LineagePage` (`/lineage/:datasetId/:tableId`) — lifta o grafo pra tela
+  cheia. `LineageTab.tsx` deletado (órfão pós-R2-7).
+- `LineageGraph`: arestas `animated` (@xyflow) recoloridas amarelo + glow
+  via `.dp6-lineage` no index.css; `onEdgeMouseEnter` destaca a aresta +
+  os 2 nós ligados, atenua o resto; `nodesep`/`ranksep` maiores, altura 540.
+- 3 `<Panel>`: Impacto de mudança de schema (tabelas a jusante + views que
+  quebrariam), Fontes, Consumidores. Indicador cache + "profundidade
+  limitada a N hops".
+- **Backend (B6):** `LineageNode.table_type` — best-effort de
+  `INFORMATION_SCHEMA.TABLES` (só-metadado, $0) só pros nós do projeto
+  raiz, engolindo exceção. **"Jobs agendados" fica "—"** (exige integrar
+  Scheduled Queries / Data Transfer — fora desta rodada). pytest 786 ok.
+- `lineage.md` §pendente marcada feita. design-system.md.
+
+### R2-9 — `feat/r2-finops-budget-crud` (backend)
+
+- **Novo domínio `domains/budget`** (Firestore, espelha `domains/favorites`):
+  meta de custo mensal **por usuário**, coleção `users/{email}/budgets/{doc_id}`.
+  `doc_id` determinístico por escopo — `project` = `{project_id}`, `dataset`
+  = `{project_id}__{dataset_id}`, `table` = `+__{table_id}`. `created_at` /
+  `created_by` preservados em upsert repetido (reeditar valor não reordena
+  nem reatribui autoria).
+- **API (em `api/v1/finops.py`, mesmo prefixo + `require_project_access`):**
+  `GET /finops/{p}/budgets` (lista do usuário, filtro por projeto in-memory),
+  `PUT /finops/{p}/budgets` (upsert; validação escopo×campos no
+  `BudgetUpsertRequest` — 422 se `dataset` sem `dataset_id`, `table` sem
+  `table_id`, `amount_usd <= 0`), `DELETE /finops/{p}/budgets?scope=&dataset_id=&table_id=`
+  (204, idempotente). Os três somam `Depends(get_current_user)` ao
+  dependency de router.
+- **B2:** `BudgetResponse.budget_target_usd` — `GET /finops/{p}/budget`
+  agora lê o budget de `scope=project` do usuário logado (`get_budget`
+  ganhou `user_email`; endpoint passa `user.email`). `null` quando não
+  cadastrado → o `ComboChart` do FinOps não desenha a linha de referência.
+- **Sem BigQuery** (B1/B2 são 100% Firestore — nenhum dry-run a reportar).
+- Testes: `tests/unit/budget/{test_repository,test_service}.py` novos +
+  2 casos de `budget_target_usd` em `tests/unit/finops/test_service.py`.
+  `uv run pytest tests/unit` = 803 ok, `ruff check` limpo.
+- `docs/specs/finops-budget.md` → v1.5 (CRUD documentado, AC-FIN-RV-04
+  marcado implementado, ASM-FIN-RV-02 confirmada: store por usuário).
+- **Incidente de deploy (não-código):** o push do R2-9 falhou 3× no CI
+  antes de passar — 1ª por `502 Bad Gateway` no `docker push` pro
+  Artifact Registry, 2ª/3ª por startup probe do Cloud Run na mesma janela
+  de degradação do GCP (`us-central1`, ~15:22–15:30 UTC). Código
+  verificado local (pytest 803 + `uvicorn observability_hub.main:app`
+  sobe limpo com o entrypoint exato do container); 4ª tentativa (mesmo
+  digest, zero mudança) passou. `backend-dev` nunca ficou fora do ar — o
+  Cloud Run só troca tráfego pra revisão `Ready`.
+
+### R2-10 — `feat/r2-finops-cost-series` (backend)
+
+- **`GET /finops/{project_id}/cost-series`** (`domains/finops`, AC-FIN-RV-02):
+  série temporal contígua de custo **query + storage** por dia/mês pro
+  gráfico combo da visão geral. Params: `granularity` (day/month),
+  `cost_type` (all/query/storage), `lookback_days` (1–31, clampado),
+  `datasets`, `tables`.
+- **Custo de query:** do mesmo cache de audit log de `get_budget`
+  (`get_scan_events_cached`, 31 dias) — **nenhum scan novo**. Cada evento
+  conta uma vez por período (sem fan-out — evita inflar o total); com
+  filtro, o evento entra se qualquer tabela real casar.
+- **Custo de storage:** `SUM(COALESCE(total_logical_usage_bytes,
+  total_physical_usage_bytes,0))` por `usage_date` de
+  `INFORMATION_SCHEMA.TABLE_STORAGE_USAGE_TIMELINE_BY_PROJECT` (fan-out
+  por região, agregado no SQL). Custo do dia = `GB × tarifa active /
+  dias_do_mês`. `repository.get_storage_cost_timeline` → `None` se
+  **nenhuma** região respondeu → `storage_available=false` +
+  `query_cost_usd` intacto + `warning`; **nunca 500** (lição do incidente
+  da rodada 1). Região que falha sozinha é ignorada.
+- **Dry-run:** a query toca só `INFORMATION_SCHEMA.*` (view de metadado,
+  BQ não cobra — mesma base $0 de `list_all_table_refs` /
+  `get_date_like_columns`). **Sem credencial de GCP no ambiente local pra
+  rodar `dry_run` antes** — confirmar em dev pós-deploy (ASM-002 da
+  spec); a degradação `storage_available=false` protege se a view cobrar.
+- Testes: `tests/unit/finops/test_service.py` (+8, `get_cost_series`),
+  `test_repository.py` (+5, `get_storage_cost_timeline`). `uv run pytest
+  tests/unit` = 815 ok, `ruff check`/`format` limpos.
+- `docs/specs/finops-budget.md` → v1.6.
+- **Deploy:** mesma flakiness de startup probe do R2-9 — 4 falhas de
+  `Creating Revision...failed` antes de passar no 5º rerun (mesmo digest).
+  Código verificado local: `uvicorn observability_hub.main:app` sobe e
+  `GET /health` responde **200 em 0.33s**, `/openapi.json` 200. Não é o
+  código — é cold-start do Cloud Run perdendo a janela de 40s do probe
+  (`failure_threshold=8×5s`, já aumentado uma vez no módulo). Fix de
+  verdade = subir o threshold no Terraform (branch de infra à parte).
+
+### R2-11 — `feat/r2-finops-table-score` (backend)
+
+- **`GET /finops/{project_id}/table-scores`** (`domains/finops`,
+  AC-FIN-RV-03 / AC-WASTE-RV-01): score de eficiência de custo 0–100 por
+  tabela (maior = melhor) + `project_efficiency_score` (média dos scores
+  ponderada por `size_bytes`). Params `datasets`, `limit` (1–500).
+- **Fórmula PROVISÓRIA** (`_table_efficiency_score`, pura, testada
+  direto) — 3 fatores, pesos somando 1.0, expostos em `factors[]` pro
+  drill-down recalibrar sem quebrar contrato:
+  `partitioning` 0.45 (`1 − economia_particionamento / custo_scan_30d`,
+  reaproveita `scan_partition_candidates`), `utilization` 0.30 (`0` se
+  ≥100 GB nunca consultada em 30d), `scan_efficiency` 0.25
+  (`1/(1+(bytes_30d/size)/10)`). **Sem sinais cross-domain** (drift de
+  schema / órfã ficam de fora — domínios isolados, CLAUDE.md). Fórmula
+  vai pro review (Q-002 na spec).
+- **Nenhuma query BQ nova** — `list_all_table_refs` + `get_tables_metadata`
+  (REST cacheado) + cache de audit log + `scan_partition_candidates`. Sem
+  `dry_run` a reportar.
+- Testes: `tests/unit/finops/test_service.py` (+6: 3
+  `_table_efficiency_score`, 3 `compute_table_scores`). `uv run pytest
+  tests/unit` = 821 ok, `ruff check`/`format` limpos.
+- `docs/specs/finops-budget.md` → v1.7 (fórmula + Q-002 aberta),
+  `finops-waste-scanner.md` AC-WASTE-RV-01.
+
+### R2-12 — `feat/r2-finops-overview` (só front-end, consome R2-9/10/11)
+
+- **`FinOpsOverviewPage` na rota `/finops`** (goal 4); o scanner de 2 abas
+  virou `/finops/scanner` (`router.tsx` + NavLink "Scanner de desperdício"
+  da sidebar; `FinOpsPage` ganhou `back` pra `/finops`).
+- Big numbers: Gasto no mês / Meta mensal / Projeção do mês (alerta se
+  passar da meta) / Tabelas de baixo score (< 50). `ComboChart` (barra por
+  período + linha acumulada + `refLine` de meta) com `ChoiceToggle` de
+  granularidade (dia/mês) e tipo de custo (tudo/query/storage) →
+  `useCostSeries`. Aviso quando `storage_available=false`.
+- `CompositeScoreRing` "Eficiência de custo" (`project_efficiency_score`)
+  + `Panel` "Top ofensores": tabela ordenada pior-primeiro, anel compacto
+  na coluna Score, linha expansível mostrando a decomposição em
+  `factors[]` (nome · % · peso · detalhe).
+- `OptionCardGrid`: Scanner de desperdício, Budget de custo, Configurar
+  budget (→ `BudgetConfigDialog` novo — escopo projeto/dataset/tabela,
+  valor mensal, lista das metas com remover inline; usa
+  `useBudgets`/`useUpsertBudget`/`useRemoveBudget`).
+- `lib/api/finops.ts` + `types/finops.ts` + `features/finops/hooks.ts`:
+  `getCostSeries`, `getTableScores`, `listBudgets`/`upsertBudget`/
+  `removeBudget` + tipos; `BudgetResponse` ganhou `budget_target_usd` e
+  `cache_updated_at`.
+- Sem `index.css` nem componente compartilhado novo (só feature files +
+  2 helpers locais) → sem sync de design-system. `pnpm lint` + `pnpm
+  build` verdes. `vite build` mantém o aviso pré-existente de chunk > 500
+  kB (xyflow/recharts no bundle principal) — R2-7b (lazy) fica como
+  follow-up opcional, não regressão desta branch.
+
+### R2-11.5 — `fix/finops-score-and-storage-timeline` (backend + front-end)
+
+Ajustes de validação visual do usuário na visão geral de FinOps:
+
+- **`scan_efficiency` ignora tabelas < 1 GB** (`_SCORE_SCAN_MIN_SIZE_BYTES`
+  = `_MIN_TABLE_SIZE_BYTES_FOR_PARTITION_CANDIDATE`) — re-scan de tabela
+  pequena custa centavos, não é sinal de desperdício; o fator fica neutro
+  (1.0) com detalhe "Tabela pequena (< 1 GB)".
+- **Tooltip da fórmula do score** na página `/finops` (`ScoreExplainer` no
+  `actions` do painel "Eficiência de custo") — os 3 fatores, pesos, e que
+  o score do projeto é média ponderada por tamanho.
+- **Storage line em dev caía em `storage_available=false`.** O motivo real
+  (agora propagado no `warning` — `get_*` retorna `(valor, motivo)` e o
+  service repassa a 1ª linha do erro do BigQuery) foi
+  `400 Unrecognized name: total_logical_usage_bytes`: o schema de coluna
+  da família `TABLE_STORAGE_USAGE_TIMELINE_*` não bate com a doc.
+  **Trocado pra `INFORMATION_SCHEMA.TABLE_STORAGE`** (snapshot atual,
+  coluna estável `total_logical_bytes`) → linha **plana** no nível de
+  storage de hoje (numa janela ≤ 31d o volume quase não varia). Região em
+  minúscula (`region-us`). `get_storage_cost_timeline` +
+  `StorageTimelineDay` removidos; `get_current_storage_bytes` novo.
+  Permissão não era o problema — sem role nova no onboarding. ASM-002
+  resolvida.
+- `uv run pytest tests/unit` = 823 ok; `pnpm lint`/`build` verdes.
+- `docs/specs/finops-budget.md` (score §, storage §, ASM-002).

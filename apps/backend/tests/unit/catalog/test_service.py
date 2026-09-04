@@ -148,6 +148,7 @@ def test_list_datasets_builds_response(monkeypatch):
             "location": "US",
             "creation_time": "2026-06-03T19:40:00Z",
             "last_modified_time": "2026-06-08T18:38:00Z",
+            "description": "Camada crua",
             "total_tables": 3,
             "total_views": 0,
             "total_size_bytes": 2075443,
@@ -164,6 +165,11 @@ def test_list_datasets_builds_response(monkeypatch):
     assert result.total_datasets == 1
     assert result.regions_found == ["US"]
     assert result.datasets[0].dataset_id == "RAW"
+    # O service repassa `description` do que o repository entregar (contrato
+    # do schema). Hoje o repository sempre devolve None — a leitura real de
+    # SCHEMATA_OPTIONS foi revertida (quebrava /validate). Ver catalog.md
+    # AC-CAT-DESC-*.
+    assert result.datasets[0].description == "Camada crua"
 
 
 def test_list_tables_resolves_region_and_builds_response(monkeypatch):
@@ -495,6 +501,33 @@ def test_search_tables_skips_prefix_search_when_query_has_no_trailing_digits(mon
     result = service.search_tables(client, "observability-hub-dev", "ga4_events", "exact")
 
     assert result.datasets_with_match == []
+    assert result.datasets_without_match == []
+    assert calls == []
+
+
+def test_search_tables_not_exact_skips_prefix_search(monkeypatch):
+    """mode="not_exact" flui pelo caminho de match (como contains/exact),
+    mas nunca roda a busca secundária de prefixo — o resultado já é "todo
+    mundo menos essa", não há ausente a explicar."""
+    client = _fake_client()
+    monkeypatch.setattr(service, "discover_regions", lambda project_id, client: ["US"])
+    monkeypatch.setattr(
+        service.repository,
+        "search_tables",
+        lambda client, project_id, regions, query, mode: [
+            {"dataset_id": "RAW", "table_id": "other", "table_type": "TABLE"}
+        ],
+    )
+    monkeypatch.setattr(service, "get_tables_metadata", lambda client, table_refs: {})
+    calls = []
+    monkeypatch.setattr(
+        service.repository, "search_tables_by_prefix", lambda *a, **k: calls.append(1) or []
+    )
+
+    result = service.search_tables(client, "observability-hub-dev", "events_20260812", "not_exact")
+
+    assert result.mode == "not_exact"
+    assert [d.table_id for d in result.datasets_with_match] == ["other"]
     assert result.datasets_without_match == []
     assert calls == []
 

@@ -476,3 +476,43 @@ apps/backend/src/observability_hub/
 - Detecção de PII ao longo da cadeia (domínio separado, `domains/pii`).
 - Configuração de `LOOKBACK_DAYS` via parâmetro de API (continua fixo em
   30 dias, só `max_hops` é parametrizável nesta versão).
+
+
+---
+
+## Refresh visual - pendente (2026-09) — FEITO (R2-8)
+
+Implementado na rodada 2 (R2-8): `LineagePage` na rota
+`/lineage/:datasetId/:tableId` (antes era só uma aba do `ProfilingDialog`,
+deletado na R2-7). Arestas `animated` do @xyflow recoloridas pra amarelo +
+glow (`.dp6-lineage` no index.css); `onEdgeMouseEnter` destaca a aresta +
+os 2 nós que ela liga e atenua o resto (AC-LIN-RV-02); `nodesep`/`ranksep`
+maiores + altura 540 (AC-LIN-RV-03). 3 `<Panel>`: Impacto de mudança de
+schema (tabelas a jusante = `hop_distance>0`; views que quebrariam via
+**B6** — novo `LineageNode.table_type`, best-effort de
+`INFORMATION_SCHEMA.TABLES`, só nós do projeto raiz; **jobs agendados = "—"**,
+exige integração com Scheduled Queries — fora desta rodada), Fontes
+(`hop_distance === -1`), Consumidores (`=== 1`). Indicador `<CacheStalenessBadge>`
++ "· profundidade limitada a {max_hops} hops" (AC-LIN-RV-06).
+
+### ACs originais
+
+
+Pedidos do brief `frontend-visual-refresh.md` (sec. Lineage) que sao feature de
+dataviz nova (nao polish). Viram branch propria depois do review, com o
+usuario validando em `dev` a cada iteracao. Ver
+`frontend-visual-refresh-plan.md` sec.5.
+
+| ID | Comportamento | Teste |
+|---|---|---|
+| AC-LIN-RV-01 | Arestas do grafo animadas (fluxo tracejado "vivo") em `LineageGraph`; a animacao para num frame sob `prefers-reduced-motion`. | `test_lineage_graph_edges_animated` |
+| AC-LIN-RV-02 | Hover numa **aresta** (nao so num no) destaca a aresta + os dois nos que ela liga e atenua o resto. | `test_lineage_edge_hover_highlights_pair` |
+| AC-LIN-RV-03 | Area do grafo maior (altura >= ~520px) com mais respiro entre nos. | (visual) |
+| AC-LIN-RV-04 | Painel "Impacto a montante" com **contagem**: tabelas afetadas / views que quebrariam / jobs agendados se o schema da tabela-foco mudar. | `test_lineage_upstream_impact_counts` |
+| AC-LIN-RV-05 | Paineis "Fontes" (origens diretas, incl. bucket GCS como no) e "Consumidores" (quem le a tabela-foco). | `test_lineage_sources_and_consumers_panels` |
+| AC-LIN-RV-06 | Indicador textual "cache atualizado ha X . profundidade limitada a Y hops" - reusa `CacheStalenessBadge` + o `max_hops` que o backend ja aplica. | `test_lineage_cache_and_depth_indicator` |
+
+Suposicao **ASM-LIN-RV-01** (aberta): AC-LIN-RV-04 pode exigir o backend
+expor a contagem de "views que quebrariam / jobs agendados" - hoje o
+lineage traz so as relacoes. Confirmar na implementacao se e derivavel do
+grafo em cache ou e campo novo.

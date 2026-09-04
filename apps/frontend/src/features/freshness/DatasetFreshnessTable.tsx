@@ -1,11 +1,20 @@
 import { Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Panel } from '@/components/Panel'
+import { SlaDistributionBar } from '@/components/SlaDistributionBar'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import {
   SLA_FILL_COLOR,
   SLA_LABELS,
@@ -79,56 +88,58 @@ export function DatasetFreshnessTable({ datasets }: { datasets: DatasetFreshness
   }, [datasets, nameFilter, selectedBuckets, minCount, sortKey, sortDir])
 
   return (
-    <>
-      <div className="mb-3 flex flex-col gap-2">
-        <div className="relative min-w-[220px] flex-1">
-          <Search
-            size={14}
-            className="-translate-y-1/2 absolute top-1/2 left-2.5 text-muted-foreground"
-          />
-          <Input
-            value={nameFilter}
-            onChange={(e) => setNameFilter(e.target.value)}
-            placeholder="Filtrar por dataset…"
-            className="pl-8"
-          />
+    <Panel
+      filterRow={
+        <div className="flex flex-col gap-2">
+          <div className="relative min-w-[220px] flex-1">
+            <Search
+              size={14}
+              className="-translate-y-1/2 absolute top-1/2 left-2.5 text-muted-foreground"
+            />
+            <Input
+              value={nameFilter}
+              onChange={(e) => setNameFilter(e.target.value)}
+              placeholder="Filtrar por dataset…"
+              className="pl-8"
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-muted-foreground text-xs">Faixas de SLA (uma ou mais):</span>
+            {SLA_ORDER.map((status) => (
+              <button
+                key={status}
+                type="button"
+                onClick={() => toggleBucket(status)}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                  selectedBuckets.has(status)
+                    ? 'border-primary bg-primary/10 text-foreground'
+                    : 'border-border text-muted-foreground hover:bg-muted',
+                )}
+              >
+                <span className={cn('size-2 rounded-full', SLA_FILL_COLOR[status])} />
+                {SLA_SHORT_LABELS[status]}
+              </button>
+            ))}
+            {selectedBuckets.size > 0 && (
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="freshness-min-count" className="text-muted-foreground text-xs">
+                  Mínimo de tabelas nessa condição
+                </Label>
+                <Input
+                  id="freshness-min-count"
+                  type="number"
+                  min={1}
+                  className="h-7 w-16 text-xs"
+                  value={minCount}
+                  onChange={(e) => setMinCount(Number(e.target.value))}
+                />
+              </div>
+            )}
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-muted-foreground text-xs">Faixas de SLA (uma ou mais):</span>
-          {SLA_ORDER.map((status) => (
-            <button
-              key={status}
-              type="button"
-              onClick={() => toggleBucket(status)}
-              className={cn(
-                'flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-                selectedBuckets.has(status)
-                  ? 'border-primary bg-primary/10 text-foreground'
-                  : 'border-border text-muted-foreground hover:bg-muted',
-              )}
-            >
-              <span className={cn('size-2 rounded-full', SLA_FILL_COLOR[status])} />
-              {SLA_SHORT_LABELS[status]}
-            </button>
-          ))}
-          {selectedBuckets.size > 0 && (
-            <div className="flex items-center gap-1.5">
-              <Label htmlFor="freshness-min-count" className="text-muted-foreground text-xs">
-                Mínimo de tabelas nessa condição
-              </Label>
-              <Input
-                id="freshness-min-count"
-                type="number"
-                min={1}
-                className="h-7 w-16 text-xs"
-                value={minCount}
-                onChange={(e) => setMinCount(Number(e.target.value))}
-              />
-            </div>
-          )}
-        </div>
-      </div>
-
+      }
+    >
       <Table>
         <TableHeader>
           <TableRow>
@@ -151,6 +162,7 @@ export function DatasetFreshnessTable({ datasets }: { datasets: DatasetFreshness
               onClick={() => toggleSort('total_tables')}
               align="right"
             />
+            <TableHead>Distribuição</TableHead>
             {SLA_ORDER.map((status) => (
               <SortableTableHead
                 key={status}
@@ -179,6 +191,9 @@ export function DatasetFreshnessTable({ datasets }: { datasets: DatasetFreshness
               </TableCell>
               <TableCell>{dataset.location}</TableCell>
               <TableCell className="text-right">{dataset.total_tables}</TableCell>
+              <TableCell className="min-w-[90px]">
+                <SlaDistributionBar counts={dataset} height="h-8" />
+              </TableCell>
               {SLA_ORDER.map((status) => {
                 const value = dataset[status]
                 return (
@@ -205,7 +220,7 @@ export function DatasetFreshnessTable({ datasets }: { datasets: DatasetFreshness
           {visibleDatasets.length === 0 && (
             <TableRow>
               <TableCell
-                colSpan={4 + SLA_ORDER.length}
+                colSpan={5 + SLA_ORDER.length}
                 className="text-center text-muted-foreground"
               >
                 Nenhum dataset encontrado com esse filtro.
@@ -214,6 +229,6 @@ export function DatasetFreshnessTable({ datasets }: { datasets: DatasetFreshness
           )}
         </TableBody>
       </Table>
-    </>
+    </Panel>
   )
 }

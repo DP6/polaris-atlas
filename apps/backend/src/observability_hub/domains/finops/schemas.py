@@ -29,6 +29,39 @@ class PartitionCandidatesResponse(BaseModel):
     warning: str | None = None
 
 
+class TableScoreFactor(BaseModel):
+    # name é uma chave estável (o frontend rotula/traduz); detail é texto
+    # pronto pra exibir no drill-down.
+    name: str
+    value: float  # 0..1 — contribuição normalizada deste fator
+    weight: float  # peso na média ponderada (soma dos pesos = 1.0)
+    detail: str
+
+
+class TableScore(BaseModel):
+    dataset_id: str
+    table_id: str
+    # 0..100, maior = mais eficiente em custo (menos desperdício). Mesma
+    # escala do anel "Eficiência de custo" do projeto.
+    score: int
+    size_bytes: int
+    observed_cost_usd_30d: float
+    is_partitioned: bool
+    factors: list[TableScoreFactor]
+
+
+class TableScoresResponse(BaseModel):
+    project_id: str
+    lookback_days: int
+    # Média dos scores por tabela ponderada por size_bytes (tabelas
+    # grandes dominam o custo). Fallback pra média simples se todas as
+    # tabelas tiverem tamanho 0/desconhecido.
+    project_efficiency_score: int
+    tables: list[TableScore]
+    cache_updated_at: datetime | None = None
+    warning: str | None = None
+
+
 class BudgetGroupBy(str, Enum):
     TABLE = "table"
     DATASET = "dataset"
@@ -66,12 +99,53 @@ class CostProjection(BaseModel):
 class BudgetResponse(BaseModel):
     project_id: str
     period_start: datetime
+    period_end: datetime
     lookback_days: int
     group_by: BudgetGroupBy
     groups: list[CostGroup]
     total_cost_usd: float
     top_queries: list[CostlyQuery]
     projection: CostProjection
+    # Meta de custo mensal do usuário logado pra este projeto (escopo=project),
+    # lida do Firestore (domains/budget). None = nenhum budget cadastrado —
+    # o gráfico do FinOps simplesmente não desenha a linha de referência.
+    budget_target_usd: float | None = None
+    cache_updated_at: datetime | None = None
+    warning: str | None = None
+
+
+class CostSeriesGranularity(str, Enum):
+    DAY = "day"
+    MONTH = "month"
+
+
+class CostType(str, Enum):
+    ALL = "all"
+    QUERY = "query"
+    STORAGE = "storage"
+
+
+class CostSeriesPoint(BaseModel):
+    # "2026-08-14" (day) ou "2026-08" (month) — ISO, ordenável como string.
+    period: str
+    query_cost_usd: float
+    storage_cost_usd: float
+    total_cost_usd: float
+
+
+class CostSeriesResponse(BaseModel):
+    project_id: str
+    granularity: CostSeriesGranularity
+    cost_type: CostType
+    # Janela efetiva coberta pelos pontos (derivada do cache de audit log
+    # de 31 dias + do que a timeline de storage devolveu).
+    period_start: datetime
+    period_end: datetime
+    points: list[CostSeriesPoint]
+    # False quando a INFORMATION_SCHEMA.TABLE_STORAGE_USAGE_TIMELINE_BY_PROJECT
+    # não pôde ser lida (erro de permissão/schema/região) — os pontos ainda
+    # trazem query_cost_usd, storage_cost_usd fica 0. Nunca vira 500.
+    storage_available: bool
     cache_updated_at: datetime | None = None
     warning: str | None = None
 

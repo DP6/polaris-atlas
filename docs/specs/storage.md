@@ -462,3 +462,20 @@ o mock existir).
    ("Cloud Storage"), separado de "BigQuery" — confirmar rótulo exato.
 3. Threshold default do waste scanner (60 dias sugerido acima) — validar
    com o usuário se faz sentido pro perfil de uso real do cliente.
+
+
+---
+
+## Refresh visual - pendente (2026-09)
+
+Ver brief `frontend-visual-refresh.md` (sec. "Buckets (Storage)") e
+`frontend-visual-refresh-plan.md` sec.5.
+
+| ID | Comportamento | Teste |
+|---|---|---|
+| AC-STG-RV-01 | Cards de resumo de bucket com **mini-sparkline** + tag de lifecycle + storage class + tamanho + n. de objetos + regiao. | `test_bucket_summary_cards` |
+| AC-STG-RV-02 | Scanner de desperdicio = tabela **agrupada por recomendacao**, com mini-grafico por linha. | `test_storage_waste_grouped` |
+
+Suposicao **ASM-STG-RV-01** (aberta): fonte do mini-sparkline do card
+(crescimento de tamanho? de objetos? janela?) - definir na implementacao;
+confirmar se vem sem custo do que o dominio ja coleta.

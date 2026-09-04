@@ -233,6 +233,43 @@ def list_all_table_refs(
     return [ref for region_refs in results for ref in region_refs]
 
 
+_RAW_TABLE_TYPE_TO_API = {
+    "BASE TABLE": "TABLE",
+    "VIEW": "VIEW",
+    "EXTERNAL": "EXTERNAL",
+    "MATERIALIZED VIEW": "MATERIALIZED_VIEW",
+}
+
+
+def get_table_types(
+    client: bigquery.Client, project_id: str, regions: list[str], max_workers: int = 8
+) -> dict[tuple[str, str], str]:
+    """(dataset_id, table_id) -> "TABLE"/"VIEW"/"MATERIALIZED_VIEW"/"EXTERNAL"
+    via INFORMATION_SCHEMA.TABLES (só-metadado, $0), uma query por região.
+    Best-effort: usado pra enriquecer os nós de lineage do projeto raiz com
+    o tipo (contar "views que quebrariam"). O chamador engole exceções."""
+    if not regions:
+        return {}
+
+    def _list_region(region: str) -> list[tuple[tuple[str, str], str]]:
+        sql = f"""
+            SELECT table_schema AS dataset_id, table_name AS table_id, table_type
+            FROM `{project_id}.region-{region}.INFORMATION_SCHEMA.TABLES`
+        """
+        rows = client.query(sql).result()
+        return [
+            (
+                (row.dataset_id, row.table_id),
+                _RAW_TABLE_TYPE_TO_API.get(row.table_type, row.table_type),
+            )
+            for row in rows
+        ]
+
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        results = list(pool.map(_list_region, regions))
+    return {key: value for region_rows in results for key, value in region_rows}
+
+
 # --- Cache de audit log (job periódico + fallback do request path) ---------
 
 

@@ -11,6 +11,8 @@ from observability_hub.domains.finops.repository import ScanEvent
 from observability_hub.domains.finops.schemas import (
     BudgetGroupBy,
     ColumnTypeScanRequest,
+    CostSeriesGranularity,
+    CostType,
     SuggestedColumnType,
 )
 
@@ -374,8 +376,8 @@ def test_get_budget_degrades_to_warning_when_cache_not_ready(monkeypatch):
     assert "ainda não foi gerado" in result.warning
 
 
-def _last_day_of_previous_month():
-    return _now().replace(day=1) - timedelta(days=1)
+def _days_ago(n: int):
+    return _now() - timedelta(days=n)
 
 
 def test_get_budget_groups_by_table(monkeypatch):
@@ -552,15 +554,36 @@ def test_get_budget_ignores_zero_cost_events(monkeypatch):
     assert result.top_queries == []
 
 
-def test_get_budget_ignores_events_before_month_start(monkeypatch):
-    events = [
-        _event([("proj", "RAW", "a")], _last_day_of_previous_month(), total_billed_bytes=10**12)
-    ]
+def test_get_budget_ignores_events_before_the_window(monkeypatch):
+    # 40 dias atrás está fora da janela default de 30.
+    events = [_event([("proj", "RAW", "a")], _days_ago(40), total_billed_bytes=10**12)]
     _stub_budget_events(monkeypatch, events)
 
     result = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj")
 
     assert result.groups == []
+
+
+def test_get_budget_lookback_days_narrows_the_window(monkeypatch):
+    # Evento de 10 dias atrás entra na janela de 30 mas não na de 7.
+    events = [_event([("proj", "RAW", "a")], _days_ago(10), total_billed_bytes=10**12)]
+    _stub_budget_events(monkeypatch, events)
+
+    wide = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj", lookback_days=30)
+    narrow = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj", lookback_days=7)
+
+    assert wide.groups != []
+    assert wide.lookback_days == 30
+    assert narrow.groups == []
+    assert narrow.lookback_days == 7
+
+
+def test_get_budget_clamps_lookback_days_to_31(monkeypatch):
+    _stub_budget_events(monkeypatch, [])
+
+    result = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj", lookback_days=999)
+
+    assert result.lookback_days == 31
 
 
 def test_get_budget_ignores_events_from_other_projects(monkeypatch):
@@ -619,6 +642,438 @@ def test_get_budget_sets_warning_when_no_events(monkeypatch):
 
     assert result.warning is not None
     assert "proj" in result.warning
+
+
+def test_get_budget_without_user_email_leaves_budget_target_none(monkeypatch):
+    _stub_budget_events(monkeypatch, [_event([("proj", "RAW", "a")], _now(), total_billed_bytes=1)])
+
+    result = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj")
+
+    assert result.budget_target_usd is None
+
+
+def test_get_budget_injects_user_budget_target_from_firestore(monkeypatch):
+    _stub_budget_events(monkeypatch, [_event([("proj", "RAW", "a")], _now(), total_billed_bytes=1)])
+    monkeypatch.setattr(
+        service.budget_repository,
+        "get_project_budget_amount",
+        lambda client, email, project_id: 250.0,
+    )
+
+    result = service.get_budget(
+        MagicMock(), MagicMock(), MagicMock(), "proj", user_email="a@dp6.com.br"
+    )
+
+    assert result.budget_target_usd == 250.0
+
+
+# --- _resolve_date_window (filtro de data real, rodada 3, AC-FIN-RV-02) ------
+
+
+def test_resolve_date_window_legacy_mode_uses_lookback_days():
+    now = _now()
+
+    start, end, lookback_days, warning = service._resolve_date_window(now, 7, None, None)
+
+    assert end == now.date()
+    assert start == now.date() - timedelta(days=6)
+    assert lookback_days == 7
+    assert warning is None
+
+
+def test_resolve_date_window_legacy_mode_clamps_to_cache_ceiling():
+    now = _now()
+
+    _start, _end, lookback_days, warning = service._resolve_date_window(now, 999, None, None)
+
+    assert lookback_days == 31
+    assert warning is None  # clamp do modo legado é comportamento pré-existente, sem aviso
+
+
+def test_resolve_date_window_explicit_range_is_used_as_is():
+    now = _now()
+    from_date = (now - timedelta(days=5)).date()
+    to_date = (now - timedelta(days=1)).date()
+
+    start, end, lookback_days, warning = service._resolve_date_window(now, 30, from_date, to_date)
+
+    assert start == from_date
+    assert end == to_date
+    assert lookback_days == 5
+    assert warning is None
+
+
+def test_resolve_date_window_clamps_future_end_date_and_warns():
+    now = _now()
+    future = (now + timedelta(days=3)).date()
+
+    _start, end, _lookback_days, warning = service._resolve_date_window(now, 30, None, future)
+
+    assert end == now.date()
+    assert warning is not None
+    assert "futuro" in warning
+
+
+def test_resolve_date_window_clamps_start_date_older_than_cache_floor_and_warns():
+    now = _now()
+    too_old = (now - timedelta(days=60)).date()
+
+    start, _end, _lookback_days, warning = service._resolve_date_window(now, 30, too_old, None)
+
+    assert start == now.date() - timedelta(days=30)  # piso do cache: 31 dias, hoje incluso
+    assert warning is not None
+    assert "cache de audit log" in warning
+
+
+def test_resolve_date_window_swaps_inverted_range_defensively():
+    now = _now()
+    later = now.date()
+    earlier = (now - timedelta(days=5)).date()
+
+    # from_date depois de to_date -> troca defensivamente, nunca 422.
+    start, end, _lookback_days, _warning = service._resolve_date_window(now, 30, later, earlier)
+
+    assert start == earlier
+    assert end == later
+
+
+# --- get_budget com from_date/to_date (rodada 3, AC-FIN-RV-02) ---------------
+
+
+def test_get_budget_with_explicit_from_to_narrows_the_window(monkeypatch):
+    # Evento de 10 dias atrás fica fora de um intervalo de 5 dias.
+    events = [_event([("proj", "RAW", "a")], _days_ago(10), total_billed_bytes=10**12)]
+    _stub_budget_events(monkeypatch, events)
+
+    from_date = _days_ago(5).date()
+    to_date = _now().date()
+    result = service.get_budget(
+        MagicMock(), MagicMock(), MagicMock(), "proj", from_date=from_date, to_date=to_date
+    )
+
+    assert result.groups == []
+    assert result.period_start.date() == from_date
+    assert result.period_end.date() == to_date
+
+
+def test_get_budget_explicit_from_to_includes_event_inside_range(monkeypatch):
+    events = [_event([("proj", "RAW", "a")], _days_ago(3), total_billed_bytes=10**12)]
+    _stub_budget_events(monkeypatch, events)
+
+    result = service.get_budget(
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        "proj",
+        from_date=_days_ago(5).date(),
+        to_date=_now().date(),
+    )
+
+    assert result.groups != []
+
+
+def test_get_budget_clamps_start_date_older_than_cache_and_surfaces_warning(monkeypatch):
+    _stub_budget_events(monkeypatch, [])
+
+    result = service.get_budget(
+        MagicMock(), MagicMock(), MagicMock(), "proj", from_date=_days_ago(90).date()
+    )
+
+    assert result.warning is not None
+    assert "cache de audit log" in result.warning
+
+
+def test_get_budget_clamps_future_to_date_and_surfaces_warning(monkeypatch):
+    _stub_budget_events(monkeypatch, [])
+
+    result = service.get_budget(
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        "proj",
+        to_date=(_now() + timedelta(days=10)).date(),
+    )
+
+    assert result.warning is not None
+    assert "futuro" in result.warning
+
+
+# --- get_cost_series ---------------------------------------------------------
+
+
+def _stub_cost_series(monkeypatch, events, current_bytes):
+    """events -> cache de audit log; current_bytes -> total de storage AGORA
+    (int) ou None => indisponível (o stub devolve um motivo do BigQuery)."""
+    monkeypatch.setattr(
+        service.repository, "get_scan_events_cached", lambda *a, **kw: (events, None)
+    )
+    monkeypatch.setattr(service, "discover_regions", lambda project_id, client: ["US"])
+    result = (current_bytes, None) if current_bytes is not None else (None, "400 Unrecognized name")
+    monkeypatch.setattr(service.repository, "get_current_storage_bytes", lambda *a, **kw: result)
+
+
+def _cost_series(monkeypatch, events=None, current_bytes=0, **kwargs):
+    _stub_cost_series(monkeypatch, events or [], current_bytes)
+    return service.get_cost_series(
+        MagicMock(), MagicMock(), MagicMock(), MagicMock(), "proj", **kwargs
+    )
+
+
+def test_get_cost_series_buckets_query_cost_on_the_event_day(monkeypatch):
+    today = _now()
+    result = _cost_series(
+        monkeypatch,
+        events=[_event([("proj", "RAW", "a")], today, total_billed_bytes=10**12)],
+        current_bytes=0,
+    )
+
+    day_key = today.date().isoformat()
+    by_key = {p.period: p for p in result.points}
+    assert by_key[day_key].query_cost_usd > 0
+    assert by_key[day_key].total_cost_usd == by_key[day_key].query_cost_usd
+
+
+def test_get_cost_series_contiguous_daily_periods_no_gaps(monkeypatch):
+    result = _cost_series(monkeypatch, events=[], current_bytes=0, lookback_days=10)
+
+    assert len(result.points) == 10
+    days = [p.period for p in result.points]
+    assert days == sorted(days)
+
+
+def test_get_cost_series_storage_unavailable_sets_flag_and_surfaces_reason(monkeypatch):
+    result = _cost_series(monkeypatch, events=[], current_bytes=None)
+
+    assert result.storage_available is False
+    assert result.warning is not None
+    assert "storage" in result.warning.lower()
+    # o motivo real do BigQuery entra no warning (403/404/400…), não fica
+    # só a hipótese genérica
+    assert "400 Unrecognized name" in result.warning
+
+
+def test_get_cost_series_flat_storage_line_from_current_bytes(monkeypatch):
+    result = _cost_series(monkeypatch, events=[], current_bytes=5 * 1024**4, lookback_days=10)
+
+    assert result.storage_available is True
+    storage_values = [p.storage_cost_usd for p in result.points]
+    assert all(v > 0 for v in storage_values)
+    # linha ~plana: mesmo nível de storage todo dia; a única variação é o
+    # divisor "dias do mês" quando a janela cruza a virada de mês.
+    assert max(storage_values) / min(storage_values) < 1.1
+
+
+def test_get_cost_series_cost_type_query_skips_storage(monkeypatch):
+    calls = {"storage": 0, "regions": 0}
+
+    def _count_storage(*a, **kw):
+        calls["storage"] += 1
+        return 0, None
+
+    def _count_regions(*a, **kw):
+        calls["regions"] += 1
+        return ["US"]
+
+    monkeypatch.setattr(service.repository, "get_scan_events_cached", lambda *a, **kw: ([], None))
+    monkeypatch.setattr(service, "discover_regions", _count_regions)
+    monkeypatch.setattr(service.repository, "get_current_storage_bytes", _count_storage)
+
+    result = service.get_cost_series(
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        "proj",
+        cost_type=CostType.QUERY,
+    )
+
+    assert calls == {"storage": 0, "regions": 0}
+    assert result.storage_available is False
+
+
+def test_get_cost_series_month_granularity_uses_year_month_keys(monkeypatch):
+    result = _cost_series(
+        monkeypatch,
+        events=[],
+        current_bytes=0,
+        granularity=CostSeriesGranularity.MONTH,
+        lookback_days=31,
+    )
+
+    assert all(len(p.period) == 7 and p.period[4] == "-" for p in result.points)
+
+
+def test_get_cost_series_dataset_filter_excludes_nonmatching_query_events(monkeypatch):
+    today = _now()
+    result = _cost_series(
+        monkeypatch,
+        events=[_event([("proj", "OTHER", "x")], today, total_billed_bytes=10**12)],
+        current_bytes=0,
+        datasets=["RAW"],
+    )
+
+    assert all(p.query_cost_usd == 0 for p in result.points)
+
+
+def test_get_cost_series_with_explicit_from_to_returns_that_range(monkeypatch):
+    from_date = _days_ago(4).date()
+    to_date = _days_ago(1).date()
+
+    result = _cost_series(
+        monkeypatch, events=[], current_bytes=0, from_date=from_date, to_date=to_date
+    )
+
+    assert result.period_start.date() == from_date
+    assert result.period_end.date() == to_date
+    assert len(result.points) == 4
+
+
+def test_get_cost_series_period_end_reflects_explicit_to_date_not_now(monkeypatch):
+    to_date = _days_ago(5).date()
+
+    result = _cost_series(monkeypatch, events=[], current_bytes=0, to_date=to_date)
+
+    assert result.period_end.date() == to_date
+    assert result.period_end.date() != _now().date()
+
+
+def test_get_cost_series_clamps_start_date_older_than_cache_and_warns(monkeypatch):
+    result = _cost_series(monkeypatch, events=[], current_bytes=0, from_date=_days_ago(90).date())
+
+    assert result.warning is not None
+    assert "cache de audit log" in result.warning
+
+
+# --- _table_efficiency_score / compute_table_scores --------------------------
+
+
+def test_table_efficiency_score_perfect_for_partitioned_used_lightly_scanned():
+    score, factors = service._table_efficiency_score(
+        size_bytes=10 * 1024**3,
+        is_partitioned=True,
+        billed_bytes_30d=1024,  # escaneada, mas quase nada
+        partition_savings_usd=0.0,
+        observed_cost_usd_30d=0.0,
+    )
+
+    assert score == 100
+    assert {f.name for f in factors} == {"partitioning", "utilization", "scan_efficiency"}
+    assert abs(sum(f.weight for f in factors) - 1.0) < 1e-9
+
+
+def test_table_efficiency_score_ignores_scan_ratio_for_small_tables():
+    # 100 MB escaneada 500x em 30d: ratio altíssimo, mas custo é de
+    # centavos — scan_efficiency deve ficar neutro (1.0), não penalizar.
+    score, factors = service._table_efficiency_score(
+        size_bytes=100 * 1024**2,
+        is_partitioned=True,
+        billed_bytes_30d=500 * 100 * 1024**2,
+        partition_savings_usd=0.0,
+        observed_cost_usd_30d=0.0,
+    )
+
+    scan = next(f for f in factors if f.name == "scan_efficiency")
+    assert scan.value == 1.0
+    assert "pequena" in scan.detail.lower()
+    assert score == 100
+
+
+def test_table_efficiency_score_penalizes_large_never_scanned_table():
+    score, factors = service._table_efficiency_score(
+        size_bytes=200 * 1024**3,  # 200 GB, > _SCORE_UNUSED_ZERO_AT_GB
+        is_partitioned=True,
+        billed_bytes_30d=0,
+        partition_savings_usd=0.0,
+        observed_cost_usd_30d=0.0,
+    )
+
+    utilization = next(f for f in factors if f.name == "utilization")
+    assert utilization.value == 0.0
+    # só perde o peso de utilização (0.30) -> 70
+    assert score == 70
+
+
+def test_table_efficiency_score_penalizes_unpartitioned_with_big_savings():
+    score, _ = service._table_efficiency_score(
+        size_bytes=5 * 1024**3,
+        is_partitioned=False,
+        billed_bytes_30d=5 * 1024**3,
+        partition_savings_usd=9.0,
+        observed_cost_usd_30d=10.0,  # economia = 90% do custo observado
+    )
+
+    # partitioning value ~ 0.1 -> perde ~0.9*0.45 do total
+    assert score < 70
+
+
+def _stub_table_scores(monkeypatch, all_tables, metadata, events, candidates):
+    _stub_partition_common(
+        monkeypatch,
+        all_tables=all_tables,
+        metadata=metadata,
+        date_columns_by_table={k: ["event_date"] for k in all_tables},
+    )
+    monkeypatch.setattr(
+        service.repository, "get_scan_events_cached", lambda *a, **kw: (events, None)
+    )
+    monkeypatch.setattr(
+        service,
+        "scan_partition_candidates",
+        lambda *a, **kw: SimpleNamespace(
+            candidates=candidates, cache_updated_at=None, warning=None
+        ),
+    )
+
+
+def test_compute_table_scores_sorts_worst_first_and_aggregates_project(monkeypatch):
+    all_tables = [("RAW", "good"), ("RAW", "bad")]
+    metadata = {
+        "proj.RAW.good": _bq_table(
+            num_bytes=1024, time_partitioning=SimpleNamespace(field="event_date")
+        ),
+        "proj.RAW.bad": _bq_table(num_bytes=500 * 1024**3, time_partitioning=None),
+    }
+    _stub_table_scores(monkeypatch, all_tables, metadata, events=[], candidates=[])
+
+    result = service.compute_table_scores(
+        _fake_client(), MagicMock(), MagicMock(), MagicMock(), "proj"
+    )
+
+    assert [t.table_id for t in result.tables] == ["bad", "good"]
+    assert result.tables[0].score < result.tables[1].score
+    # média ponderada por tamanho -> a tabela gigante "bad" domina
+    assert result.project_efficiency_score <= result.tables[1].score
+
+
+def test_compute_table_scores_uses_partition_candidate_savings(monkeypatch):
+    all_tables = [("RAW", "t")]
+    metadata = {"proj.RAW.t": _bq_table(num_bytes=5 * 1024**3, time_partitioning=None)}
+    candidate = SimpleNamespace(
+        dataset_id="RAW",
+        table_id="t",
+        observed_cost_usd_30d=10.0,
+        estimated_savings_usd_optimistic=9.0,
+    )
+    _stub_table_scores(monkeypatch, all_tables, metadata, events=[], candidates=[candidate])
+
+    result = service.compute_table_scores(
+        _fake_client(), MagicMock(), MagicMock(), MagicMock(), "proj"
+    )
+
+    partitioning = next(f for f in result.tables[0].factors if f.name == "partitioning")
+    assert partitioning.value < 0.2
+    assert result.tables[0].observed_cost_usd_30d == 10.0
+
+
+def test_compute_table_scores_empty_project_scores_100(monkeypatch):
+    _stub_table_scores(monkeypatch, [], {}, events=[], candidates=[])
+
+    result = service.compute_table_scores(
+        _fake_client(), MagicMock(), MagicMock(), MagicMock(), "proj"
+    )
+
+    assert result.tables == []
+    assert result.project_efficiency_score == 100
 
 
 # --- _pick_suggestion ----------------------------------------------------------

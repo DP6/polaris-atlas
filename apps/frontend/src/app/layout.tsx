@@ -32,7 +32,9 @@ export function AppLayout() {
       />
       <div className="flex min-h-0 flex-1">
         {projectId && !sidebarCollapsed && <DatasetSidebar projectId={projectId} />}
-        <main className="min-w-0 flex-1 overflow-y-auto p-6">
+        {/* pb maior que o resto: respiro no fim de toda página (ícone/card/
+            texto não encostam na borda inferior ao rolar até o fim). */}
+        <main className="min-w-0 flex-1 overflow-y-auto px-6 pt-6 pb-16">
           <div className="mx-auto h-full w-full max-w-[1400px]">
             {canRenderOutlet ? (
               <Outlet />

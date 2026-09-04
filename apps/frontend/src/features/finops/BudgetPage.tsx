@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { Calendar, ChevronDown, ChevronUp, DollarSign, Target, TrendingUp } from 'lucide-react'
 import { Fragment, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -15,6 +15,7 @@ import {
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { ChoiceToggle } from '@/components/ChoiceToggle'
 import { LoadingState } from '@/components/LoadingState'
+import { LookbackPicker } from '@/components/LookbackPicker'
 import { MetricGrid, MetricTile } from '@/components/MetricTile'
 import { PageHeader } from '@/components/PageHeader'
 import { RefreshButton } from '@/components/RefreshButton'
@@ -60,6 +61,7 @@ const GROUP_BY_OPTIONS: { value: BudgetGroupBy; label: string }[] = [
 ]
 
 const LIMIT_OPTIONS = [5, 10, 20, 50] as const
+const LOOKBACK_OPTIONS = [7, 15, 30] as const
 
 const GROUP_KEY_COLUMN_LABEL: Record<BudgetGroupBy, string> = {
   table: 'Tabela',
@@ -89,8 +91,9 @@ export function BudgetPage() {
   const { projectId } = useProjectContext()
   const [groupBy, setGroupBy] = useState<BudgetGroupBy>('table')
   const [limit, setLimit] = useState(10)
+  const [lookbackDays, setLookbackDays] = useState(30)
   const [hasRun, setHasRun] = useState(false)
-  const query = useBudget(projectId, groupBy, limit, hasRun)
+  const query = useBudget(projectId, groupBy, limit, lookbackDays, hasRun)
   const data = query.data
 
   if (!hasRun) {
@@ -98,10 +101,18 @@ export function BudgetPage() {
       <div className="flex flex-col gap-4">
         <PageHeader
           title="FinOps — Budget de custo"
-          description="Estima o custo do mês corrente via audit logs de jobs do BigQuery (bytes cobrados) + preço público on-demand — sem depender do Cloud Billing Export. Escolha o agrupamento e o limite de itens antes de rodar."
+          description="Estima o custo do período escolhido via audit logs de jobs do BigQuery (bytes cobrados) + preço público on-demand — sem depender do Cloud Billing Export. A janela é limitada a 31 dias (retenção do cache de audit log)."
         />
 
         <div className="flex flex-col gap-4 rounded-lg border border-border p-4">
+          <LookbackPicker
+            options={LOOKBACK_OPTIONS}
+            max={31}
+            label="Janela — últimos N dias"
+            value={lookbackDays}
+            onChange={setLookbackDays}
+          />
+
           <div>
             <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
               Agrupar por
@@ -149,7 +160,7 @@ export function BudgetPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="FinOps — Budget de custo"
-        description="Custo por agrupamento e queries mais caras do mês corrente — estimativa baseada em bytes escaneados, cobrança on-demand."
+        description={`Custo por agrupamento e queries mais caras dos últimos ${data?.lookback_days ?? lookbackDays} dias — estimativa baseada em bytes escaneados, cobrança on-demand.`}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => setHasRun(false)}>
@@ -169,18 +180,28 @@ export function BudgetPage() {
 
           <MetricGrid>
             {[
-              { label: 'Custo até agora', value: formatUsd(data.projection.cost_so_far_usd) },
-              { label: 'Média diária', value: formatUsd(data.projection.daily_average_usd) },
               {
-                label: 'Projeção do mês',
-                value: formatUsd(data.projection.projected_month_total_usd),
+                label: 'Custo até agora',
+                value: formatUsd(data.projection.cost_so_far_usd),
+                icon: <DollarSign size={14} />,
               },
               {
-                label: 'Dias decorridos',
-                value: `${data.projection.days_elapsed} de ${data.projection.days_in_month}`,
+                label: 'Média diária',
+                value: formatUsd(data.projection.daily_average_usd),
+                icon: <TrendingUp size={14} />,
+              },
+              {
+                label: 'Projeção mensal',
+                value: formatUsd(data.projection.projected_month_total_usd),
+                icon: <Target size={14} />,
+              },
+              {
+                label: 'Janela analisada',
+                value: `${data.projection.days_elapsed} dias`,
+                icon: <Calendar size={14} />,
               },
             ].map((item) => (
-              <MetricTile key={item.label} label={item.label} value={item.value} />
+              <MetricTile key={item.label} label={item.label} value={item.value} icon={item.icon} />
             ))}
           </MetricGrid>
 
@@ -406,7 +427,7 @@ function CostByGroupTab({
           {visibleGroups.length === 0 && (
             <TableRow>
               <TableCell colSpan={4} className="text-center text-muted-foreground">
-                Nenhum custo registrado neste mês.
+                Nenhum custo registrado no período.
               </TableCell>
             </TableRow>
           )}
@@ -530,7 +551,7 @@ function QueriesTab({ queries }: { queries: CostlyQuery[] }) {
           {visibleQueries.length === 0 && (
             <TableRow>
               <TableCell colSpan={6} className="text-center text-muted-foreground">
-                Nenhuma query com custo neste mês.
+                Nenhuma query com custo no período.
               </TableCell>
             </TableRow>
           )}

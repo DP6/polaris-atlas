@@ -16,7 +16,7 @@ function applyTheme(theme: Theme): void {
   document.documentElement.classList.toggle('dark', theme === 'dark')
 }
 
-// Dark é o padrão do produto (docs/skills/frontend.md) — só persiste
+// Dark é o padrão do produto (docs/frontend/behaviors.md) — só persiste
 // "light" no localStorage; ausência de valor salvo (ou localStorage
 // indisponível) sempre cai em dark. O script bloqueante em index.html
 // já aplicou a classe .dark antes do primeiro paint, usando a mesma

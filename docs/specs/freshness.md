@@ -171,7 +171,30 @@ apps/backend/src/observability_hub/
 └── tests/unit/freshness/
     ├── test_service.py
     └── test_schemas.py
+
+apps/frontend/src/
+└── components/SlaDistributionBar.tsx   # 3 barras verticais compartilhadas
 ```
+
+### `SlaDistributionBar` — componente compartilhado (refresh visual 2026-09; 3 barras na rodada 3)
+
+**Rodada 3:** deixou de ser uma barra horizontal empilhada de 6 faixas
+(que sumia quando uma faixa tinha 0) e virou **3 barras verticais** —
+verde / amarelo / vermelho, as 6 faixas colapsadas nas 3 severidades via
+`SLA_SEVERITY`. As 3 barras estão **sempre presentes**; o que varia é a
+**altura** de cada uma (∝ contagem, com altura mínima pra faixa com 0
+continuar visível). Consome `FreshnessCounts` (já servido pelo endpoint
+`GET /freshness/{project}` por dataset) — **sem query nova**. `role="img"`
++ `aria-label`/`title` com a decomposição. Prop `height` = classe Tailwind
+de altura do container.
+
+Reaproveitada por: cards do Catálogo de Dados (`DatasetOverviewCard`, PR 6)
+e o próprio Freshness (PR 8 — feito): `SlaRow` (faixa de totais do projeto
+e do dataset) ganhou a barra agregada abaixo dos 6 números, e
+`DatasetFreshnessTable` ganhou uma coluna "Distribuição" por linha. As
+contagens por faixa (colunas ordenáveis) continuam — a barra é adicional,
+não substitui. É o "mesmo componente visual" que o brief pede nos dois
+lados.
 
 ---
 
