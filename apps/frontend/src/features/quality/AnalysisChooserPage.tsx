@@ -1,5 +1,6 @@
 import {
   BarChart2,
+  BookOpenCheck,
   Columns,
   GitBranch,
   History,
@@ -76,6 +77,13 @@ export function AnalysisChooserPage() {
           title="Lineage"
           description="De onde os dados desta tabela vêm e para onde vão — grafo em tela cheia."
           to={`/lineage/${datasetId}/${tableId}`}
+        />
+        <OptionCard
+          layout="wide"
+          icon={<BookOpenCheck />}
+          title="Metadados"
+          description="Descrição, ownership, classificação, certificação e PII confirmado por coluna."
+          to={`${base}/metadata`}
         />
       </OptionCardGrid>
     </div>

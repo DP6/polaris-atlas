@@ -16,3 +16,16 @@ export function useDatasetFreshness(projectId: string | undefined, datasetId: st
     enabled: Boolean(projectId) && Boolean(datasetId),
   })
 }
+
+export function useTableFreshness(
+  projectId: string | undefined,
+  datasetId: string | undefined,
+  tableId: string | undefined,
+) {
+  return useQuery({
+    queryKey: ['freshness-table', projectId, datasetId, tableId],
+    queryFn: () =>
+      freshnessApi.getTableFreshness(projectId as string, datasetId as string, tableId as string),
+    enabled: Boolean(projectId) && Boolean(datasetId) && Boolean(tableId),
+  })
+}

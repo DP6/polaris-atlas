@@ -20,6 +20,8 @@ import { FreshnessPage } from '@/features/freshness/FreshnessPage'
 import { GovernanceOverviewPage } from '@/features/governance/GovernanceOverviewPage'
 import { LineagePage } from '@/features/lineage/LineagePage'
 import { OrphansPage } from '@/features/lineage/OrphansPage'
+import { MetadataAnalysisPage } from '@/features/metadata/MetadataAnalysisPage'
+import { MetadataOverviewPage } from '@/features/metadata/MetadataOverviewPage'
 import { NotFoundPage } from '@/features/misc/NotFoundPage'
 import { AccessAnalysisPage } from '@/features/quality/AccessAnalysisPage'
 import { AnalysisChooserPage } from '@/features/quality/AnalysisChooserPage'
@@ -52,6 +54,7 @@ export function AppRoutes() {
           <Route path="freshness" element={<FreshnessPage />} />
           <Route path="freshness/:datasetId" element={<DatasetFreshnessPage />} />
           <Route path="orphans" element={<OrphansPage />} />
+          <Route path="metadados" element={<MetadataOverviewPage />} />
           <Route path="lineage/:datasetId/:tableId" element={<LineagePage />} />
           {/* "Análises de qualidade" na sidebar mostra só o caminho das
               análises salvas (pastas) — rodada 3. */}
@@ -67,6 +70,7 @@ export function AppRoutes() {
             <Route path="column-types" element={<ColumnTypesAnalysisPage />} />
             <Route path="history" element={<HistoryAnalysisPage />} />
             <Route path="access" element={<AccessAnalysisPage />} />
+            <Route path="metadata" element={<MetadataAnalysisPage />} />
           </Route>
           <Route path="finops" element={<FinOpsOverviewPage />} />
           <Route path="finops/scanner" element={<ScannerOverviewPage />} />
