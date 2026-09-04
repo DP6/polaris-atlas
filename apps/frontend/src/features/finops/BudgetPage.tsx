@@ -1,4 +1,12 @@
-import { Calendar, ChevronDown, ChevronUp, DollarSign, Target, TrendingUp } from 'lucide-react'
+import {
+  Calendar,
+  ChevronDown,
+  ChevronUp,
+  DollarSign,
+  HardDrive,
+  Target,
+  TrendingUp,
+} from 'lucide-react'
 import { Fragment, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -14,6 +22,7 @@ import {
 } from 'recharts'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { ChoiceToggle } from '@/components/ChoiceToggle'
+import { ComboChart } from '@/components/ComboChart'
 import { LoadingState } from '@/components/LoadingState'
 import { LookbackPicker } from '@/components/LookbackPicker'
 import { MetricGrid, MetricTile } from '@/components/MetricTile'
@@ -41,12 +50,19 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { WarningCallout } from '@/components/WarningCallout'
-import { useBudget } from '@/features/finops/hooks'
+import { useBudget, useBudgets, useCostSeries } from '@/features/finops/hooks'
 import { useProjectContext } from '@/features/projects/ProjectContext'
 import { useTableFilterSort } from '@/hooks/useTableFilterSort'
 import { formatBytes, formatDate, formatNumber, formatUsd } from '@/lib/format'
 import { cn, linkClass } from '@/lib/utils'
-import type { BudgetGroupBy, CostGroup, CostlyQuery, CostProjection } from '@/types/finops'
+import type {
+  BudgetEntry,
+  BudgetGroupBy,
+  CostGroup,
+  CostlyQuery,
+  CostProjection,
+  CostType,
+} from '@/types/finops'
 
 const COST_TAB = 'cost'
 const QUERIES_TAB = 'queries'
@@ -58,6 +74,12 @@ const GROUP_BY_OPTIONS: { value: BudgetGroupBy; label: string }[] = [
   { value: 'day', label: 'Dia' },
   { value: 'month', label: 'Mês' },
   { value: 'year', label: 'Ano' },
+]
+
+const COST_TYPE_OPTIONS: { value: CostType; label: string }[] = [
+  { value: 'all', label: 'Tudo' },
+  { value: 'query', label: 'Query' },
+  { value: 'storage', label: 'Storage' },
 ]
 
 const LIMIT_OPTIONS = [5, 10, 20, 50] as const
@@ -72,11 +94,23 @@ const GROUP_KEY_COLUMN_LABEL: Record<BudgetGroupBy, string> = {
   year: 'Ano',
 }
 
-type GroupSortKey = 'key' | 'cost_usd' | 'billed_bytes' | 'job_count'
+// Só table/dataset suportam split de storage (v1.12) — outras agregações
+// (usuário/dia/mês/ano) não têm um "dono" de bytes de storage.
+function supportsStorageSplit(groupBy: BudgetGroupBy): boolean {
+  return groupBy === 'table' || groupBy === 'dataset'
+}
+
+type GroupSortKey =
+  | 'key'
+  | 'cost_usd'
+  | 'billed_bytes'
+  | 'job_count'
+  | 'storage_cost_usd'
+  | 'total_cost_usd'
 
 function compareGroup(a: CostGroup, b: CostGroup, key: GroupSortKey): number {
   if (key === 'key') return a.key.localeCompare(b.key)
-  return a[key] - b[key]
+  return (a[key] ?? 0) - (b[key] ?? 0)
 }
 
 type QuerySortKey = 'executed_at' | 'cost_usd' | 'billed_bytes'
@@ -93,15 +127,25 @@ export function BudgetPage() {
   const [limit, setLimit] = useState(10)
   const [lookbackDays, setLookbackDays] = useState(30)
   const [hasRun, setHasRun] = useState(false)
-  const query = useBudget(projectId, groupBy, limit, lookbackDays, hasRun)
+  const includeStorage = supportsStorageSplit(groupBy)
+  const query = useBudget(
+    projectId,
+    groupBy,
+    limit,
+    lookbackDays,
+    hasRun,
+    undefined,
+    includeStorage,
+  )
+  const budgetsQuery = useBudgets(projectId)
   const data = query.data
 
   if (!hasRun) {
     return (
       <div className="flex flex-col gap-4">
         <PageHeader
-          title="FinOps — Budget de custo"
-          description="Estima o custo do período escolhido via audit logs de jobs do BigQuery (bytes cobrados) + preço público on-demand — sem depender do Cloud Billing Export. A janela é limitada a 31 dias (retenção do cache de audit log)."
+          title="FinOps — Detalhamento de custo"
+          description="Estima o custo do período escolhido via audit logs de jobs do BigQuery (bytes cobrados) + preço público on-demand — sem depender do Cloud Billing Export. Agrupando por tabela ou dataset, mostra também o split de storage e a comparação com a meta cadastrada. A janela é limitada a 31 dias (retenção do cache de audit log)."
         />
 
         <div className="flex flex-col gap-4 rounded-lg border border-border p-4">
@@ -159,7 +203,7 @@ export function BudgetPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="FinOps — Budget de custo"
+        title="FinOps — Detalhamento de custo"
         description={`Custo por agrupamento e queries mais caras dos últimos ${data?.lookback_days ?? lookbackDays} dias — estimativa baseada em bytes escaneados, cobrança on-demand.`}
         actions={
           <>
@@ -219,6 +263,7 @@ export function BudgetPage() {
                 groupBy={groupBy}
                 onGroupByChange={setGroupBy}
                 projection={data.projection}
+                budgets={budgetsQuery.data?.budgets ?? []}
               />
             </TabsContent>
 
@@ -235,13 +280,35 @@ export function BudgetPage() {
 // Link pro dataset dono do grupo — funciona tanto pra group_by=table
 // (key "project.dataset.table") quanto group_by=dataset (key
 // "project.dataset", sem terceiro segmento): rest.split('.')[0] é o
-// dataset_id nos dois casos.
+// dataset_id nos dois casos. `label` (rest inteiro) também é o formato
+// que o filtro datasets/tables de cost-series espera (sem o project_id à
+// frente) — reaproveitado pro drill-down (v1.12).
 function groupKeyLink(projectId: string, key: string): { datasetId: string; label: string } | null {
   if (!key.startsWith(`${projectId}.`)) return null
   const rest = key.slice(projectId.length + 1)
   const [datasetId] = rest.split('.')
   if (!datasetId) return null
   return { datasetId, label: rest }
+}
+
+// Meta cadastrada (BudgetConfigDialog) que corresponde a este grupo —
+// escopo table casa por dataset_id+table_id, escopo dataset só por
+// dataset_id. `label` vem de groupKeyLink ("dataset.table" ou "dataset").
+function findBudgetTarget(
+  budgets: BudgetEntry[],
+  groupBy: BudgetGroupBy,
+  label: string,
+): BudgetEntry | undefined {
+  if (groupBy === 'table') {
+    const [datasetId, tableId] = label.split('.')
+    return budgets.find(
+      (b) => b.scope === 'table' && b.dataset_id === datasetId && b.table_id === tableId,
+    )
+  }
+  if (groupBy === 'dataset') {
+    return budgets.find((b) => b.scope === 'dataset' && b.dataset_id === label)
+  }
+  return undefined
 }
 
 function CostByGroupTab({
@@ -251,6 +318,7 @@ function CostByGroupTab({
   groupBy,
   onGroupByChange,
   projection,
+  budgets,
 }: {
   projectId: string
   groups: CostGroup[]
@@ -258,7 +326,12 @@ function CostByGroupTab({
   groupBy: BudgetGroupBy
   onGroupByChange: (value: BudgetGroupBy) => void
   projection: CostProjection
+  budgets: BudgetEntry[]
 }) {
+  const [costType, setCostType] = useState<CostType>('all')
+  const [expandedKey, setExpandedKey] = useState<string | null>(null)
+  const hasStorage = supportsStorageSplit(groupBy) && groups.some((g) => g.storage_cost_usd != null)
+
   const {
     sortKey,
     sortDir,
@@ -291,24 +364,52 @@ function CostByGroupTab({
       })
   }
 
+  // Top 10 por custo total (query+storage) pro ranking visual — só quando
+  // a agregação suporta storage e a resposta trouxe o split (v1.12).
+  const rankingChartData = hasStorage
+    ? [...groups]
+        .sort((a, b) => (b.total_cost_usd ?? b.cost_usd) - (a.total_cost_usd ?? a.cost_usd))
+        .slice(0, 10)
+        .map((g) => ({
+          label: groupKeyLink(projectId, g.key)?.label ?? g.key,
+          query: g.cost_usd,
+          storage: g.storage_cost_usd ?? 0,
+        }))
+    : []
+
   return (
     <div className="mt-4 flex flex-col gap-4">
-      <div className="flex gap-2">
-        {GROUP_BY_OPTIONS.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => onGroupByChange(option.value)}
-            className={cn(
-              'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-              groupBy === option.value
-                ? 'border-primary bg-primary/10 text-foreground'
-                : 'border-border text-muted-foreground hover:bg-muted',
-            )}
-          >
-            {option.label}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex gap-2">
+          {GROUP_BY_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onGroupByChange(option.value)}
+              className={cn(
+                'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                groupBy === option.value
+                  ? 'border-primary bg-primary/10 text-foreground'
+                  : 'border-border text-muted-foreground hover:bg-muted',
+              )}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        {hasStorage && (
+          <div className="flex flex-col gap-1">
+            <span className="text-label text-muted-foreground">Tipo de custo</span>
+            <ChoiceToggle
+              aria-label="Tipo de custo"
+              options={COST_TYPE_OPTIONS}
+              value={costType}
+              onChange={setCostType}
+              size="sm"
+            />
+          </div>
+        )}
       </div>
 
       {groupBy === 'day' && cumulativeChartData.length > 0 && (
@@ -363,6 +464,38 @@ function CostByGroupTab({
         </div>
       )}
 
+      {hasStorage && rankingChartData.length > 0 && (
+        <div className="h-64 w-full shrink-0 rounded-lg border border-border bg-card p-4">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={rankingChartData}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+              <XAxis
+                dataKey="label"
+                tick={{ fontSize: 10 }}
+                interval={0}
+                angle={-25}
+                textAnchor="end"
+                height={60}
+              />
+              <YAxis tick={{ fontSize: 11 }} width={56} tickFormatter={(v) => formatUsd(v)} />
+              <RechartsTooltip formatter={(value) => formatUsd(Number(value))} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              {costType !== 'storage' && (
+                <Bar dataKey="query" name="Query" stackId="cost" fill="var(--color-status-info)" />
+              )}
+              {costType !== 'query' && (
+                <Bar
+                  dataKey="storage"
+                  name="Storage"
+                  stackId="cost"
+                  fill="var(--color-accent-blue)"
+                />
+              )}
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
       <Table>
         <TableHeader>
           <TableRow>
@@ -386,13 +519,40 @@ function CostByGroupTab({
               onClick={() => toggleSort('job_count')}
               align="right"
             />
-            <SortableTableHead
-              label="Custo"
-              active={sortKey === 'cost_usd'}
-              direction={sortDir}
-              onClick={() => toggleSort('cost_usd')}
-              align="right"
-            />
+            {hasStorage ? (
+              <>
+                <SortableTableHead
+                  label="Custo query"
+                  active={sortKey === 'cost_usd'}
+                  direction={sortDir}
+                  onClick={() => toggleSort('cost_usd')}
+                  align="right"
+                />
+                <SortableTableHead
+                  label="Custo storage"
+                  active={sortKey === 'storage_cost_usd'}
+                  direction={sortDir}
+                  onClick={() => toggleSort('storage_cost_usd')}
+                  align="right"
+                />
+                <SortableTableHead
+                  label="Custo total"
+                  active={sortKey === 'total_cost_usd'}
+                  direction={sortDir}
+                  onClick={() => toggleSort('total_cost_usd')}
+                  align="right"
+                />
+                <TableHead>Meta</TableHead>
+              </>
+            ) : (
+              <SortableTableHead
+                label="Custo"
+                active={sortKey === 'cost_usd'}
+                direction={sortDir}
+                onClick={() => toggleSort('cost_usd')}
+                align="right"
+              />
+            )}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -401,32 +561,97 @@ function CostByGroupTab({
               groupBy === 'table' || groupBy === 'dataset'
                 ? groupKeyLink(projectId, group.key)
                 : null
+            const target = link ? findBudgetTarget(budgets, groupBy, link.label) : undefined
+            const totalForGroup = group.total_cost_usd ?? group.cost_usd
+            const isOverBudget = target != null && totalForGroup > target.amount_usd
+            const isExpanded = expandedKey === group.key
+
             return (
-              <TableRow key={group.key}>
-                <TableCell className="font-medium">
-                  {link ? (
-                    <Link to={`/datasets/${link.datasetId}`} className={linkClass}>
-                      {link.label}
-                    </Link>
+              <Fragment key={group.key}>
+                <TableRow
+                  className={hasStorage && link ? 'cursor-pointer' : undefined}
+                  onClick={
+                    hasStorage && link
+                      ? () => setExpandedKey(isExpanded ? null : group.key)
+                      : undefined
+                  }
+                >
+                  <TableCell className="font-medium">
+                    <span className="inline-flex items-center gap-1.5">
+                      {hasStorage && link && (
+                        <ChevronDown
+                          size={13}
+                          className={cn(
+                            'shrink-0 transition-transform',
+                            !isExpanded && '-rotate-90',
+                          )}
+                        />
+                      )}
+                      {link ? (
+                        <Link
+                          to={`/datasets/${link.datasetId}`}
+                          className={linkClass}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {link.label}
+                        </Link>
+                      ) : (
+                        group.key
+                      )}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right text-muted-foreground">
+                    {formatBytes(group.billed_bytes)}
+                  </TableCell>
+                  <TableCell className="text-right text-muted-foreground">
+                    {formatNumber(group.job_count)}
+                  </TableCell>
+                  {hasStorage ? (
+                    <>
+                      <TableCell className="text-right text-muted-foreground">
+                        {formatUsd(group.cost_usd)}
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {formatUsd(group.storage_cost_usd ?? 0)}
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        {formatUsd(totalForGroup)}
+                      </TableCell>
+                      <TableCell>
+                        {target ? (
+                          <Badge variant={isOverBudget ? 'error' : 'success'}>
+                            {isOverBudget ? 'Acima da meta' : 'Dentro da meta'}
+                            {' · '}
+                            {formatUsd(target.amount_usd)}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                    </>
                   ) : (
-                    group.key
+                    <TableCell className="text-right font-medium">
+                      {formatUsd(group.cost_usd)}
+                    </TableCell>
                   )}
-                </TableCell>
-                <TableCell className="text-right text-muted-foreground">
-                  {formatBytes(group.billed_bytes)}
-                </TableCell>
-                <TableCell className="text-right text-muted-foreground">
-                  {formatNumber(group.job_count)}
-                </TableCell>
-                <TableCell className="text-right font-medium">
-                  {formatUsd(group.cost_usd)}
-                </TableCell>
-              </TableRow>
+                </TableRow>
+                {isExpanded && link && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="bg-muted/40">
+                      <GroupDrillDown
+                        projectId={projectId}
+                        groupBy={groupBy}
+                        groupLabel={link.label}
+                      />
+                    </TableCell>
+                  </TableRow>
+                )}
+              </Fragment>
             )
           })}
           {visibleGroups.length === 0 && (
             <TableRow>
-              <TableCell colSpan={4} className="text-center text-muted-foreground">
+              <TableCell colSpan={hasStorage ? 7 : 4} className="text-center text-muted-foreground">
                 Nenhum custo registrado no período.
               </TableCell>
             </TableRow>
@@ -438,11 +663,78 @@ function CostByGroupTab({
               <TableCell>Total</TableCell>
               <TableCell />
               <TableCell />
-              <TableCell className="text-right">{formatUsd(totalCostUsd)}</TableCell>
+              {hasStorage ? (
+                <>
+                  <TableCell className="text-right">{formatUsd(totalCostUsd)}</TableCell>
+                  <TableCell className="text-right">
+                    {formatUsd(groups.reduce((sum, g) => sum + (g.storage_cost_usd ?? 0), 0))}
+                  </TableCell>
+                  <TableCell className="text-right font-medium">
+                    {formatUsd(
+                      totalCostUsd + groups.reduce((sum, g) => sum + (g.storage_cost_usd ?? 0), 0),
+                    )}
+                  </TableCell>
+                  <TableCell />
+                </>
+              ) : (
+                <TableCell className="text-right">{formatUsd(totalCostUsd)}</TableCell>
+              )}
             </TableRow>
           </TableFooter>
         )}
       </Table>
+    </div>
+  )
+}
+
+// Drill-down por tabela/dataset (v1.12) — busca sob demanda (só quando a
+// linha está expandida) a série diária filtrada pra essa chave, via o
+// mesmo cost-series já usado na Visão Geral. `groupLabel` já vem no
+// formato "dataset.table"/"dataset" que o filtro espera (sem project_id).
+function GroupDrillDown({
+  projectId,
+  groupBy,
+  groupLabel,
+}: {
+  projectId: string
+  groupBy: BudgetGroupBy
+  groupLabel: string
+}) {
+  const seriesQuery = useCostSeries(projectId, {
+    granularity: 'day',
+    tables: groupBy === 'table' ? [groupLabel] : undefined,
+    datasets: groupBy === 'dataset' ? [groupLabel] : undefined,
+  })
+
+  if (seriesQuery.isLoading) return <LoadingState />
+  if (seriesQuery.isError) return <ApiErrorNotice error={seriesQuery.error} />
+
+  const points = seriesQuery.data?.points ?? []
+  if (points.length === 0 || points.every((p) => p.total_cost_usd === 0)) {
+    return (
+      <p className="py-2 text-body text-muted-foreground">
+        Sem custo diário registrado pra {groupLabel} na janela.
+      </p>
+    )
+  }
+
+  return (
+    <div className="py-2">
+      <p className="mb-2 flex items-center gap-1.5 text-label text-muted-foreground">
+        <HardDrive size={13} /> Série diária — {groupLabel}
+      </p>
+      <ComboChart
+        data={points.map((p) => ({
+          period: p.period,
+          query: p.query_cost_usd,
+          storage: p.storage_cost_usd,
+        }))}
+        xKey="period"
+        bar={{ key: 'query', name: 'Query', color: 'var(--color-status-info)' }}
+        lines={[{ key: 'storage', name: 'Storage', color: 'var(--color-accent-blue)' }]}
+        height={180}
+        valueFormat={formatUsd}
+      />
     </div>
   )
 }

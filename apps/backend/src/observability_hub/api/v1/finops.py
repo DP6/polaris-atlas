@@ -65,7 +65,9 @@ def get_budget(
     lookback_days: int = Query(default=30, ge=1, le=31),
     from_date: date | None = Query(default=None, alias="from"),
     to_date: date | None = Query(default=None, alias="to"),
+    include_storage: bool = Query(default=False),
     user: UserInfo = Depends(get_current_user),
+    client: bigquery.Client = Depends(get_client),
     logging_client: cloud_logging.Client = Depends(get_logging_client),
     storage_client: storage.Client = Depends(get_storage_client),
     firestore_client: firestore.Client = Depends(get_firestore_client),
@@ -81,6 +83,8 @@ def get_budget(
         from_date=from_date,
         to_date=to_date,
         user_email=user.email,
+        client=client,
+        include_storage=include_storage,
     )
 
 

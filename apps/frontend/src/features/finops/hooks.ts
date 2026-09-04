@@ -30,6 +30,7 @@ export function useBudget(
   lookbackDays = 30,
   enabled = true,
   dateRange?: { from?: string; to?: string },
+  includeStorage = false,
 ) {
   return useQuery({
     queryKey: [
@@ -40,9 +41,17 @@ export function useBudget(
       lookbackDays,
       dateRange?.from,
       dateRange?.to,
+      includeStorage,
     ],
     queryFn: () =>
-      finopsApi.getBudget(projectId as string, groupBy, limit, lookbackDays, dateRange),
+      finopsApi.getBudget(
+        projectId as string,
+        groupBy,
+        limit,
+        lookbackDays,
+        dateRange,
+        includeStorage,
+      ),
     enabled: Boolean(projectId) && enabled,
   })
 }
@@ -57,6 +66,7 @@ export function useCostSeries(
     to?: string
     datasets?: string[]
     tables?: string[]
+    enabled?: boolean
   } = {},
 ) {
   return useQuery({
@@ -72,7 +82,7 @@ export function useCostSeries(
       opts.tables,
     ],
     queryFn: () => finopsApi.getCostSeries(projectId as string, opts),
-    enabled: Boolean(projectId),
+    enabled: Boolean(projectId) && (opts.enabled ?? true),
   })
 }
 

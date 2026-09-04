@@ -455,6 +455,67 @@ def test_get_current_storage_bytes_passes_dataset_and_table_filters_as_params():
     assert param_names == {"datasets", "tables"}
 
 
+# --- get_storage_bytes_by_table ------------------------------------------------
+
+
+def _table_storage_row(table_schema, table_name, logical_bytes):
+    return SimpleNamespace(
+        table_schema=table_schema, table_name=table_name, logical_bytes=logical_bytes
+    )
+
+
+def test_get_storage_bytes_by_table_returns_reason_for_no_regions():
+    result, reason = repository.get_storage_bytes_by_table(MagicMock(), "proj", [])
+    assert result is None
+    assert reason is not None
+
+
+def test_get_storage_bytes_by_table_groups_by_schema_and_name():
+    client = MagicMock()
+    result = MagicMock()
+    result.result.return_value = [
+        _table_storage_row("RAW", "a", 100),
+        _table_storage_row("RAW", "b", 50),
+    ]
+    client.query.return_value = result
+
+    bytes_by_table, reason = repository.get_storage_bytes_by_table(client, "proj", ["US"])
+
+    assert reason is None
+    assert bytes_by_table == {("RAW", "a"): 100, ("RAW", "b"): 50}
+    called_sql = client.query.call_args[0][0]
+    assert "GROUP BY table_schema, table_name" in called_sql
+
+
+def test_get_storage_bytes_by_table_merges_across_regions():
+    client = MagicMock()
+
+    def _query(sql, job_config=None):
+        result = MagicMock()
+        if "region-us." in sql:
+            result.result.return_value = [_table_storage_row("RAW", "a", 100)]
+        else:
+            result.result.return_value = [_table_storage_row("RAW", "a", 25)]
+        return result
+
+    client.query.side_effect = _query
+
+    bytes_by_table, reason = repository.get_storage_bytes_by_table(client, "proj", ["US", "EU"])
+
+    assert reason is None
+    assert bytes_by_table == {("RAW", "a"): 125}
+
+
+def test_get_storage_bytes_by_table_returns_reason_when_all_regions_fail():
+    client = MagicMock()
+    client.query.side_effect = GoogleAPICallError("403 Permission denied")
+
+    bytes_by_table, reason = repository.get_storage_bytes_by_table(client, "proj", ["US", "EU"])
+
+    assert bytes_by_table is None
+    assert "Permission denied" in reason
+
+
 # --- get_date_like_columns -------------------------------------------------------
 
 

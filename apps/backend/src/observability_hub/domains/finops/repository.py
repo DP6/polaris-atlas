@@ -378,6 +378,77 @@ def get_current_storage_bytes(
     return sum(byte_total for byte_total, _r in per_region if byte_total is not None), None
 
 
+def get_storage_bytes_by_table(
+    client: bigquery.Client,
+    project_id: str,
+    regions: list[str],
+    datasets: list[str] | None = None,
+    tables: list[str] | None = None,
+    max_workers: int = 8,
+) -> tuple[dict[tuple[str, str], int] | None, str | None]:
+    """Igual a get_current_storage_bytes, mas GROUP BY table_schema,
+    table_name em vez de somar tudo — usada pelo breakdown de custo por
+    tabela/dataset de get_budget (include_storage=True,
+    docs/specs/finops-budget.md v1.12). Mesma fonte $0, mesmo contrato de
+    erro: (dict, None) se ao menos uma região responder — merge por
+    (dataset_id, table_id) somando entre regiões —, (None, motivo) se
+    nenhuma responder. Nunca lança."""
+    if not regions:
+        return None, "nenhuma região com dataset no projeto"
+
+    filters: list[str] = []
+    params: list[bigquery.ArrayQueryParameter] = []
+    if datasets:
+        filters.append("table_schema IN UNNEST(@datasets)")
+        params.append(bigquery.ArrayQueryParameter("datasets", "STRING", datasets))
+    if tables:
+        filters.append("CONCAT(table_schema, '.', table_name) IN UNNEST(@tables)")
+        params.append(bigquery.ArrayQueryParameter("tables", "STRING", tables))
+    where = f"WHERE {' AND '.join(filters)}" if filters else ""
+
+    def _query_region(region: str) -> tuple[dict[tuple[str, str], int] | None, str | None]:
+        sql = f"""
+            SELECT table_schema, table_name,
+                   SUM(COALESCE(total_logical_bytes, 0)) AS logical_bytes
+            FROM `{project_id}.region-{region.lower()}.INFORMATION_SCHEMA.TABLE_STORAGE`
+            {where}
+            GROUP BY table_schema, table_name
+        """
+        try:
+            rows = list(
+                client.query(
+                    sql, job_config=bigquery.QueryJobConfig(query_parameters=params)
+                ).result()
+            )
+        except (GoogleAPICallError, ValueError) as exc:
+            reason = _short_error(exc)
+            logger.warning(
+                "Storage por tabela indisponível em region-%s de %s: %s",
+                region.lower(),
+                project_id,
+                reason,
+            )
+            return None, reason
+        return {
+            (row.table_schema, row.table_name): int(row.logical_bytes or 0) for row in rows
+        }, None
+
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        per_region = list(pool.map(_query_region, regions))
+
+    if all(result is None for result, _reason in per_region):
+        reasons = sorted({reason for _r, reason in per_region if reason})
+        return None, "; ".join(reasons) or "erro desconhecido"
+
+    merged: dict[tuple[str, str], int] = {}
+    for result, _reason in per_region:
+        if result is None:
+            continue
+        for key, byte_count in result.items():
+            merged[key] = merged.get(key, 0) + byte_count
+    return merged, None
+
+
 def get_date_like_columns(
     client: bigquery.Client, project_id: str, dataset_id: str, table_id: str, location: str
 ) -> list[str]:

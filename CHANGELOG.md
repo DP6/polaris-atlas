@@ -5,6 +5,59 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+### finops-cost-detail — `feat/finops-cost-detail` (backend + front-end)
+
+Pedido do usuário sobre a Visão Geral do FinOps: separar "Gasto no mês" (fixo,
+mês corrente) de "Gasto no período" (segue o filtro), deixar visualmente claro
+o que o filtro afeta, e trazer acompanhamento de custo por tabela/dataset
+(split query/storage, comparação com meta) — inicialmente desenhado como tela
+nova, depois **unificado** por decisão do usuário dentro da tela de Budget já
+existente ("Budget de custo" → "Detalhamento de custo").
+
+**Achado no meio do planejamento:** `git fetch` revelou que outra sessão já
+tinha fechado com o usuário um plano diferente pra essa mesma divergência do
+card "Gasto no mês" (PR #58, `docs(finops): planeja v1.11`), já mergeado —
+`cost-series` ganharia `total_cost_usd` e o card seria renomeado/refixado a
+partir dali, mais um endpoint `cost-history` de 24 meses via Firestore. Os
+dois planos foram **fundidos**: a parte de `cost-series.total_cost_usd` (real,
+não só spec) foi implementada aqui como pré-requisito do card "Gasto no
+período filtrado"; `cost-history` (Firestore, job diário, 24 meses) ficou
+fora do escopo — não foi tocado. `finops-budget.md` foi de v1.10 → v1.12
+(v1.11 já estava tomada pela spec do `cost-history`).
+
+- **Backend:** `get_cost_series` ganha `total_cost_usd` na resposta (soma dos
+  pontos, já filtrada por `cost_type`/janela — sem query nova). `get_budget`
+  ganha `include_storage` (bool) — quando `true` e `group_by` é
+  `table`/`dataset`, `CostGroup` ganha `storage_cost_usd`/`total_cost_usd` via
+  novo `repository.get_storage_bytes_by_table` (mesma
+  `INFORMATION_SCHEMA.TABLE_STORAGE` de `get_current_storage_bytes`, $0,
+  agrupada por tabela). **União, não interseção**: tabela com storage mas
+  sem query no período aparece com `cost_usd=0` — decisão do usuário, sinal
+  de tabela abandonada. Degrada pra query-only + warning se a região de
+  storage não responder. `finops-budget.md` → v1.12. 12 testes novos,
+  `uv run pytest tests/unit` = 851 ok.
+- **Frontend — `FinOpsOverviewPage`:** fix do bug real (card "Gasto no mês"
+  lia `budget.total_cost_usd`, que na verdade é o total da janela filtrada,
+  não do mês) — vira **dois** cards: "Gasto no mês" (sempre
+  `projection.cost_so_far_usd`, month-to-date real, nunca muda) e "Gasto no
+  período filtrado" (novo, `seriesQuery.data.total_cost_usd`). Período e Tipo
+  de custo saíram de dentro do `Panel` do gráfico pra um bloco visual único
+  (borda + fundo) que também contém o card filtrado — deixa óbvio por layout
+  o que o filtro afeta, sem precisar de texto explicativo (opção escolhida
+  pelo usuário entre 3 alternativas).
+- **Frontend — `BudgetPage` (renomeada "Detalhamento de custo" na UI, arquivo
+  e rota `/finops/budget` mantidos):** quando `group_by` é tabela/dataset —
+  toggle local "Tipo de custo" (filtra só o gráfico, sem parâmetro novo no
+  backend), ranking em barras empilhadas query+storage (top 10, `ComposedChart`
+  local, mesmo padrão já usado no gráfico de `group_by=day`), colunas extras
+  de custo query/storage/total, comparação com a meta cadastrada por
+  tabela/dataset (`useBudgets`, já existia — só nunca tinha sido comparada
+  com gasto real em lugar nenhum da UI) com badge "Dentro"/"Acima da meta", e
+  linha expansível com drill-down de série diária via `cost-series` filtrado
+  (busca sob demanda, só quando expandida — `useCostSeries` ganhou `enabled`).
+  Sidebar/`OptionCard` da Visão Geral renomeados junto, sem rota nova.
+  `pnpm lint` + `pnpm build` verdes.
+
 ## Refresh visual do Hub — rodada 3 (ajustes de UI, 2026-09)
 
 Terceira leva de ajustes finos após validação visual do usuário em `dev`. Sem

@@ -1,21 +1,47 @@
 # Spec — Domínio: FinOps — Budget de custo
 
-**Versão:** 1.11 (2026-09-04 — planejada, ver "Histórico mensal e
-consistência card/gráfico — pendente": `GET /finops/{p}/cost-series`
-ganha `total_cost_usd` na resposta [soma de `points[].total_cost_usd`,
-já filtrada por `cost_type`/janela/`datasets`/`tables` — nenhuma query
-BQ nova]; o card "Gasto no mês" da `FinOpsOverviewPage` passa a ler daqui
-em vez de `budget.total_cost_usd`, fechando a divergência com o
-"Acumulado" do gráfico [antes: card só somava query; gráfico em "Tudo"
-somava query+storage] e passando a herdar o filtro de `cost_type`, que
-antes só afetava o gráfico — renomeado pra "Gasto no período". Novo
-endpoint `GET /finops/{p}/cost-history` — totais **mensais** persistidos
-no Firestore [`hub_projects/{p}/finops_daily_costs/{data}`, granularidade
-diária, retenção **24 meses**, gravado pelo Job diário pra **todo**
-`hub_project` — não só o projeto aberto na UI], fora do alcance do cache
-de 31 dias de audit log, pra comparar até 24 meses pra trás. Não interfere
-com a projeção month-to-date da v1.10 abaixo — `projection` continua vindo
-só de `get_budget`.)
+**Versão:** 1.12 (2026-09-04 — fusão "Detalhamento de custo", branch
+`feat/finops-cost-detail`: `GET /finops/{p}/budget` ganha
+`include_storage` [bool, default `false`] — quando `true` e `group_by` é
+`table`/`dataset`, `CostGroup` ganha `storage_cost_usd`/`total_cost_usd`
+[**união** de chaves: toda tabela com storage > 0 aparece, mesmo as nunca
+consultadas na janela — `cost_usd=0` nesse caso, sinal de tabela
+abandonada]. Fonte nova só pro storage: `repository.get_storage_bytes_by_table`
+[mesma `INFORMATION_SCHEMA.TABLE_STORAGE` de `get_current_storage_bytes`,
+$0, agrupada por tabela em vez de somada]. A tela `BudgetPage`
+["Budget de custo" → **"Detalhamento de custo"**, mesma rota
+`/finops/budget`] passa a mostrar, quando `group_by` é tabela/dataset: um
+ranking em barras empilhadas query+storage, colunas de custo
+query/storage/total, comparação com a meta cadastrada por tabela/dataset
+[`GET .../budgets`, já existia — só nunca tinha sido comparada com gasto
+real em lugar nenhum da UI] e drill-down por linha [expande, busca sob
+demanda a série diária via `cost-series` filtrado pra aquela
+tabela/dataset]. Sem tela/rota/sidebar nova — tudo dentro da tela de
+Budget já existente, decisão do usuário depois de um primeiro desenho
+como tela separada.)
+v1.11 (2026-09-04 — `GET /finops/{p}/cost-series` ganha `total_cost_usd`
+na resposta [soma de `points[].total_cost_usd`, já filtrada por
+`cost_type`/janela/`datasets`/`tables` — nenhuma query BQ nova]:
+**implementado** na v1.12 acima como pré-requisito do fix abaixo. O card
+"Gasto no mês" da `FinOpsOverviewPage` estava lendo `budget.total_cost_usd`
+[só custo de query, e reagia ao filtro de período apesar do nome] — a
+correção final (decidida com o usuário) foi diferente do desenho original
+desta entrada: em vez de renomear um único card pra "Gasto no período",
+a tela ganhou **dois** cards — "Gasto no mês" [sempre month-to-date real,
+`budget.projection.cost_so_far_usd`, v1.10, nunca muda com o filtro] e
+"Gasto no período filtrado" [novo, lê `seriesQuery.data.total_cost_usd`
+— aqui sim a parte desta entrada — bate com o "Acumulado" do gráfico e
+herda o filtro de `cost_type`, que antes só afetava o gráfico]. O filtro
+de Período e de Tipo de custo saíram de dentro do `Panel` do gráfico pra
+um bloco visual único que também contém o card filtrado, deixando claro
+o que o filtro afeta. **Ainda planejado, não implementado nesta v1.12**:
+o endpoint novo `GET /finops/{p}/cost-history` — totais **mensais**
+persistidos no Firestore [`hub_projects/{p}/finops_daily_costs/{data}`,
+granularidade diária, retenção **24 meses**, gravado pelo Job diário pra
+**todo** `hub_project` — não só o projeto aberto na UI], fora do alcance
+do cache de 31 dias de audit log, pra comparar até 24 meses pra trás. Não
+interfere com a projeção month-to-date da v1.10 abaixo — `projection`
+continua vindo só de `get_budget`.)
 v1.10 (fix `fix/finops-projection-days-elapsed` — a projeção
 mensal (`projection.projected_month_total_usd`) virou **month-to-date
 real**, decidido pelo usuário entre as opções levantadas em
@@ -56,7 +82,7 @@ v1.5: CRUD de meta de custo por usuário (`domains/budget`). v1.4: cache de
 audit log **incremental**, janela 30 → **31 dias** — ver ASM-001)
 **Status:** Aprovada
 **Fase:** 4 — FinOps (segunda frente: budget por dataset/projeto)
-**Última atualização:** 2026-09-04 (v1.11)
+**Última atualização:** 2026-09-04 (v1.12)
 
 ---
 
@@ -77,9 +103,15 @@ usada pelo scanner de desperdício — nenhuma integração nova:
 2. **Top N queries mais caras** — os jobs individuais de maior custo.
 3. **Projeção do mês** — custo até agora, média diária, projeção pro
    total do mês.
-4. **Comparação com meses anteriores** (v1.11, planejada) — totais
-   mensais persistidos, até 24 meses pra trás. Ver "Histórico mensal
-   (`cost-history` — v1.11)".
+4. **Comparação com meses anteriores** (v1.11, planejada — não
+   implementada nesta v1.12) — totais mensais persistidos, até 24 meses
+   pra trás. Ver "Histórico mensal (`cost-history` — v1.11)".
+5. **Split query/storage e comparação com meta por tabela/dataset**
+   (v1.12) — quando `group_by` é tabela ou dataset, `include_storage`
+   soma o custo de storage (união com todas as tabelas que têm storage,
+   mesmo sem query no período) e a UI compara com a meta cadastrada. Ver
+   "Split de storage por tabela/dataset (`include_storage` — v1.12)"
+   abaixo.
 
 *(A v1.0 também tinha "top N gastadores" como visão separada — removida
 na v1.1: `group_by=user` cobre o mesmo caso, sem duplicar lógica de
@@ -194,6 +226,12 @@ Janela **"últimos N dias"** (rodada 3; antes era fixo no mês corrente).
   cache (hoje − 30 dias); se `from` vier depois de `to` após os clamps,
   o service troca os dois em vez de 422. Qualquer clamp entra no
   `warning` da resposta — nunca falha/trunca em silêncio.
+- `include_storage` (query, default `false`, v1.12) — quando `true` e
+  `group_by` é `table`/`dataset`, cada `CostGroup` ganha
+  `storage_cost_usd`/`total_cost_usd` (`null` nos dois quando o flag é
+  `false`, ou quando `group_by` não é table/dataset — ignorado
+  silenciosamente nesse caso, sem erro). Ver "Split de storage por
+  tabela/dataset" abaixo.
 
 **Projeção mensal (`projection`) — month-to-date real, v1.10:**
 sempre calculada sobre o dia 1 do mês corrente até hoje, **nunca** sobre
@@ -222,7 +260,9 @@ mais `projection.days_elapsed`.
       "key": "observability-hub-dev.RAW.ga4_events",
       "cost_usd": 5.68,
       "billed_bytes": 1000000000000,
-      "job_count": 12
+      "job_count": 12,
+      "storage_cost_usd": null,
+      "total_cost_usd": null
     }
   ],
   "total_cost_usd": 8.88,
@@ -254,10 +294,64 @@ que **o usuário logado** cadastrou pra este projeto (escopo `project`),
 lida do Firestore (ver "Cadastro de budget"). `null` quando não há
 cadastro — o `ComboChart` do FinOps simplesmente não desenha a linha de
 referência. Só o escopo `project` alimenta este campo; budgets de
-dataset/tabela aparecem só no CRUD abaixo (a linha do gráfico geral do
-projeto não teria como representar N metas de granularidade menor).
-Depende de `get_current_user` (o endpoint deixou de ser puramente
-project-scoped — passou a ter recorte por usuário).
+dataset/tabela até a v1.11 só apareciam no CRUD abaixo (a linha do gráfico
+geral do projeto não teria como representar N metas de granularidade
+menor) — a partir da v1.12, a tela "Detalhamento de custo" (`group_by`
+tabela/dataset) compara cada `CostGroup` com a meta de mesmo escopo,
+client-side (`GET .../budgets` já traz todos os escopos, ver "Split de
+storage por tabela/dataset" abaixo). Depende de `get_current_user` (o
+endpoint deixou de ser puramente project-scoped — passou a ter recorte
+por usuário).
+
+---
+
+## Split de storage por tabela/dataset (`include_storage` — v1.12)
+
+Antes da v1.12, `group_by=table`/`dataset` só somava custo de **query**
+(via os mesmos eventos de audit log de sempre) — não havia como ver,
+agrupado por tabela, quanto do custo é storage. `cost-series` (v1.6) já
+faz esse split, mas como série temporal única do projeto inteiro, sem
+quebra por tabela/dataset.
+
+**Fonte:** `repository.get_storage_bytes_by_table` — mesma view
+`INFORMATION_SCHEMA.TABLE_STORAGE` de `get_current_storage_bytes`
+(metadado, $0), só que com `GROUP BY table_schema, table_name` em vez de
+`SUM` — nenhuma query BigQuery nova de fato, é o mesmo padrão de
+fan-out por região já usado em todo o domínio. Custo de storage por
+chave usa a mesma metodologia "linha plana prorateada pelos dias da
+janela" de `_storage_cost_for_day` (já usada em `cost-series`).
+
+**União, não interseção:** quando `include_storage=true`, `groups`
+passa a incluir toda tabela com `storage_bytes > 0` — mesmo as que não
+tiveram nenhuma query na janela (`cost_usd=0` nesse caso). Decisão do
+usuário: esse é o sinal mais útil de FinOps aqui — uma tabela abandonada
+que só acumula custo de storage é exatamente o tipo de desperdício que
+esse domínio existe pra achar, e escondê-la (só decorar as tabelas já
+consultadas) deixaria esse caso invisível.
+
+**Escopo do parâmetro:** só tem efeito com `group_by=table` ou
+`group_by=dataset` — nas outras agregações (`user`/`day`/`month`/`year`)
+não existe um "dono" natural de bytes de storage, então `include_storage`
+é ignorado silenciosamente (sem warning, sem erro — `storage_cost_usd`/
+`total_cost_usd` continuam `null`). Também é ignorado se o endpoint for
+chamado sem `client` de BigQuery injetado (não deveria acontecer via API,
+só relevante pra quem chama `service.get_budget` diretamente, ex. testes).
+
+**Degradação:** se nenhuma região responder a query de storage
+(permissão, schema, etc.), `groups` volta só com o custo de query
+(comportamento pré-v1.12) e um `warning` explica o motivo — nunca falha o
+endpoint inteiro por causa do storage.
+
+**Frontend (`BudgetPage`, renomeada "Detalhamento de custo"):** quando
+`group_by` é tabela/dataset, a aba "Custo por agrupamento" ganha um
+toggle "Tipo de custo" (Tudo/Query/Storage — só filtra o gráfico de
+ranking, o backend não tem esse parâmetro), um gráfico de barras
+empilhadas com as 10 chaves de maior `total_cost_usd`, colunas extras na
+tabela (custo query/storage/total + meta + badge "Dentro"/"Acima da
+meta") e uma linha expansível por chave que busca sob demanda (só quando
+expandida) a série diária via `cost-series` filtrado pra aquela
+tabela/dataset (`tables=["dataset.table"]` ou `datasets=["dataset"]` —
+sem o `project_id`, formato que o filtro de `cost-series` já espera).
 
 ---
 
@@ -357,16 +451,19 @@ custo de **query** e de **storage** por período, filtrável.
 `points` é **contíguo** (um ponto por dia/mês da janela, mesmo sem custo
 — o gráfico não pode ter buraco).
 
-`total_cost_usd` (v1.11, planejada) — soma de `points[].total_cost_usd`
-da resposta inteira, já respeitando `cost_type`/`datasets`/`tables`/janela
-(nenhuma soma nova: os pontos já carregam o valor certo, isto só agrega).
-**Fonte única do card "Gasto no período" da `FinOpsOverviewPage`** — o
-card deixa de chamar `get_budget` pra esse número e passa a ler este
-campo, garantindo que bate com o "Acumulado" do `ComboChart` (mesma
-resposta) e reage a `cost_type`/data do jeito que o gráfico já reage,
-sem chamada HTTP extra. `budget_target_usd` e `projection`
-(month-to-date real, v1.10) continuam vindo só de `GET .../budget` — não
-têm equivalente aqui.
+`total_cost_usd` (v1.11, **implementado na v1.12**) — soma de
+`points[].total_cost_usd` da resposta inteira, já respeitando
+`cost_type`/`datasets`/`tables`/janela (nenhuma soma nova: os pontos já
+carregam o valor certo, isto só agrega). **Fonte do card "Gasto no
+período filtrado" da `FinOpsOverviewPage`** — o card lê este campo em vez
+de `budget.total_cost_usd`, garantindo que bate com o "Acumulado" do
+`ComboChart` (mesma resposta) e reage a `cost_type`/data do jeito que o
+gráfico já reage, sem chamada HTTP extra. Convive com um segundo card,
+"Gasto no mês" (`budget.projection.cost_so_far_usd`, v1.10, sempre
+month-to-date real, nunca muda com o filtro) — a v1.11 original previa só
+um card renomeado; a v1.12 manteve os dois, decisão do usuário.
+`budget_target_usd` e `projection` (month-to-date real, v1.10) continuam
+vindo só de `GET .../budget` — não têm equivalente aqui.
 
 ### De onde vem cada série
 
@@ -630,15 +727,15 @@ def get_budget(
 ```
 apps/backend/src/observability_hub/
 ├── api/v1/
-│   └── finops.py          # + GET /finops/{project_id}/budget?group_by=...
+│   └── finops.py          # + GET /finops/{project_id}/budget?group_by=...&include_storage=... (v1.12)
 │                          # + GET/PUT/DELETE /finops/{project_id}/budgets (CRUD, v1.5)
 │                          # + GET /finops/{project_id}/cost-series (v1.6)
 │                          # + GET /finops/{project_id}/table-scores (v1.7)
-│                          # + GET /finops/{project_id}/cost-history (v1.11, planejada)
+│                          # + GET /finops/{project_id}/cost-history (v1.11, planejada — não implementada)
 ├── domains/finops/
-│   ├── service.py          # + get_budget() (user_email → budget_target_usd; projeção month-to-date real, v1.10); + get_cost_series() (v1.6, + total_cost_usd na v1.11); + _table_efficiency_score() + compute_table_scores() (v1.7); + get_cost_history() (v1.11, planejada — lê só Firestore)
-│   ├── repository.py       # ScanEvent + get_scan_events_cached() (cache, ver finops-waste-scanner.md v1.4); _parse_table_ref filtra INFORMATION_SCHEMA; + StorageTimelineDay + get_storage_cost_timeline() (v1.6); + write_daily_cost_snapshot()/list_daily_cost_snapshots()/evict_daily_cost_snapshots_older_than() (v1.11, planejada — hub_projects/{p}/finops_daily_costs)
-│   └── schemas.py          # + BudgetResponse (+ budget_target_usd); + CostSeries* (v1.6, + total_cost_usd na v1.11); + TableScoreFactor, TableScore, TableScoresResponse (v1.7); + CostHistoryResponse, CostHistoryMonth (v1.11, planejada)
+│   ├── service.py          # + get_budget() (user_email → budget_target_usd; projeção month-to-date real, v1.10; include_storage + _merge_storage_into_groups(), v1.12); + get_cost_series() (v1.6, + total_cost_usd, v1.11/v1.12); + _table_efficiency_score() + compute_table_scores() (v1.7); + get_cost_history() (v1.11, planejada — não implementada)
+│   ├── repository.py       # ScanEvent + get_scan_events_cached() (cache, ver finops-waste-scanner.md v1.4); _parse_table_ref filtra INFORMATION_SCHEMA; + StorageTimelineDay + get_storage_cost_timeline() (v1.6); + get_storage_bytes_by_table() (v1.12 — storage por tabela/dataset, GROUP BY em vez de SUM); + write_daily_cost_snapshot()/list_daily_cost_snapshots()/evict_daily_cost_snapshots_older_than() (v1.11, planejada — hub_projects/{p}/finops_daily_costs)
+│   └── schemas.py          # + BudgetResponse (+ budget_target_usd); + CostGroup.storage_cost_usd/total_cost_usd (v1.12); + CostSeries* (v1.6, + total_cost_usd, v1.11/v1.12); + TableScoreFactor, TableScore, TableScoresResponse (v1.7); + CostHistoryResponse, CostHistoryMonth (v1.11, planejada)
 ├── domains/budget/          # v1.5 — CRUD de meta de custo por usuário (Firestore, espelha domains/favorites)
 │   ├── schemas.py           # BudgetScope, BudgetEntry, BudgetUpsertRequest, BudgetListResponse
 │   ├── repository.py        # _budget_doc_id, list/upsert/remove_budget, get_project_budget_amount
@@ -646,17 +743,23 @@ apps/backend/src/observability_hub/
 ├── jobs/
 │   └── refresh_event_cache.py   # v1.11, planejada — depois do scan do dia, grava o snapshot diário de custo (query do dia + foto de storage) por hub_project e evicta o que passou de 24 meses
 └── tests/unit/
-    ├── finops/test_service.py      # + get_budget/budget_target_usd + get_cost_series (v1.6) + _table_efficiency_score / compute_table_scores (v1.7) + total_cost_usd / get_cost_history (v1.11, planejada)
-    ├── finops/test_repository.py   # + INFORMATION_SCHEMA filter + get_storage_cost_timeline (v1.6) + snapshot diário / eviction 24 meses (v1.11, planejada)
+    ├── finops/test_service.py      # + get_budget/budget_target_usd + get_cost_series (v1.6) + _table_efficiency_score / compute_table_scores (v1.7) + total_cost_usd (v1.12) + get_budget(include_storage=True) (v1.12) + get_cost_history (v1.11, planejada)
+    ├── finops/test_repository.py   # + INFORMATION_SCHEMA filter + get_storage_cost_timeline (v1.6) + get_storage_bytes_by_table (v1.12) + snapshot diário / eviction 24 meses (v1.11, planejada)
     └── budget/{test_repository,test_service}.py  # v1.5 — doc_id por escopo, preservação de created_at, get_project_budget_amount
 ```
 
-Frontend (`apps/frontend/src/features/finops/BudgetPage.tsx`): o gate
+Frontend (`apps/frontend/src/features/finops/BudgetPage.tsx`, renomeada
+"Detalhamento de custo" na UI — arquivo/rota mantidos, v1.12): o gate
 pré-run tem `LookbackPicker` compartilhado (presets 7/15/30 + "Outro",
 `components/LookbackPicker.tsx`, também usado por Tabelas órfãs) + seletor
 de `group_by` + limite. Depois de "Executar", duas abas via `Tabs` do
-shadcn/ui — "Custo por agrupamento" (seletor de
-`group_by` em pill buttons, tabela ordenável, total no rodapé via
+shadcn/ui — "Custo por agrupamento" (seletor de `group_by` em pill
+buttons; quando `group_by` é tabela/dataset e a resposta trouxe split de
+storage: toggle "Tipo de custo" local, gráfico de ranking em barras
+empilhadas query+storage [top 10], colunas extras de custo query/storage/
+total + meta cadastrada [`useBudgets`, join client-side por escopo] +
+badge "Dentro"/"Acima da meta", linha expansível com drill-down de série
+diária via `cost-series` filtrado; tabela ordenável, total no rodapé via
 `TableFooter`) e "Queries mais caras" (tabela ordenável por custo/bytes/
 data; coluna "Tabelas" como badges; texto da query oculto por padrão,
 com toggle "Ver query"/"Ocultar query" por linha que expande um bloco
@@ -688,6 +791,9 @@ tinha com o texto da query inline na célula).
 | **cost-series:** timeline de storage indisponível em todas as regiões | `storage_available=false`, `storage_cost_usd=0` em todos os pontos, `query_cost_usd` intacto, `warning` explica — nunca 500 |
 | **cost-series:** dia sem query e sem storage | Ponto presente com os três valores `0` (série contígua, sem buraco) |
 | **cost-series:** `cost_type=query` | Timeline de storage nem é consultada; `storage_available=false` |
+| **budget:** `include_storage=true` com `group_by` fora de table/dataset | Ignorado silenciosamente — `storage_cost_usd`/`total_cost_usd` continuam `null` em todo `CostGroup`, sem warning |
+| **budget:** `include_storage=true` e nenhuma região responde a query de storage | `groups` volta idêntico ao comportamento pré-v1.12 (só custo de query), `warning` explica o motivo — nunca falha o endpoint inteiro |
+| **budget:** tabela com storage > 0 mas nenhuma query no período (`include_storage=true`) | Aparece em `groups` com `cost_usd=0`/`billed_bytes=0`/`job_count=0` e `storage_cost_usd` > 0 — decisão do usuário (união, não interseção) |
 | **cost-history:** mês pedido sem nenhum doc gravado no Firestore | Aparece na resposta com os três custos `0.0` e `days_recorded=0` — série contígua, sem buraco (mesmo princípio de `cost-series`) |
 | **cost-history:** `months` fora de 1–24 | Clampado no service (não é 422) — 24 é o teto de retenção do Firestore, não uma escolha do chamador |
 | **cost-history:** Job de um dia específico falhou (não gravou o snapshot daquele dia) | O mês correspondente sai com `days_recorded` menor que o total de dias do mês — nunca preenchido retroativamente por estimativa |
