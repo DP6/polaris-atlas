@@ -136,6 +136,41 @@ barras verticais sempre visíveis.
 - `AppLayout`: `<main>` de `p-6` → `px-6 pt-6 pb-16` — respiro no fim de toda página
   (cards/ícones/texto não encostavam na borda inferior ao rolar até o fim).
 
+### finops-overview-date-range — `feat/finops-overview-date-range` (backend + front-end)
+
+Revisão pedida pelo usuário sobre a Visão Geral do FinOps: investigar a projeção mensal,
+implementar filtro de data + teto no gráfico, debater onde colocar comparação de budget por
+dataset/tabela. Só a 2ª frente virou código aqui — a 1ª foi investigação (achado abaixo,
+correção não aplicada) e a 3ª ficou como opções levantadas pro usuário decidir.
+
+- **Investigado (sem fix):** `projected_month_total_usd` colapsa pra `≈ cost_so_far_usd` o
+  tempo todo com o `lookback_days` default (30) — não é caso de borda de fim de mês.
+  Causa: `R3-finops-budget-period` trocou `lookback_days` de "dias decorridos do mês
+  corrente" pra uma janela rolante configurável, mas a fórmula da projeção
+  (`daily_average × days_in_month`) continua assumindo a semântica antiga; como
+  `lookback_days` (30) e `days_in_month` (28–31) ficam sempre próximos, o resultado é
+  quase sempre igual ao gasto atual. Fix conceitual (não aplicado): separar
+  `days_elapsed_in_month` (calendário) de `lookback_days` (janela de dados) — decisão do
+  usuário, fora deste PR.
+- **Backend:** `_resolve_date_window` (helper puro, `domains/finops/service.py`) resolve a
+  janela efetiva de `get_budget`/`get_cost_series` — modo legado (`lookback_days`,
+  comportamento inalterado) ou filtro de data explícito (`from`/`to`, `YYYY-MM-DD`, alias
+  do FastAPI, mesmo padrão de `admin/analytics/logins`), clampado no piso do cache (~31
+  dias) e num fim de janela nunca no futuro; troca `from`/`to` invertidos em vez de 422.
+  Todo clamp vira `warning` explícito. `BudgetResponse` ganha `period_end`.
+  `_BUDGET_MAX_LOOKBACK_DAYS`/`_COST_SERIES_MAX_LOOKBACK_DAYS` unificados em
+  `_FINOPS_CACHE_MAX_DAYS`. `finops-budget.md` → v1.9. 13 testes novos,
+  `uv run pytest tests/unit` = 838 ok.
+- **Frontend:** `FinOpsOverviewPage` ganha um filtro de período real — atalhos "Mês
+  atual"/"Tudo" (`ChoiceToggle`) + dois `DateField` ("De"/"Até", já existente no design
+  system — sem instalar shadcn `Calendar` novo). O teto de budget (`refLine` do
+  `ComboChart`, já existia) só desenha quando a janela efetiva tem ≥ 20 dias
+  (`MIN_RANGE_DAYS_FOR_BUDGET_REF_LINE`) — comparar um intervalo curto contra uma meta
+  mensal inteira enganaria. `useBudget`/`useCostSeries`/`finopsApi.getBudget`/
+  `getCostSeries` ganham `from`/`to` opcionais, sem quebrar os call sites existentes
+  (`BudgetPage`, que fica como está — continua com seu próprio `LookbackPicker`).
+- `pnpm lint` + `pnpm build` verdes.
+
 ## Refresh visual do Hub — rodada 2 (2026-09)
 
 Segunda rodada, sobre as lacunas que a rodada 1 marcou como "especificado,

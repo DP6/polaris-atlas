@@ -5,6 +5,7 @@ import { CacheStalenessBadge } from '@/components/CacheStalenessBadge'
 import { ChoiceToggle } from '@/components/ChoiceToggle'
 import { ComboChart } from '@/components/ComboChart'
 import { CompositeScoreRing } from '@/components/CompositeScoreRing'
+import { DateField } from '@/components/DateField'
 import { LoadingState } from '@/components/LoadingState'
 import { OptionCard, OptionCardGrid } from '@/components/OptionCard'
 import { PageHeader } from '@/components/PageHeader'
@@ -37,6 +38,35 @@ const COST_TYPE_OPTIONS: { value: CostType; label: string }[] = [
   { value: 'storage', label: 'Storage' },
 ]
 
+// Filtro de data do gráfico (rodada 3, AC-FIN-RV-02) — dois atalhos
+// nomeados + os dois DateField ("De"/"Até") pra um intervalo customizado
+// qualquer. from/to vazios = "Tudo": o back-end cai no lookback_days
+// default (mesmo comportamento de antes do filtro existir).
+// 'custom' nunca é clicável (não entra em DATE_PRESET_OPTIONS) — só marca
+// "nenhum atalho ativo" quando o usuário digita um intervalo à mão.
+type DatePreset = 'month' | 'all' | 'custom'
+const DATE_PRESET_OPTIONS: { value: DatePreset; label: string }[] = [
+  { value: 'month', label: 'Mês atual' },
+  { value: 'all', label: 'Tudo' },
+]
+// Mínimo de dias pra o teto de budget (meta MENSAL) fazer sentido como
+// comparação — evita desenhar a linha contra um intervalo curto/estranho
+// onde "dentro do orçamento" enganaria (ver refLine mais abaixo).
+const MIN_RANGE_DAYS_FOR_BUDGET_REF_LINE = 20
+
+function toDateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function todayKey(): string {
+  return toDateKey(new Date())
+}
+
+function currentMonthStartKey(): string {
+  const now = new Date()
+  return toDateKey(new Date(now.getFullYear(), now.getMonth(), 1))
+}
+
 function pickValue(
   point: { query_cost_usd: number; storage_cost_usd: number; total_cost_usd: number },
   costType: CostType,
@@ -57,9 +87,34 @@ export function FinOpsOverviewPage() {
   const [granularity, setGranularity] = useState<CostSeriesGranularity>('day')
   const [costType, setCostType] = useState<CostType>('all')
   const [configOpen, setConfigOpen] = useState(false)
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
 
-  const budgetQuery = useBudget(projectId)
-  const seriesQuery = useCostSeries(projectId, { granularity, costType })
+  const datePreset: DatePreset =
+    dateFrom === currentMonthStartKey() && dateTo === todayKey()
+      ? 'month'
+      : !dateFrom && !dateTo
+        ? 'all'
+        : 'custom' // intervalo customizado — nenhum atalho fica marcado
+  function applyDatePreset(preset: DatePreset) {
+    if (preset === 'month') {
+      setDateFrom(currentMonthStartKey())
+      setDateTo(todayKey())
+    } else if (preset === 'all') {
+      setDateFrom('')
+      setDateTo('')
+    }
+  }
+  const dateRange =
+    dateFrom || dateTo ? { from: dateFrom || undefined, to: dateTo || undefined } : undefined
+
+  const budgetQuery = useBudget(projectId, 'table', 10, 30, true, dateRange)
+  const seriesQuery = useCostSeries(projectId, {
+    granularity,
+    costType,
+    from: dateRange?.from,
+    to: dateRange?.to,
+  })
   const scoresQuery = useTableScores(projectId)
 
   const chartData = useMemo(() => {
@@ -82,6 +137,18 @@ export function FinOpsOverviewPage() {
   const projectedOverBudget =
     budget?.budget_target_usd != null &&
     budget.projection.projected_month_total_usd > budget.budget_target_usd
+
+  // O teto de budget é uma meta MENSAL — comparar contra um intervalo
+  // curto (ex: 5 dias) enganaria ("dentro do orçamento" cedo demais).
+  // "Mês atual" e "Tudo" (~31 dias) sempre passam; um intervalo
+  // customizado curto esconde a linha sozinho.
+  const rangeDays = budget
+    ? Math.round(
+        (new Date(budget.period_end).getTime() - new Date(budget.period_start).getTime()) /
+          86_400_000,
+      ) + 1
+    : 0
+  const showBudgetRefLine = rangeDays >= MIN_RANGE_DAYS_FOR_BUDGET_REF_LINE
 
   const refreshing = budgetQuery.isFetching || seriesQuery.isFetching || scoresQuery.isFetching
 
@@ -158,18 +225,45 @@ export function FinOpsOverviewPage() {
             : undefined
         }
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <ChoiceToggle
-              aria-label="Granularidade"
-              options={GRANULARITY_OPTIONS}
-              value={granularity}
-              onChange={setGranularity}
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-1">
+              <span className="text-label text-muted-foreground">Granularidade</span>
+              <ChoiceToggle
+                aria-label="Granularidade"
+                options={GRANULARITY_OPTIONS}
+                value={granularity}
+                onChange={setGranularity}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-label text-muted-foreground">Tipo de custo</span>
+              <ChoiceToggle
+                aria-label="Tipo de custo"
+                options={COST_TYPE_OPTIONS}
+                value={costType}
+                onChange={setCostType}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-label text-muted-foreground">Período</span>
+              <ChoiceToggle
+                aria-label="Atalhos de período"
+                options={DATE_PRESET_OPTIONS}
+                value={datePreset}
+                onChange={applyDatePreset}
+              />
+            </div>
+            <DateField
+              id="finops-date-from"
+              label="De"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
             />
-            <ChoiceToggle
-              aria-label="Tipo de custo"
-              options={COST_TYPE_OPTIONS}
-              value={costType}
-              onChange={setCostType}
+            <DateField
+              id="finops-date-to"
+              label="Até"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
             />
           </div>
         }
@@ -195,7 +289,7 @@ export function FinOpsOverviewPage() {
                 },
               ]}
               refLine={
-                budget?.budget_target_usd != null
+                showBudgetRefLine && budget?.budget_target_usd != null
                   ? { y: budget.budget_target_usd, label: 'Meta' }
                   : undefined
               }

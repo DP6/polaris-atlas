@@ -667,6 +667,137 @@ def test_get_budget_injects_user_budget_target_from_firestore(monkeypatch):
     assert result.budget_target_usd == 250.0
 
 
+# --- _resolve_date_window (filtro de data real, rodada 3, AC-FIN-RV-02) ------
+
+
+def test_resolve_date_window_legacy_mode_uses_lookback_days():
+    now = _now()
+
+    start, end, lookback_days, warning = service._resolve_date_window(now, 7, None, None)
+
+    assert end == now.date()
+    assert start == now.date() - timedelta(days=6)
+    assert lookback_days == 7
+    assert warning is None
+
+
+def test_resolve_date_window_legacy_mode_clamps_to_cache_ceiling():
+    now = _now()
+
+    _start, _end, lookback_days, warning = service._resolve_date_window(now, 999, None, None)
+
+    assert lookback_days == 31
+    assert warning is None  # clamp do modo legado é comportamento pré-existente, sem aviso
+
+
+def test_resolve_date_window_explicit_range_is_used_as_is():
+    now = _now()
+    from_date = (now - timedelta(days=5)).date()
+    to_date = (now - timedelta(days=1)).date()
+
+    start, end, lookback_days, warning = service._resolve_date_window(now, 30, from_date, to_date)
+
+    assert start == from_date
+    assert end == to_date
+    assert lookback_days == 5
+    assert warning is None
+
+
+def test_resolve_date_window_clamps_future_end_date_and_warns():
+    now = _now()
+    future = (now + timedelta(days=3)).date()
+
+    _start, end, _lookback_days, warning = service._resolve_date_window(now, 30, None, future)
+
+    assert end == now.date()
+    assert warning is not None
+    assert "futuro" in warning
+
+
+def test_resolve_date_window_clamps_start_date_older_than_cache_floor_and_warns():
+    now = _now()
+    too_old = (now - timedelta(days=60)).date()
+
+    start, _end, _lookback_days, warning = service._resolve_date_window(now, 30, too_old, None)
+
+    assert start == now.date() - timedelta(days=30)  # piso do cache: 31 dias, hoje incluso
+    assert warning is not None
+    assert "cache de audit log" in warning
+
+
+def test_resolve_date_window_swaps_inverted_range_defensively():
+    now = _now()
+    later = now.date()
+    earlier = (now - timedelta(days=5)).date()
+
+    # from_date depois de to_date -> troca defensivamente, nunca 422.
+    start, end, _lookback_days, _warning = service._resolve_date_window(now, 30, later, earlier)
+
+    assert start == earlier
+    assert end == later
+
+
+# --- get_budget com from_date/to_date (rodada 3, AC-FIN-RV-02) ---------------
+
+
+def test_get_budget_with_explicit_from_to_narrows_the_window(monkeypatch):
+    # Evento de 10 dias atrás fica fora de um intervalo de 5 dias.
+    events = [_event([("proj", "RAW", "a")], _days_ago(10), total_billed_bytes=10**12)]
+    _stub_budget_events(monkeypatch, events)
+
+    from_date = _days_ago(5).date()
+    to_date = _now().date()
+    result = service.get_budget(
+        MagicMock(), MagicMock(), MagicMock(), "proj", from_date=from_date, to_date=to_date
+    )
+
+    assert result.groups == []
+    assert result.period_start.date() == from_date
+    assert result.period_end.date() == to_date
+
+
+def test_get_budget_explicit_from_to_includes_event_inside_range(monkeypatch):
+    events = [_event([("proj", "RAW", "a")], _days_ago(3), total_billed_bytes=10**12)]
+    _stub_budget_events(monkeypatch, events)
+
+    result = service.get_budget(
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        "proj",
+        from_date=_days_ago(5).date(),
+        to_date=_now().date(),
+    )
+
+    assert result.groups != []
+
+
+def test_get_budget_clamps_start_date_older_than_cache_and_surfaces_warning(monkeypatch):
+    _stub_budget_events(monkeypatch, [])
+
+    result = service.get_budget(
+        MagicMock(), MagicMock(), MagicMock(), "proj", from_date=_days_ago(90).date()
+    )
+
+    assert result.warning is not None
+    assert "cache de audit log" in result.warning
+
+
+def test_get_budget_clamps_future_to_date_and_surfaces_warning(monkeypatch):
+    _stub_budget_events(monkeypatch, [])
+
+    result = service.get_budget(
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        "proj",
+        to_date=(_now() + timedelta(days=10)).date(),
+    )
+
+    assert result.warning is not None
+    assert "futuro" in result.warning
+
+
 # --- get_cost_series ---------------------------------------------------------
 
 
@@ -782,6 +913,35 @@ def test_get_cost_series_dataset_filter_excludes_nonmatching_query_events(monkey
     )
 
     assert all(p.query_cost_usd == 0 for p in result.points)
+
+
+def test_get_cost_series_with_explicit_from_to_returns_that_range(monkeypatch):
+    from_date = _days_ago(4).date()
+    to_date = _days_ago(1).date()
+
+    result = _cost_series(
+        monkeypatch, events=[], current_bytes=0, from_date=from_date, to_date=to_date
+    )
+
+    assert result.period_start.date() == from_date
+    assert result.period_end.date() == to_date
+    assert len(result.points) == 4
+
+
+def test_get_cost_series_period_end_reflects_explicit_to_date_not_now(monkeypatch):
+    to_date = _days_ago(5).date()
+
+    result = _cost_series(monkeypatch, events=[], current_bytes=0, to_date=to_date)
+
+    assert result.period_end.date() == to_date
+    assert result.period_end.date() != _now().date()
+
+
+def test_get_cost_series_clamps_start_date_older_than_cache_and_warns(monkeypatch):
+    result = _cost_series(monkeypatch, events=[], current_bytes=0, from_date=_days_ago(90).date())
+
+    assert result.warning is not None
+    assert "cache de audit log" in result.warning
 
 
 # --- _table_efficiency_score / compute_table_scores --------------------------

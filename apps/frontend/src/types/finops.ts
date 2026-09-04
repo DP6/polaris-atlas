@@ -49,6 +49,7 @@ export interface CostProjection {
 export interface BudgetResponse {
   project_id: string
   period_start: string
+  period_end: string
   lookback_days: number
   group_by: BudgetGroupBy
   groups: CostGroup[]

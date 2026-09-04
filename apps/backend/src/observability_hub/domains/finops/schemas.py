@@ -99,6 +99,7 @@ class CostProjection(BaseModel):
 class BudgetResponse(BaseModel):
     project_id: str
     period_start: datetime
+    period_end: datetime
     lookback_days: int
     group_by: BudgetGroupBy
     groups: list[CostGroup]

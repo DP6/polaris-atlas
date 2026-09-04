@@ -1,6 +1,17 @@
 # Spec — Domínio: FinOps — Budget de custo
 
-**Versão:** 1.8 (rodada 3 — `GET /finops/{p}/budget` ganhou `lookback_days`
+**Versão:** 1.9 (rodada 3 — filtro de data real na Visão Geral, AC-FIN-RV-02:
+`GET /finops/{p}/budget` e `GET /finops/{p}/cost-series` ganham `from`/`to`
+(query, `YYYY-MM-DD`) — um intervalo explícito, que passa a valer sobre
+`lookback_days` quando presente. Continuam clampados no piso do cache
+(~31 dias) e num fim de janela nunca no futuro — `_resolve_date_window`
+central aos dois endpoints, nunca 422, sempre um `warning` quando algo foi
+ajustado. `BudgetResponse` ganha `period_end` (só tinha `period_start`).
+FE: `FinOpsOverviewPage` ganha os atalhos "Mês atual"/"Tudo" + dois
+`DateField` ("De"/"Até") — a linha de teto do budget (`refLine`) só
+aparece quando a janela efetiva tem ≥ 20 dias, pra não comparar um
+intervalo curto contra uma meta mensal inteira.)
+v1.8 (rodada 3 — `GET /finops/{p}/budget` ganhou `lookback_days`
 (1–31, default 30); a janela deixou de ser fixa no mês corrente e a
 projeção virou run-rate `média_da_janela × dias_do_mês`. FE: `LookbackPicker`
 compartilhado, seletor 7/15/30 no gate do `BudgetPage`.)
@@ -13,7 +24,7 @@ v1.5: CRUD de meta de custo por usuário (`domains/budget`). v1.4: cache de
 audit log **incremental**, janela 30 → **31 dias** — ver ASM-001)
 **Status:** Aprovada
 **Fase:** 4 — FinOps (segunda frente: budget por dataset/projeto)
-**Última atualização:** 2026-09-01
+**Última atualização:** 2026-09-04
 
 ---
 
@@ -141,12 +152,20 @@ Janela **"últimos N dias"** (rodada 3; antes era fixo no mês corrente).
   clampa (não é 422). A **projeção mensal** (`projected_month_total_usd`)
   passou a ser `média_diária_da_janela × dias_do_mês` — não é mais
   "resto do mês corrente".
+- `from`/`to` (query, `YYYY-MM-DD`, rodada 3 — filtro de data real da
+  Visão Geral, AC-FIN-RV-02) — intervalo explícito, que **sobrescreve**
+  `lookback_days` quando presente (`_resolve_date_window`). `to` clampado
+  pra nunca ficar no futuro (vira hoje); `from` clampado pro piso do
+  cache (hoje − 30 dias); se `from` vier depois de `to` após os clamps,
+  o service troca os dois em vez de 422. Qualquer clamp entra no
+  `warning` da resposta — nunca falha/trunca em silêncio.
 
 **Response 200:**
 ```json
 {
   "project_id": "observability-hub-dev",
   "period_start": "2026-08-01T00:00:00Z",
+  "period_end": "2026-08-15T00:00:00Z",
   "lookback_days": 15,
   "group_by": "table",
   "groups": [
@@ -259,6 +278,11 @@ custo de **query** e de **storage** por período, filtrável.
   timeline de storage inteira (`storage_available=false`).
 - `lookback_days` — 1–31, default 30. Teto de 31 porque o cache de audit
   log só guarda 31 dias (v1.4) e o gráfico combina os dois eixos.
+- `from`/`to` (query, `YYYY-MM-DD`, rodada 3) — mesmo `_resolve_date_window`
+  de `get_budget`: sobrescreve `lookback_days` quando presente, mesmo
+  clamp no piso do cache e no fim no futuro, mesmo `warning` quando ajusta.
+  `period_end` da resposta passa a refletir o `to` efetivo (antes era
+  sempre "agora").
 - `datasets` — repetível; restringe a esses datasets.
 - `tables` — repetível, forma `dataset.table`; restringe a essas tabelas.
 
@@ -558,19 +582,22 @@ usuarios (ASM-005 do brief).
 | ID | Comportamento | Teste |
 |---|---|---|
 | AC-FIN-RV-01 | Grafico de custo = combo **coluna (diario) + linha (acumulado)**, com projecao tracejada e linha de budget. | `test_finops_cost_combo_chart` |
-| AC-FIN-RV-02 | Filtros do grafico: dataset, tabela, granularidade (mes/dia), tipo de custo (query / storage / ambos). **Backend (R2-10):** `GET /finops/{p}/cost-series?granularity=&cost_type=&lookback_days=&datasets=&tables=` → série contígua de `query_cost_usd`/`storage_cost_usd`/`total_cost_usd` por período. | `test_get_cost_series_month_granularity_uses_year_month_keys`, `test_get_cost_series_dataset_filter_excludes_nonmatching_query_events`, `test_get_cost_series_cost_type_query_skips_storage`, `test_get_cost_series_adds_storage_cost_when_timeline_present` |
+| AC-FIN-RV-02 | Filtros do grafico: dataset, tabela, granularidade (mes/dia), tipo de custo (query / storage / ambos), **periodo (data final / intervalo customizado, atalhos "Mês atual"/"Tudo" — rodada 3)**. **Backend (R2-10 + rodada 3):** `GET /finops/{p}/cost-series?granularity=&cost_type=&lookback_days=&from=&to=&datasets=&tables=` → série contígua de `query_cost_usd`/`storage_cost_usd`/`total_cost_usd` por período; `from`/`to` sobrescrevem `lookback_days` via `_resolve_date_window` (mesmo helper de `get_budget`), clampados no piso do cache e nunca no futuro. O teto de budget (`refLine`) só desenha quando a janela efetiva tem ≥ 20 dias (senão comparar contra uma meta mensal inteira engana). | `test_get_cost_series_month_granularity_uses_year_month_keys`, `test_get_cost_series_dataset_filter_excludes_nonmatching_query_events`, `test_get_cost_series_cost_type_query_skips_storage`, `test_get_cost_series_adds_storage_cost_when_timeline_present`, `test_resolve_date_window_explicit_range_is_used_as_is`, `test_resolve_date_window_clamps_future_end_date_and_warns`, `test_resolve_date_window_clamps_start_date_older_than_cache_floor_and_warns`, `test_resolve_date_window_swaps_inverted_range_defensively`, `test_get_cost_series_with_explicit_from_to_returns_that_range`, `test_get_budget_with_explicit_from_to_narrows_the_window` |
 | AC-FIN-RV-03 | **Dois scores distintos**: (a) "Eficiencia de custo" geral do projeto (anel composto - ja prototipado); (b) "Score por tabela" individual - coluna "Score" ordenavel (anel compacto + numero) no scanner de desperdicio / Top ofensores **e** anel grande + decomposicao no drill-down da linha (Q-002). **Backend (R2-11):** `GET /finops/{p}/table-scores` → `project_efficiency_score` + `tables[].score` + `tables[].factors[]` (decomposicao). Formula provisoria (Q-002). | `test_table_efficiency_score_penalizes_large_never_scanned_table`, `test_table_efficiency_score_penalizes_unpartitioned_with_big_savings`, `test_compute_table_scores_sorts_worst_first_and_aggregates_project`, `test_compute_table_scores_uses_partition_candidate_savings` |
 | AC-FIN-RV-04 | Cadastro de budget com granularidade por **dataset e por tabela** (`scope=project\|dataset\|table` no CRUD). So cadastro simples - sem convite/aceite/compartilhamento. GET/PUT/DELETE `/finops/{p}/budgets`, por usuario (Firestore). O valor de `scope=project` volta como `budget_target_usd` no `GET /finops/{p}/budget`. | `test_upsert_budget_dataset_scope_uses_two_segment_doc_id`, `test_upsert_request_rejects_dataset_scope_without_dataset_id`, `test_get_budget_injects_user_budget_target_from_firestore` |
 | AC-FIN-RV-05 | "Top ofensores" com mini-grafico de tendencia de 7 dias por linha. | `test_finops_top_offenders_trend` |
 
 Status (2026-09): **backend de AC-FIN-RV-02/03/04 implementado** —
 R2-9 (`budgets` CRUD + `budget_target_usd`), R2-10
-(`cost-series`), R2-11 (`table-scores`). Falta a UI: R2-12 monta
+(`cost-series`), R2-11 (`table-scores`). R2-12 montou
 `FinOpsOverviewPage` consumindo os três endpoints (big numbers +
 `ComboChart` com filtros + anel de eficiência + coluna "Score" +
 drill-down + Top ofensores) — fecha AC-FIN-RV-01/02/03/05 no front. A
-fórmula do score (Q-002) e os filtros do gráfico entram no review
-do PR final.
+rodada 3 fechou o filtro de período de AC-FIN-RV-02 (antes só
+granularidade/tipo de custo existiam; período ainda era fixo em
+`lookback_days`): `from`/`to` em `get_budget`/`get_cost_series`, dois
+`DateField` + atalhos "Mês atual"/"Tudo" no front. A fórmula do score
+(Q-002) segue em aberto pro review do PR final.
 
 Suposicao **ASM-FIN-RV-01** (respondida, R2-10/R2-11): AC-FIN-RV-02 exigiu
 endpoint novo (`cost-series`) com query nova de storage (só

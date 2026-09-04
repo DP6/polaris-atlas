@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, Query
 from google.cloud import bigquery, firestore, storage
 from google.cloud import logging as cloud_logging
@@ -61,6 +63,8 @@ def get_budget(
     group_by: BudgetGroupBy = Query(default=BudgetGroupBy.TABLE),
     limit: int = Query(default=10, ge=1, le=50),
     lookback_days: int = Query(default=30, ge=1, le=31),
+    from_date: date | None = Query(default=None, alias="from"),
+    to_date: date | None = Query(default=None, alias="to"),
     user: UserInfo = Depends(get_current_user),
     logging_client: cloud_logging.Client = Depends(get_logging_client),
     storage_client: storage.Client = Depends(get_storage_client),
@@ -74,6 +78,8 @@ def get_budget(
         group_by=group_by,
         limit=limit,
         lookback_days=lookback_days,
+        from_date=from_date,
+        to_date=to_date,
         user_email=user.email,
     )
 
@@ -84,6 +90,8 @@ def get_cost_series(
     granularity: CostSeriesGranularity = Query(default=CostSeriesGranularity.DAY),
     cost_type: CostType = Query(default=CostType.ALL),
     lookback_days: int = Query(default=30, ge=1, le=31),
+    from_date: date | None = Query(default=None, alias="from"),
+    to_date: date | None = Query(default=None, alias="to"),
     datasets: list[str] | None = Query(default=None),
     tables: list[str] | None = Query(default=None),
     client: bigquery.Client = Depends(get_client),
@@ -100,6 +108,8 @@ def get_cost_series(
         granularity=granularity,
         cost_type=cost_type,
         lookback_days=lookback_days,
+        from_date=from_date,
+        to_date=to_date,
         datasets=datasets,
         tables=tables,
     )

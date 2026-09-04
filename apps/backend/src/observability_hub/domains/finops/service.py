@@ -57,10 +57,14 @@ _MIN_TABLE_SIZE_BYTES_FOR_PARTITION_CANDIDATE = 1_073_741_824  # 1 GB
 _CONSERVATIVE_REDUCTION = 0.30
 _OPTIMISTIC_REDUCTION = 0.70
 _BUDGET_TOP_N_DEFAULT = 10
-# Janela do budget: "últimos N dias". Default = 30 (comportamento próximo
-# do mês corrente); teto = 31 (o cache de audit log não guarda mais).
+# Teto de retenção do cache de audit log — nem "últimos N dias" nem um
+# filtro de data explícito (from/to) conseguem alcançar mais que isso.
+# Era duas constantes (uma por endpoint); unificada porque é o mesmo
+# limite físico dos dois (_resolve_date_window).
+_FINOPS_CACHE_MAX_DAYS = 31
+# Janela default do budget quando nenhum filtro é passado: "últimos N
+# dias", N = 30 (comportamento próximo do mês corrente).
 _BUDGET_DEFAULT_LOOKBACK_DAYS = 30
-_BUDGET_MAX_LOOKBACK_DAYS = 31
 _COLUMN_TYPE_SCAN_TIMEOUT_SECONDS = 120.0
 _COLUMN_TYPE_SCAN_MAX_WORKERS = 4
 _STORAGE_BYTES_OVERHEAD = (
@@ -267,6 +271,61 @@ def _group_keys(
     return [str(event.timestamp.year)]  # YEAR
 
 
+def _resolve_date_window(
+    now: datetime,
+    lookback_days: int,
+    from_date: date | None,
+    to_date: date | None,
+) -> tuple[date, date, int, str | None]:
+    """Resolve a janela efetiva de dados pra get_budget/get_cost_series —
+    dois modos:
+
+    - Legado (from_date/to_date ambos None): "últimos N dias" a partir de
+      hoje, N = lookback_days clampado em 1.._FINOPS_CACHE_MAX_DAYS.
+    - Filtro de data explícito (rodada 3, AC-FIN-RV-02): to_date clampado
+      pra não ficar no futuro; from_date clampado pro piso do cache (hoje
+      - (_FINOPS_CACHE_MAX_DAYS - 1) dias); se invertido depois dos
+      clamps, troca defensivamente — nunca 422, mesma filosofia do
+      lookback_days de hoje (o service resolve, não empurra erro pro
+      chamador por um parâmetro fora do alcance).
+
+    Retorna (start, end, lookback_days_efetivo, warning|None) — warning só
+    quando algum clamp mudou o que foi pedido; nunca trunca em silêncio.
+    """
+    today = now.date()
+    cache_floor = today - timedelta(days=_FINOPS_CACHE_MAX_DAYS - 1)
+
+    if from_date is None and to_date is None:
+        lookback_days = max(1, min(lookback_days, _FINOPS_CACHE_MAX_DAYS))
+        end = today
+        start = end - timedelta(days=lookback_days - 1)
+        return start, end, lookback_days, None
+
+    warnings: list[str] = []
+
+    end = to_date or today
+    if end > today:
+        warnings.append(
+            f"Data final pedida ({end.isoformat()}) é no futuro — ajustada para hoje "
+            f"({today.isoformat()})."
+        )
+        end = today
+
+    start = from_date or cache_floor
+    if start < cache_floor:
+        warnings.append(
+            f"Data inicial pedida ({start.isoformat()}) é anterior ao que o cache de "
+            f"audit log guarda ({_FINOPS_CACHE_MAX_DAYS} dias) — ajustada para "
+            f"{cache_floor.isoformat()}."
+        )
+        start = cache_floor
+
+    if start > end:
+        start, end = end, start
+
+    return start, end, (end - start).days + 1, (" ".join(warnings) or None)
+
+
 def get_budget(
     logging_client: cloud_logging.Client,
     storage_client: storage.Client,
@@ -275,17 +334,19 @@ def get_budget(
     group_by: BudgetGroupBy = BudgetGroupBy.TABLE,
     limit: int = _BUDGET_TOP_N_DEFAULT,
     lookback_days: int = _BUDGET_DEFAULT_LOOKBACK_DAYS,
+    from_date: date | None = None,
+    to_date: date | None = None,
     user_email: str | None = None,
 ) -> BudgetResponse:
-    # Janela escolhível (rodada 3) — "últimos N dias", N em 1..31 (teto do
-    # cache de audit log). Antes era fixo no mês corrente.
-    lookback_days = max(1, min(lookback_days, _BUDGET_MAX_LOOKBACK_DAYS))
     now = datetime.now(UTC)
-    period_start = now - timedelta(days=lookback_days)
+    start_date, end_date, lookback_days, clamp_warning = _resolve_date_window(
+        now, lookback_days, from_date, to_date
+    )
+    period_start = datetime.combine(start_date, datetime.min.time(), tzinfo=UTC)
+    period_end = datetime.combine(end_date, datetime.min.time(), tzinfo=UTC)
 
     # Fonte é o mesmo cache de ~30 dias de scan_partition_candidates; o
-    # recorte pra janela sai do filtro `event.timestamp < period_start`
-    # abaixo.
+    # recorte pra janela sai do filtro de start_date/end_date abaixo.
     events, cache_updated_at, quota_warning = _scan_events_or_quota_warning(
         logging_client, storage_client, firestore_client, project_id
     )
@@ -296,7 +357,10 @@ def get_budget(
     total_billed_bytes = 0
 
     for event in events:
-        if event.timestamp is None or event.timestamp < period_start:
+        if event.timestamp is None:
+            continue
+        event_date = event.timestamp.date()
+        if event_date < start_date or event_date > end_date:
             continue
         if event.total_billed_bytes <= 0:
             continue
@@ -357,14 +421,16 @@ def get_budget(
         projected_month_total_usd=round(daily_average * days_in_month, 6),
     )
 
+    warning_parts = [w for w in (clamp_warning,) if w]
     if quota_warning is not None:
-        warning = quota_warning
+        warning_parts.append(quota_warning)
     elif not events:
-        warning = _EMPTY_RESULT_WARNING.format(days=lookback_days, project_id=project_id)
+        warning_parts.append(
+            _EMPTY_RESULT_WARNING.format(days=lookback_days, project_id=project_id)
+        )
     elif lookback_days > 30:
-        warning = _BUDGET_RETENTION_CAVEAT.format(days=lookback_days)
-    else:
-        warning = None
+        warning_parts.append(_BUDGET_RETENTION_CAVEAT.format(days=lookback_days))
+    warning = " ".join(warning_parts) or None
 
     budget_target_usd = (
         budget_repository.get_project_budget_amount(firestore_client, user_email, project_id)
@@ -375,6 +441,7 @@ def get_budget(
     return BudgetResponse(
         project_id=project_id,
         period_start=period_start,
+        period_end=period_end,
         lookback_days=lookback_days,
         group_by=group_by,
         groups=groups,
@@ -386,11 +453,6 @@ def get_budget(
         warning=warning,
     )
 
-
-# Janela máxima da série — o cache de audit log guarda 31 dias
-# (finops-waste-scanner.md v1.4), então o eixo de "custo de query" não
-# pode ir além disso.
-_COST_SERIES_MAX_LOOKBACK_DAYS = 31
 
 _STORAGE_UNAVAILABLE_WARNING = (
     "A linha de custo de storage não pôde ser montada: "
@@ -441,6 +503,8 @@ def get_cost_series(
     granularity: CostSeriesGranularity = CostSeriesGranularity.DAY,
     cost_type: CostType = CostType.ALL,
     lookback_days: int = 30,
+    from_date: date | None = None,
+    to_date: date | None = None,
     datasets: list[str] | None = None,
     tables: list[str] | None = None,
 ) -> CostSeriesResponse:
@@ -450,10 +514,10 @@ def get_cost_series(
     é uma linha plana no nível atual, de INFORMATION_SCHEMA.TABLE_STORAGE
     (metadado, $0), que degrada pra `storage_available=False` se
     indisponível — nunca 500."""
-    lookback_days = max(1, min(lookback_days, _COST_SERIES_MAX_LOOKBACK_DAYS))
     now = datetime.now(UTC)
-    start_date = (now - timedelta(days=lookback_days - 1)).date()
-    end_date = now.date()
+    start_date, end_date, _lookback_days, clamp_warning = _resolve_date_window(
+        now, lookback_days, from_date, to_date
+    )
 
     want_query = cost_type in (CostType.ALL, CostType.QUERY)
     want_storage = cost_type in (CostType.ALL, CostType.STORAGE)
@@ -464,14 +528,18 @@ def get_cost_series(
     # --- custo de query, do cache de audit log ------------------------------
     query_cost_by_period: dict[str, float] = {}
     cache_updated_at: datetime | None = None
-    warning: str | None = None
+    warning: str | None = clamp_warning
     if want_query:
         events, cache_updated_at, quota_warning = _scan_events_or_quota_warning(
             logging_client, storage_client, firestore_client, project_id
         )
-        warning = quota_warning
+        if quota_warning:
+            warning = f"{warning} {quota_warning}".strip() if warning else quota_warning
         for event in events:
-            if event.timestamp is None or event.timestamp.date() < start_date:
+            if event.timestamp is None:
+                continue
+            event_date = event.timestamp.date()
+            if event_date < start_date or event_date > end_date:
                 continue
             if event.total_billed_bytes <= 0:
                 continue
@@ -537,7 +605,7 @@ def get_cost_series(
         granularity=granularity,
         cost_type=cost_type,
         period_start=datetime.combine(start_date, datetime.min.time(), tzinfo=UTC),
-        period_end=now,
+        period_end=datetime.combine(end_date, datetime.min.time(), tzinfo=UTC),
         points=points,
         storage_available=storage_available,
         cache_updated_at=cache_updated_at,

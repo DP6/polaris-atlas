@@ -29,10 +29,20 @@ export function useBudget(
   limit = 10,
   lookbackDays = 30,
   enabled = true,
+  dateRange?: { from?: string; to?: string },
 ) {
   return useQuery({
-    queryKey: ['finops-budget', projectId, groupBy, limit, lookbackDays],
-    queryFn: () => finopsApi.getBudget(projectId as string, groupBy, limit, lookbackDays),
+    queryKey: [
+      'finops-budget',
+      projectId,
+      groupBy,
+      limit,
+      lookbackDays,
+      dateRange?.from,
+      dateRange?.to,
+    ],
+    queryFn: () =>
+      finopsApi.getBudget(projectId as string, groupBy, limit, lookbackDays, dateRange),
     enabled: Boolean(projectId) && enabled,
   })
 }
@@ -43,6 +53,8 @@ export function useCostSeries(
     granularity?: CostSeriesGranularity
     costType?: CostType
     lookbackDays?: number
+    from?: string
+    to?: string
     datasets?: string[]
     tables?: string[]
   } = {},
@@ -54,6 +66,8 @@ export function useCostSeries(
       opts.granularity,
       opts.costType,
       opts.lookbackDays,
+      opts.from,
+      opts.to,
       opts.datasets,
       opts.tables,
     ],

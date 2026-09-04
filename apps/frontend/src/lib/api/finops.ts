@@ -30,10 +30,25 @@ export const finopsApi = {
     )
   },
 
-  getBudget: (projectId: string, groupBy: BudgetGroupBy = 'table', limit = 10, lookbackDays = 30) =>
-    httpClient.get<BudgetResponse>(
-      `/api/v1/finops/${projectId}/budget?group_by=${groupBy}&limit=${limit}&lookback_days=${lookbackDays}`,
-    ),
+  // dateRange (rodada 3, filtro de data real) sobrescreve lookbackDays no
+  // back-end quando presente — mandamos os dois sem excluir um pelo outro,
+  // mesmo padrão de admin/getLoginAnalytics.
+  getBudget: (
+    projectId: string,
+    groupBy: BudgetGroupBy = 'table',
+    limit = 10,
+    lookbackDays = 30,
+    dateRange?: { from?: string; to?: string },
+  ) => {
+    const params = new URLSearchParams({
+      group_by: groupBy,
+      limit: String(limit),
+      lookback_days: String(lookbackDays),
+    })
+    if (dateRange?.from) params.set('from', dateRange.from)
+    if (dateRange?.to) params.set('to', dateRange.to)
+    return httpClient.get<BudgetResponse>(`/api/v1/finops/${projectId}/budget?${params}`)
+  },
 
   getCostSeries: (
     projectId: string,
@@ -41,6 +56,8 @@ export const finopsApi = {
       granularity?: CostSeriesGranularity
       costType?: CostType
       lookbackDays?: number
+      from?: string
+      to?: string
       datasets?: string[]
       tables?: string[]
     } = {},
@@ -49,6 +66,8 @@ export const finopsApi = {
     if (opts.granularity) params.set('granularity', opts.granularity)
     if (opts.costType) params.set('cost_type', opts.costType)
     if (opts.lookbackDays) params.set('lookback_days', String(opts.lookbackDays))
+    if (opts.from) params.set('from', opts.from)
+    if (opts.to) params.set('to', opts.to)
     for (const d of opts.datasets ?? []) params.append('datasets', d)
     for (const t of opts.tables ?? []) params.append('tables', t)
     const qs = params.toString()
