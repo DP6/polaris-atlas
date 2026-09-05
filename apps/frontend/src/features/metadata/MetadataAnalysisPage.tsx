@@ -33,15 +33,17 @@ import type { CertificationStatus, RelatedLink } from '@/types/metadata'
 // Defesa em profundidade pro CodeQL js/xss-through-dom: o backend já
 // valida `url` contra ^https?:// no schema de request (Pydantic), mas o
 // front não deve confiar cegamente num dado que pode ter chegado por
-// outro caminho (edição direta no Firestore, bug de validação futuro) —
-// só renderiza como link de verdade (href) se o esquema for http(s);
-// caso contrário mostra como texto plano, nunca como âncora clicável.
-// Regex ancorada no início (não new URL().protocol) — idioma que as
-// queries de sanitização de URL do CodeQL reconhecem como barreira.
+// outro caminho (edição direta no Firestore, bug de validação futuro).
+// O `href` do <a> abaixo usa o RETORNO desta função, nunca `link.url`
+// diretamente — duas tentativas anteriores guardavam o valor original
+// atrás de uma condição externa (`isSafeHttpUrl(url) ? <a href={url}>`),
+// o que o CodeQL não reconhece como sanitização (o dado "sujo" ainda
+// chega no sink); o rastreamento de taint só considera limpo o valor
+// que É o retorno de uma função sanitizadora usado direto no sink.
 const SAFE_HTTP_URL_PATTERN = /^https?:\/\//i
 
-function isSafeHttpUrl(url: string): boolean {
-  return SAFE_HTTP_URL_PATTERN.test(url)
+function toSafeHref(url: string): string | undefined {
+  return SAFE_HTTP_URL_PATTERN.test(url) ? url : undefined
 }
 
 const CERTIFICATION_LABEL: Record<CertificationStatus, string> = {
@@ -326,37 +328,42 @@ function TableFieldsPanel({
         <div className="flex flex-col gap-1.5">
           <span className="text-label text-muted-foreground">Links relacionados</span>
           <div className="flex flex-col gap-1">
-            {links.map((link, i) => (
-              <div key={link.url} className="flex items-center gap-2 text-sm">
-                {isSafeHttpUrl(link.url) ? (
-                  <a
-                    href={link.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-primary hover:underline"
-                  >
-                    {link.label}
-                  </a>
-                ) : (
-                  <span
-                    className="text-muted-foreground line-through"
-                    title="URL inválida (só http/https é aceito) — não renderizada como link"
-                  >
-                    {link.label}
-                  </span>
-                )}
-                {canManage && (
-                  <button
-                    type="button"
-                    onClick={() => removeLink(i)}
-                    aria-label={`Remover link ${link.label}`}
-                    className="text-muted-foreground hover:text-status-error-foreground"
-                  >
-                    <X size={12} />
-                  </button>
-                )}
-              </div>
-            ))}
+            {links.map((link, i) => {
+              // href vem do retorno de toSafeHref, nunca de link.url
+              // direto — ver comentário na definição da função.
+              const safeHref = toSafeHref(link.url)
+              return (
+                <div key={link.url} className="flex items-center gap-2 text-sm">
+                  {safeHref !== undefined ? (
+                    <a
+                      href={safeHref}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      {link.label}
+                    </a>
+                  ) : (
+                    <span
+                      className="text-muted-foreground line-through"
+                      title="URL inválida (só http/https é aceito) — não renderizada como link"
+                    >
+                      {link.label}
+                    </span>
+                  )}
+                  {canManage && (
+                    <button
+                      type="button"
+                      onClick={() => removeLink(i)}
+                      aria-label={`Remover link ${link.label}`}
+                      className="text-muted-foreground hover:text-status-error-foreground"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              )
+            })}
             {links.length === 0 && (
               <p className="text-muted-foreground text-xs">Nenhum link ainda.</p>
             )}
