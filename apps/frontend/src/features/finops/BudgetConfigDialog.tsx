@@ -18,8 +18,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { useCurrentUser } from '@/features/auth/hooks'
 import { useDatasets, useTables } from '@/features/catalog/hooks'
 import { useBudgets, useRemoveBudget, useUpsertBudget } from '@/features/finops/hooks'
+import { useCanManageProject, useProjectAdmins } from '@/features/metadata/hooks'
 import { formatUsd } from '@/lib/format'
 import { ApiError } from '@/lib/http-client'
 import type { BudgetEntry, BudgetScope } from '@/types/finops'
@@ -36,9 +38,11 @@ function budgetLabel(b: BudgetEntry): string {
   return `Tabela ${b.dataset_id}.${b.table_id}`
 }
 
-// Cadastro simples de meta de custo mensal (R2-9): escopo projeto / dataset
-// / tabela, valor em USD, sem compartilhamento entre usuários. Lista as
-// metas já salvas com remover inline.
+// Cadastro de meta de custo mensal, compartilhada por projeto (v1.13):
+// escopo projeto / dataset / tabela, valor em USD, visível a qualquer um
+// com acesso ao projeto — editável só por Admin de projeto/superadmin
+// (docs/specs/finops-budget.md v1.13, docs/specs/admin.md v1.11). Lista
+// as metas já salvas com remover inline.
 export function BudgetConfigDialog({ projectId, open, onOpenChange }: BudgetConfigDialogProps) {
   const [scope, setScope] = useState<BudgetScope>('project')
   const [datasetId, setDatasetId] = useState('')
@@ -50,9 +54,24 @@ export function BudgetConfigDialog({ projectId, open, onOpenChange }: BudgetConf
   const tablesQuery = useTables(projectId, scope === 'table' ? datasetId : undefined)
   const upsert = useUpsertBudget(projectId)
   const remove = useRemoveBudget(projectId)
+  // scope=project só é gerenciável por quem tem o papel pro projeto
+  // inteiro (datasetId=undefined não cobre grant escopado a datasets
+  // específicos) — mesma regra de core/auth.py::require_project_admin.
+  const { canManage } = useCanManageProject(projectId, scope === 'project' ? undefined : datasetId)
+  // Gate mais amplo, só pra decidir se mostra o "remover" de cada meta já
+  // salva (cada uma pode ter um escopo/dataset diferente do formulário
+  // acima) — aproximação de UX; a exclusão em si é revalidada pelo
+  // backend pro escopo exato daquela meta.
+  const userQuery = useCurrentUser()
+  const adminsQuery = useProjectAdmins(projectId)
+  const hasAnyAdminRole = Boolean(
+    userQuery.data?.is_admin ||
+      adminsQuery.data?.admins.some((a) => a.email === userQuery.data?.email),
+  )
 
   const amountNumber = Number(amount)
   const canSubmit =
+    canManage &&
     Number.isFinite(amountNumber) &&
     amountNumber > 0 &&
     (scope === 'project' ||
@@ -97,8 +116,10 @@ export function BudgetConfigDialog({ projectId, open, onOpenChange }: BudgetConf
         <DialogHeader>
           <DialogTitle>Configurar budget</DialogTitle>
           <DialogDescription>
-            Meta de custo mensal (só sua — não é compartilhada). A meta de escopo "projeto" vira a
-            linha de referência do gráfico de custo.
+            Meta de custo mensal do projeto — visível a qualquer um com acesso, editável só por
+            Admin de projeto/superadmin. A meta de escopo "projeto" vira a linha de referência do
+            gráfico de custo.
+            {!canManage && ' Você não tem esse papel neste escopo — só leitura.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -107,6 +128,7 @@ export function BudgetConfigDialog({ projectId, open, onOpenChange }: BudgetConf
             <Label htmlFor="budget-scope">Escopo</Label>
             <Select
               value={scope}
+              disabled={!canManage}
               onValueChange={(v) => {
                 setScope((v as BudgetScope) ?? 'project')
                 setDatasetId('')
@@ -129,6 +151,7 @@ export function BudgetConfigDialog({ projectId, open, onOpenChange }: BudgetConf
               <Label htmlFor="budget-dataset">Dataset</Label>
               <Select
                 value={datasetId}
+                disabled={!canManage}
                 onValueChange={(v) => {
                   setDatasetId(v ?? '')
                   setTableId('')
@@ -154,7 +177,7 @@ export function BudgetConfigDialog({ projectId, open, onOpenChange }: BudgetConf
               <Select
                 value={tableId}
                 onValueChange={(v) => setTableId(v ?? '')}
-                disabled={!datasetId}
+                disabled={!canManage || !datasetId}
               >
                 <SelectTrigger id="budget-table">
                   <SelectValue placeholder="Selecione uma tabela…" />
@@ -178,6 +201,7 @@ export function BudgetConfigDialog({ projectId, open, onOpenChange }: BudgetConf
               min={0}
               step="0.01"
               value={amount}
+              disabled={!canManage}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="ex: 250"
             />
@@ -200,21 +224,23 @@ export function BudgetConfigDialog({ projectId, open, onOpenChange }: BudgetConf
                   <span className="min-w-0 truncate">
                     {budgetLabel(b)} — <b className="tabular-nums">{formatUsd(b.amount_usd)}/mês</b>
                   </span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`Remover meta ${budgetLabel(b)}`}
-                    disabled={remove.isPending}
-                    onClick={() =>
-                      remove.mutate({
-                        scope: b.scope,
-                        datasetId: b.dataset_id,
-                        tableId: b.table_id,
-                      })
-                    }
-                  >
-                    <Trash2 size={14} />
-                  </Button>
+                  {hasAnyAdminRole && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Remover meta ${budgetLabel(b)}`}
+                      disabled={remove.isPending}
+                      onClick={() =>
+                        remove.mutate({
+                          scope: b.scope,
+                          datasetId: b.dataset_id,
+                          tableId: b.table_id,
+                        })
+                      }
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  )}
                 </li>
               ))}
             </ul>

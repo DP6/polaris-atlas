@@ -227,3 +227,28 @@ class EventCacheRunsResponse(BaseModel):
     # pagina no cliente, mesmo padrão das outras seções de analytics do
     # admin (lista carregada inteira, corte no front).
     runs: list[EventCacheRun]
+
+
+class ProjectAdmin(BaseModel):
+    """hub_projects/{project_id}/project_admins/{email} — ver
+    docs/specs/admin.md, "Admin de projeto". Diferente de HubUser/
+    HubProject/HubGroup: este documento vive dentro do projeto, não do
+    usuário — a pergunta mais frequente é "quem administra o projeto X"."""
+
+    email: str
+    # None = projeto inteiro (todos os datasets, presentes e futuros,
+    # reavaliado a cada request). Lista = só esses datasets, estático até
+    # alguém editar o grant. Ver core/auth.py::require_project_admin.
+    datasets: list[str] | None = None
+    granted_by: str
+    granted_at: datetime
+    updated_at: datetime
+
+
+class ProjectAdminsListResponse(BaseModel):
+    project_id: str
+    admins: list[ProjectAdmin]
+
+
+class UpsertProjectAdminRequest(BaseModel):
+    datasets: list[str] | None = None

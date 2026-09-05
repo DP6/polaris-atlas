@@ -11,6 +11,9 @@ class BudgetScope(str, Enum):
 
 
 class BudgetEntry(BaseModel):
+    # Ecoado pela service layer (domains/budget/service.py) — não é
+    # persistido no doc, que já vive em hub_projects/{project_id}/budgets
+    # (implícito no caminho, ver repository.py).
     project_id: str
     scope: BudgetScope
     # dataset_id preenchido em scope=dataset|table; table_id só em scope=table.
@@ -19,9 +22,15 @@ class BudgetEntry(BaseModel):
     amount_usd: float
     # Só "month" nesta fase (cadastro simples — ASM-005 do brief).
     period: str = "month"
+    # Quem criou o registro pela primeira vez — com budget compartilhado
+    # por projeto (v1.13), não significa mais "dono": vários Admins de
+    # projeto podem editar o mesmo registro depois.
     created_by: str
     created_at: datetime
     updated_at: datetime
+    # Quem fez a última edição (novo na v1.13) — o campo com significado
+    # de "responsável atual", diferente de created_by.
+    updated_by: str
 
 
 class BudgetUpsertRequest(BaseModel):

@@ -66,12 +66,13 @@ def get_budget(
     from_date: date | None = Query(default=None, alias="from"),
     to_date: date | None = Query(default=None, alias="to"),
     include_storage: bool = Query(default=False),
-    user: UserInfo = Depends(get_current_user),
     client: bigquery.Client = Depends(get_client),
     logging_client: cloud_logging.Client = Depends(get_logging_client),
     storage_client: storage.Client = Depends(get_storage_client),
     firestore_client: firestore.Client = Depends(get_firestore_client),
 ) -> BudgetResponse:
+    # budget_target_usd é compartilhado por projeto (v1.13) — não depende
+    # mais de quem está logado, ver domains/finops/service.py::get_budget.
     return service.get_budget(
         logging_client,
         storage_client,
@@ -82,7 +83,6 @@ def get_budget(
         lookback_days=lookback_days,
         from_date=from_date,
         to_date=to_date,
-        user_email=user.email,
         client=client,
         include_storage=include_storage,
     )
@@ -143,10 +143,12 @@ def get_table_scores(
 @router.get("/{project_id}/budgets", response_model=BudgetListResponse)
 def list_budgets(
     project_id: str,
-    user: UserInfo = Depends(get_current_user),
     firestore_client: firestore.Client = Depends(get_firestore_client),
 ) -> BudgetListResponse:
-    return budget_service.list_budgets(firestore_client, user.email, project_id)
+    # Budget é compartilhado por projeto (v1.13) — leitura só exige
+    # require_project_access (dependency do router), sem recorte por
+    # usuário: qualquer um com acesso ao projeto vê o mesmo budget.
+    return budget_service.list_budgets(firestore_client, project_id)
 
 
 @router.put("/{project_id}/budgets", response_model=BudgetEntry)
@@ -156,7 +158,10 @@ def upsert_budget(
     user: UserInfo = Depends(get_current_user),
     firestore_client: firestore.Client = Depends(get_firestore_client),
 ) -> BudgetEntry:
-    return budget_service.upsert_budget(firestore_client, user.email, project_id, request)
+    # Escrita exige Admin de projeto/superadmin — checado dentro de
+    # budget_service (o dataset_id relevante vem do body, não do path,
+    # ver domains/budget/service.py::_require_project_admin).
+    return budget_service.upsert_budget(firestore_client, project_id, request, user.email)
 
 
 @router.delete("/{project_id}/budgets", status_code=204)
@@ -170,9 +175,9 @@ def remove_budget(
 ) -> None:
     budget_service.remove_budget(
         firestore_client,
-        user.email,
         project_id,
         scope,
+        user.email,
         dataset_id=dataset_id,
         table_id=table_id,
     )

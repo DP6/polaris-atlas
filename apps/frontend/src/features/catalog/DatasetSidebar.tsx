@@ -1,4 +1,5 @@
 import {
+  BookOpenCheck,
   Boxes,
   ChevronDown,
   Clock,
@@ -290,6 +291,10 @@ export function DatasetSidebar({ projectId }: DatasetSidebarProps) {
             <NavLink to="/orphans" className={NAV_LINK_CLASS}>
               <Unlink size={16} />
               Tabelas sem consumidor
+            </NavLink>
+            <NavLink to="/metadados" className={NAV_LINK_CLASS}>
+              <BookOpenCheck size={16} />
+              Metadados
             </NavLink>
           </nav>
         </SidebarSection>

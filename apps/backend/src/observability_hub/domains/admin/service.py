@@ -19,7 +19,7 @@ from observability_hub.core.bigquery import get_runtime_project
 from observability_hub.core.config import settings
 from observability_hub.core.exceptions import AccessRequestNotFoundError, LastAdminLockoutError
 from observability_hub.core.run_client import trigger_job_execution
-from observability_hub.domains.admin import repository
+from observability_hub.domains.admin import project_admin_repository, repository
 from observability_hub.domains.admin.schemas import (
     AccessRequest,
     AccessRequestsListResponse,
@@ -36,10 +36,13 @@ from observability_hub.domains.admin.schemas import (
     HubUser,
     HubUsersListResponse,
     ProjectAccessGrant,
+    ProjectAdmin,
+    ProjectAdminsListResponse,
     ProjectUsersResponse,
     UpsertHubGroupRequest,
     UpsertHubProjectRequest,
     UpsertHubUserRequest,
+    UpsertProjectAdminRequest,
     WorkspaceGroupInfo,
     WorkspaceGroupsListResponse,
 )
@@ -139,6 +142,65 @@ def has_project_access(client: firestore.Client, email: str, project_id: str) ->
         if email in workspace_directory.get_group_members(group["group_id"]):
             return True
     return False
+
+
+# --- project_admins (papel "Admin de projeto", docs/specs/admin.md) ----------------
+
+
+def _covers_dataset(datasets: list[str] | None, dataset_id: str | None) -> bool:
+    """None em `datasets` (grant) = projeto inteiro, cobre qualquer
+    dataset_id pedido (inclusive None, usado por endpoints
+    project-scoped). Lista em `datasets` só cobre dataset_id se ele
+    estiver nela — nunca cobre um endpoint project-scoped (dataset_id
+    None), mesmo com a lista não-vazia."""
+    if datasets is None:
+        return True
+    if dataset_id is None:
+        return False
+    return dataset_id in datasets
+
+
+def is_project_admin(
+    client: firestore.Client, email: str, project_id: str, dataset_id: str | None = None
+) -> bool:
+    """Não checa superadmin — isso é feito por quem chama
+    (core/auth.py::require_project_admin), que já tem is_admin
+    disponível e não precisa de uma segunda leitura do Firestore aqui."""
+    grant = project_admin_repository.get_project_admin(client, project_id, _normalize_email(email))
+    return bool(grant and _covers_dataset(grant.get("datasets"), dataset_id))
+
+
+def list_project_admins(client: firestore.Client, project_id: str) -> ProjectAdminsListResponse:
+    raw = project_admin_repository.list_project_admins(client, project_id)
+    return ProjectAdminsListResponse(project_id=project_id, admins=[ProjectAdmin(**a) for a in raw])
+
+
+def grant_project_admin(
+    client: firestore.Client,
+    project_id: str,
+    email: str,
+    request: UpsertProjectAdminRequest,
+    granted_by: str,
+) -> ProjectAdmin:
+    raw = project_admin_repository.upsert_project_admin(
+        client,
+        project_id,
+        _normalize_email(email),
+        request.datasets,
+        _normalize_email(granted_by),
+    )
+    return ProjectAdmin(**raw)
+
+
+def revoke_project_admin(client: firestore.Client, project_id: str, email: str) -> None:
+    """Idempotente — revogar quem não é Admin de projeto não é erro,
+    mesmo padrão de delete_user/delete_group. Sem checagem de
+    hierarquia: revogação entre Admins de projeto é simétrica (ver
+    docs/specs/admin.md, ASM-005) — quem chega até aqui já passou por
+    require_project_admin no router, então já está autorizado a revogar
+    qualquer Admin de projeto deste projeto, independente de quem
+    concedeu a quem."""
+    project_admin_repository.delete_project_admin(client, project_id, _normalize_email(email))
 
 
 # --- hub_projects ------------------------------------------------------------------

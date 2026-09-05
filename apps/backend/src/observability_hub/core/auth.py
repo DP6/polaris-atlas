@@ -12,7 +12,11 @@ decodifica o JWT duas vezes.
 from fastapi import Cookie, Depends
 from google.cloud import firestore
 
-from observability_hub.core.exceptions import AdminAccessRequiredError, ProjectNotAuthorizedError
+from observability_hub.core.exceptions import (
+    AdminAccessRequiredError,
+    ProjectAdminRequiredError,
+    ProjectNotAuthorizedError,
+)
 from observability_hub.core.firestore import get_firestore_client
 from observability_hub.domains.admin import service as admin_service
 from observability_hub.domains.auth import service
@@ -51,4 +55,29 @@ def require_project_access(
     nega tudo por padrão (fail closed)."""
     if not admin_service.has_project_access(client, user.email, project_id):
         raise ProjectNotAuthorizedError(project_id)
+    return user
+
+
+def require_project_admin(
+    project_id: str,
+    dataset_id: str | None = None,
+    user: UserInfo = Depends(get_current_user),
+    client: firestore.Client = Depends(get_firestore_client),
+) -> UserInfo:
+    """Papel delegável "Admin de projeto" (ver docs/specs/admin.md) —
+    diferente de require_admin (superadmin global) e de
+    require_project_access (acesso comum de leitura): aplicada por
+    endpoint, não por router inteiro, só nos endpoints de escrita de
+    domains/metadata e do budget compartilhado (domains/budget).
+
+    Superadmin sempre passa (mesmo bypass de require_admin). Senão,
+    precisa de um doc em hub_projects/{project_id}/project_admins/{email}
+    cujo `datasets` seja None (projeto inteiro) ou contenha dataset_id.
+    dataset_id=None é usado por endpoints project-scoped (ex: budget de
+    projeto inteiro) — só passa quem tem `datasets: null`, nunca um
+    admin restrito a datasets específicos."""
+    if admin_service.is_admin(client, user.email):
+        return user
+    if not admin_service.is_project_admin(client, user.email, project_id, dataset_id):
+        raise ProjectAdminRequiredError(project_id)
     return user

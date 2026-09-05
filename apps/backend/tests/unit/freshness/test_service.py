@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from observability_hub.core.exceptions import DatasetNotFoundError
+from observability_hub.core.exceptions import DatasetNotFoundError, TableNotFoundError
 from observability_hub.domains.freshness import service
 from observability_hub.domains.freshness.schemas import SLAStatus
 
@@ -202,3 +202,60 @@ def test_get_dataset_freshness_propagates_dataset_not_found(monkeypatch):
 
     with pytest.raises(DatasetNotFoundError):
         service.get_dataset_freshness(client, "observability-hub-dev", "GHOST")
+
+
+# --- get_table_freshness (v1.1, pré-requisito de docs/specs/metadata.md) ---------
+
+
+def test_get_table_freshness_filters_single_table_from_dataset(monkeypatch):
+    client = _fake_client()
+    monkeypatch.setattr(service, "discover_regions", lambda project_id, client: ["US"])
+    monkeypatch.setattr(
+        service, "resolve_dataset_region", lambda client, project_id, dataset_id, regions: "US"
+    )
+    raw_tables = [
+        {
+            "table_id": "crm_leads",
+            "table_type": "TABLE",
+            "last_modified_time": "2024-01-15T00:00:00Z",
+            "hours_since_update": 14424.0,
+            "sla_status": "stale",
+            "size_bytes": 849813,
+            "row_count": 10000,
+        },
+        {
+            "table_id": "ga4_events",
+            "table_type": "TABLE",
+            "last_modified_time": "2026-08-10T09:00:00Z",
+            "hours_since_update": 1.0,
+            "sla_status": "ok",
+            "size_bytes": 576920,
+            "row_count": 5000,
+        },
+    ]
+    monkeypatch.setattr(
+        service.repository,
+        "get_table_freshness",
+        lambda client, project_id, dataset_id, location: raw_tables,
+    )
+
+    result = service.get_table_freshness(client, "observability-hub-dev", "RAW", "ga4_events")
+
+    assert result.table_id == "ga4_events"
+    assert result.sla_status == SLAStatus.OK
+
+
+def test_get_table_freshness_raises_table_not_found_when_absent(monkeypatch):
+    client = _fake_client()
+    monkeypatch.setattr(service, "discover_regions", lambda project_id, client: ["US"])
+    monkeypatch.setattr(
+        service, "resolve_dataset_region", lambda client, project_id, dataset_id, regions: "US"
+    )
+    monkeypatch.setattr(
+        service.repository,
+        "get_table_freshness",
+        lambda client, project_id, dataset_id, location: [],
+    )
+
+    with pytest.raises(TableNotFoundError):
+        service.get_table_freshness(client, "observability-hub-dev", "RAW", "ghost")

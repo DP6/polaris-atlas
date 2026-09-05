@@ -13,8 +13,10 @@ from observability_hub.api.v1 import (
     freshness,
     history,
     lineage,
+    metadata,
     pii,
     profiling,
+    project_admins,
     projects,
     quality,
     storage,
@@ -23,6 +25,7 @@ from observability_hub.core.config import settings
 from observability_hub.core.exceptions import (
     AccessRequestNotFoundError,
     AdminAccessRequiredError,
+    ColumnNotFoundError,
     DatasetNotFoundError,
     EventCacheNotReadyError,
     FolderAccessDeniedError,
@@ -39,6 +42,7 @@ from observability_hub.core.exceptions import (
     PiiScanTimeoutError,
     ProfilingTimeoutError,
     ProjectAccessDeniedError,
+    ProjectAdminRequiredError,
     ProjectNotAuthorizedError,
     ProjectNotFoundError,
     StorageAccessDeniedError,
@@ -60,6 +64,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(projects.router)
+app.include_router(project_admins.router)
 app.include_router(catalog.router)
 app.include_router(freshness.router)
 app.include_router(profiling.router)
@@ -74,6 +79,7 @@ app.include_router(finops.router)
 app.include_router(admin.router)
 app.include_router(access_requests.router)
 app.include_router(storage.router)
+app.include_router(metadata.router)
 
 
 @app.get("/health")
@@ -231,6 +237,14 @@ def handle_table_not_found(request: Request, exc: TableNotFoundError) -> JSONRes
     )
 
 
+@app.exception_handler(ColumnNotFoundError)
+def handle_column_not_found(request: Request, exc: ColumnNotFoundError) -> JSONResponse:
+    return JSONResponse(
+        status_code=404,
+        content={"error": "column_not_found", "message": str(exc)},
+    )
+
+
 @app.exception_handler(TableNotPartitionedError)
 def handle_table_not_partitioned(request: Request, exc: TableNotPartitionedError) -> JSONResponse:
     return JSONResponse(
@@ -322,6 +336,14 @@ def handle_admin_access_required(request: Request, exc: AdminAccessRequiredError
     return JSONResponse(
         status_code=403,
         content={"error": "admin_access_required", "message": str(exc)},
+    )
+
+
+@app.exception_handler(ProjectAdminRequiredError)
+def handle_project_admin_required(request: Request, exc: ProjectAdminRequiredError) -> JSONResponse:
+    return JSONResponse(
+        status_code=403,
+        content={"error": "project_admin_required", "message": str(exc)},
     )
 
 

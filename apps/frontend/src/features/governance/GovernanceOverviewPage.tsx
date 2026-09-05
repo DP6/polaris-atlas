@@ -1,4 +1,4 @@
-import { Clock, Unlink } from 'lucide-react'
+import { BookOpenCheck, Clock, Unlink } from 'lucide-react'
 import { OptionCard, OptionCardGrid } from '@/components/OptionCard'
 import { PageHeader } from '@/components/PageHeader'
 
@@ -10,7 +10,7 @@ export function GovernanceOverviewPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Governança"
-        description="Freshness com SLA e tabelas sem consumidor conhecido."
+        description="Freshness com SLA, tabelas sem consumidor conhecido e metadados de tabela/coluna."
       />
       <OptionCardGrid>
         <OptionCard
@@ -24,6 +24,12 @@ export function GovernanceOverviewPage() {
           title="Tabelas sem consumidor"
           description="Tabelas que não aparecem lidas em nenhum job do BigQuery na janela — candidatas a limpeza."
           to="/orphans"
+        />
+        <OptionCard
+          icon={<BookOpenCheck />}
+          title="Metadados"
+          description="Descrição, ownership, classificação e certificação por tabela — quais já estão documentadas."
+          to="/metadados"
         />
       </OptionCardGrid>
     </div>
