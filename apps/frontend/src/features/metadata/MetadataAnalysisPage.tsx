@@ -36,12 +36,12 @@ import type { CertificationStatus, RelatedLink } from '@/types/metadata'
 // outro caminho (edição direta no Firestore, bug de validação futuro) —
 // só renderiza como link de verdade (href) se o esquema for http(s);
 // caso contrário mostra como texto plano, nunca como âncora clicável.
+// Regex ancorada no início (não new URL().protocol) — idioma que as
+// queries de sanitização de URL do CodeQL reconhecem como barreira.
+const SAFE_HTTP_URL_PATTERN = /^https?:\/\//i
+
 function isSafeHttpUrl(url: string): boolean {
-  try {
-    return ['http:', 'https:'].includes(new URL(url).protocol)
-  } catch {
-    return false
-  }
+  return SAFE_HTTP_URL_PATTERN.test(url)
 }
 
 const CERTIFICATION_LABEL: Record<CertificationStatus, string> = {
