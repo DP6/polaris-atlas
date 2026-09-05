@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
-from observability_hub.domains.history import service
+from atlas.domains.history import service
 
 
 def test_get_history_builds_response(monkeypatch):

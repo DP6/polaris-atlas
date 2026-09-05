@@ -2,9 +2,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from observability_hub.core.exceptions import DatasetNotFoundError, TableNotFoundError
-from observability_hub.domains.freshness import service
-from observability_hub.domains.freshness.schemas import SLAStatus
+from atlas.core.exceptions import DatasetNotFoundError, TableNotFoundError
+from atlas.domains.freshness import service
+from atlas.domains.freshness.schemas import SLAStatus
 
 
 def _fake_client() -> MagicMock:
@@ -33,7 +33,7 @@ def test_get_project_freshness_computes_worst_status(monkeypatch):
         lambda client, project_id, regions: raw,
     )
 
-    result = service.get_project_freshness(client, "observability-hub-dev")
+    result = service.get_project_freshness(client, "atlas-dev")
 
     assert len(result.datasets) == 1
     assert result.datasets[0].worst_status == SLAStatus.STALE
@@ -61,7 +61,7 @@ def test_get_project_freshness_worst_status_is_none_for_empty_dataset(monkeypatc
         lambda client, project_id, regions: raw,
     )
 
-    result = service.get_project_freshness(client, "observability-hub-dev")
+    result = service.get_project_freshness(client, "atlas-dev")
 
     assert result.datasets[0].worst_status is None
 
@@ -88,7 +88,7 @@ def test_get_project_freshness_worst_status_picks_highest_severity_present(monke
         lambda client, project_id, regions: raw,
     )
 
-    result = service.get_project_freshness(client, "observability-hub-dev")
+    result = service.get_project_freshness(client, "atlas-dev")
 
     assert result.datasets[0].worst_status == SLAStatus.WARNING_12_24
 
@@ -127,7 +127,7 @@ def test_get_dataset_freshness_resolves_region_and_builds_summary(monkeypatch):
         lambda client, project_id, dataset_id, location: raw_tables,
     )
 
-    result = service.get_dataset_freshness(client, "observability-hub-dev", "RAW")
+    result = service.get_dataset_freshness(client, "atlas-dev", "RAW")
 
     assert result.location == "US"
     assert result.summary.total_tables == 2
@@ -163,7 +163,7 @@ def test_get_dataset_freshness_summary_ignores_null_sla_status(monkeypatch):
         lambda client, project_id, dataset_id, location: raw_tables,
     )
 
-    result = service.get_dataset_freshness(client, "observability-hub-dev", "RAW")
+    result = service.get_dataset_freshness(client, "atlas-dev", "RAW")
 
     assert result.summary.total_tables == 1
     assert result.summary.ok == 0
@@ -185,7 +185,7 @@ def test_get_dataset_freshness_empty_dataset_has_zeroed_summary(monkeypatch):
         lambda client, project_id, dataset_id, location: [],
     )
 
-    result = service.get_dataset_freshness(client, "observability-hub-dev", "EMPTY")
+    result = service.get_dataset_freshness(client, "atlas-dev", "EMPTY")
 
     assert result.summary.total_tables == 0
     assert result.tables == []
@@ -201,7 +201,7 @@ def test_get_dataset_freshness_propagates_dataset_not_found(monkeypatch):
     monkeypatch.setattr(service, "resolve_dataset_region", raise_not_found)
 
     with pytest.raises(DatasetNotFoundError):
-        service.get_dataset_freshness(client, "observability-hub-dev", "GHOST")
+        service.get_dataset_freshness(client, "atlas-dev", "GHOST")
 
 
 # --- get_table_freshness (v1.1, pré-requisito de docs/specs/metadata.md) ---------
@@ -239,7 +239,7 @@ def test_get_table_freshness_filters_single_table_from_dataset(monkeypatch):
         lambda client, project_id, dataset_id, location: raw_tables,
     )
 
-    result = service.get_table_freshness(client, "observability-hub-dev", "RAW", "ga4_events")
+    result = service.get_table_freshness(client, "atlas-dev", "RAW", "ga4_events")
 
     assert result.table_id == "ga4_events"
     assert result.sla_status == SLAStatus.OK
@@ -258,4 +258,4 @@ def test_get_table_freshness_raises_table_not_found_when_absent(monkeypatch):
     )
 
     with pytest.raises(TableNotFoundError):
-        service.get_table_freshness(client, "observability-hub-dev", "RAW", "ghost")
+        service.get_table_freshness(client, "atlas-dev", "RAW", "ghost")

@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
-from observability_hub.core import sla
+from atlas.core import sla
 
 
 def test_hours_since_none_when_modified_is_none():

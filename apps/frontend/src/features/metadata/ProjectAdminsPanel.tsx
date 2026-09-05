@@ -46,7 +46,7 @@ export function ProjectAdminsPanel({ projectId }: { projectId: string }) {
         <div className="flex flex-col gap-1.5">
           {adminsQuery.data.admins.length === 0 && (
             <p className="text-muted-foreground text-xs">
-              Nenhum Admin de projeto além do(s) administrador(es) do Hub.
+              Nenhum Admin de projeto além do(s) administrador(es) do Atlas.
             </p>
           )}
           {adminsQuery.data.admins.map((admin) => (

@@ -6,8 +6,8 @@ from unittest.mock import MagicMock
 import pytest
 from google.api_core.exceptions import Forbidden
 
-from observability_hub.core.exceptions import ProjectAccessDeniedError
-from observability_hub.domains.quality import repository
+from atlas.core.exceptions import ProjectAccessDeniedError
+from atlas.domains.quality import repository
 
 
 def _row(**kwargs):

@@ -2,14 +2,14 @@ import pytest
 from authlib.integrations.base_client.errors import OAuthError
 from requests import RequestException
 
-from observability_hub.core.exceptions import (
+from atlas.core.exceptions import (
     InvalidSessionError,
     OAuthEmailNotAllowedError,
     OAuthExchangeError,
     OAuthStateMismatchError,
 )
-from observability_hub.domains.auth import service
-from observability_hub.domains.auth.schemas import UserInfo
+from atlas.domains.auth import service
+from atlas.domains.auth.schemas import UserInfo
 
 
 def test_generate_state_returns_nonempty_urlsafe_token():

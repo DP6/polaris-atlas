@@ -49,7 +49,7 @@ const CUSTOM_GROUP_OPTION = '__custom__'
 // herda o acesso do grupo, além do que já tiver individualmente. Modelo
 // híbrido: membros do Workspace (workspace_members) vêm ao vivo do
 // Google Workspace via domain-wide delegation, só leitura aqui; membros
-// manuais (manual_members) são cadastro direto na Hub, editável — os
+// manuais (manual_members) são cadastro direto no Atlas, editável — os
 // dois se somam. Usar o e-mail de um grupo real do Workspace como
 // group_id ativa o lado automático; um group_id qualquer funciona só
 // com manual_members (workspace_members fica sempre vazio).

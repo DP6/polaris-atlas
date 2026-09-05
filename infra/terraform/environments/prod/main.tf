@@ -39,22 +39,22 @@ module "backend_cloud_run" {
   # (canônica + legada por número do projeto, mantidas por segurança durante
   # a transição).
   env = {
-    OBSERVABILITY_HUB_CORS_ORIGINS = "https://observability-hub.dp6.io,${module.frontend_cloud_run.service_url},${module.frontend_cloud_run.service_url_alt}"
+    ATLAS_CORS_ORIGINS = "https://observability-hub.dp6.io,${module.frontend_cloud_run.service_url},${module.frontend_cloud_run.service_url_alt}"
     # Único sinal de ambiente do backend (core/config.py::settings.environment)
     # — nunca mais inferido do project_id, que é o mesmo pros dois ambientes
     # nesta topologia.
-    OBSERVABILITY_HUB_ENVIRONMENT = "prod"
+    ATLAS_ENVIRONMENT = "prod"
     # Conta do Workspace impersonada via domain-wide delegation pra ler
     # grupos reais (core/workspace_directory.py, domains/admin v1.5) —
     # indicada pela TI ao autorizar a delegação, ver
     # docs/onboarding-cliente.md (2026-08-25).
-    OBSERVABILITY_HUB_WORKSPACE_IMPERSONATE_EMAIL = "admin.victoria@dp6.com.br"
+    ATLAS_WORKSPACE_IMPERSONATE_EMAIL = "admin.victoria@dp6.com.br"
     # Usados só pelo gatilho manual de admin (domains/admin::
     # trigger_event_cache_refresh, ver core/run_client.py) pra endereçar o
     # Cloud Run Job de refresh do cache — e pelo cache em si
     # (core/event_cache.py) pra saber onde gravar/ler o payload de eventos.
-    OBSERVABILITY_HUB_REGION                  = var.region
-    OBSERVABILITY_HUB_EVENT_CACHE_BUCKET_NAME = google_storage_bucket.event_cache.name
+    ATLAS_REGION                  = var.region
+    ATLAS_EVENT_CACHE_BUCKET_NAME = google_storage_bucket.event_cache.name
   }
 }
 
@@ -139,7 +139,7 @@ resource "google_storage_bucket_iam_member" "event_cache_runtime_access" {
 
 # Job periódico (1x/dia, D-1) que popula o cache acima — ver
 # infra/terraform/modules/cloud-run-job e
-# apps/backend/src/observability_hub/jobs/refresh_event_cache.py.
+# apps/backend/src/atlas/jobs/refresh_event_cache.py.
 module "backend_event_cache_job" {
   source = "../../modules/cloud-run-job"
 
@@ -148,16 +148,16 @@ module "backend_event_cache_job" {
   environment = "prod"
   job_name    = "backend-prod-refresh-cache"
   image       = var.backend_image
-  command     = ["python", "-m", "observability_hub.jobs.refresh_event_cache"]
+  command     = ["python", "-m", "atlas.jobs.refresh_event_cache"]
 
   service_account               = module.backend_cloud_run.runtime_service_account_email
   backend_service_account_email = module.backend_cloud_run.runtime_service_account_email
   scheduler_service_account_id  = "backend-prod-cache-sched"
 
   env = {
-    OBSERVABILITY_HUB_ENVIRONMENT             = "prod"
-    OBSERVABILITY_HUB_REGION                  = var.region
-    OBSERVABILITY_HUB_EVENT_CACHE_BUCKET_NAME = google_storage_bucket.event_cache.name
-    OBSERVABILITY_HUB_RUNTIME_SA_EMAIL        = module.backend_cloud_run.runtime_service_account_email
+    ATLAS_ENVIRONMENT             = "prod"
+    ATLAS_REGION                  = var.region
+    ATLAS_EVENT_CACHE_BUCKET_NAME = google_storage_bucket.event_cache.name
+    ATLAS_RUNTIME_SA_EMAIL        = module.backend_cloud_run.runtime_service_account_email
   }
 }

@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 from google.cloud import firestore
 
-from observability_hub.domains.quality import folder_repository
+from atlas.domains.quality import folder_repository
 
 
 def _fake_folders_collection():

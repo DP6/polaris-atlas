@@ -92,7 +92,7 @@ export function LoginAnalyticsSection() {
 
   if (analyticsQuery.isError || !analyticsQuery.data) {
     return (
-      <p className="text-sm text-status-error-foreground">Erro ao carregar os acessos ao Hub.</p>
+      <p className="text-sm text-status-error-foreground">Erro ao carregar os acessos ao Atlas.</p>
     )
   }
 
@@ -121,7 +121,7 @@ export function LoginAnalyticsSection() {
 
   return (
     <Panel
-      title="Acessos ao Hub"
+      title="Acessos ao Atlas"
       subtitle="Coluna e linha na mesma janela — troque qual métrica é coluna e qual é linha, a granularidade e o período."
       actions={
         <div className="flex flex-wrap items-end gap-3">

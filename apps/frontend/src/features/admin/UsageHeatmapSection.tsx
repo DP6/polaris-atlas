@@ -21,7 +21,7 @@ export function UsageHeatmapSection() {
       <p className="text-sm text-muted-foreground">
         Combina login, profiling, scan de PII, visualização de tabela e busca dos últimos 90 dias
         num mapa de dia da semana × hora — útil pra saber quando dar suporte/manutenção sem
-        atrapalhar quem está usando o Hub.
+        atrapalhar quem está usando o Atlas.
       </p>
 
       {hasData ? (

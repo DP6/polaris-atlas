@@ -1,4 +1,4 @@
-from observability_hub.domains.pii import sql_builder
+from atlas.domains.pii import sql_builder
 
 # --- name_match_types -------------------------------------------------------
 

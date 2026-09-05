@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from observability_hub.core import workspace_directory
+from atlas.core import workspace_directory
 
 
 def setup_function():

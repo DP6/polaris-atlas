@@ -9,7 +9,7 @@ resource "google_artifact_registry_repository" "apps" {
   location      = var.region
   repository_id = var.artifact_registry_repository_id
   format        = "DOCKER"
-  description   = "Imagens Docker dos apps do Observability Hub (backend, frontend)."
+  description   = "Imagens Docker dos apps do Atlas (backend, frontend)."
 }
 
 # O recurso ganhou `count` para permitir instâncias do módulo que reaproveitam
@@ -95,7 +95,7 @@ resource "google_cloud_run_v2_service" "service" {
       # o nome a partir do project_id, que sozinho não distingue dev de prod
       # na topologia single-project (ver core/config.py::runtime_sa_email).
       env {
-        name  = "OBSERVABILITY_HUB_RUNTIME_SA_EMAIL"
+        name  = "ATLAS_RUNTIME_SA_EMAIL"
         value = google_service_account.runtime.email
       }
 

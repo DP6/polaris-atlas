@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 
-const STORAGE_KEY = 'observability-hub:theme'
+const STORAGE_KEY = 'atlas:theme'
 
 export type Theme = 'dark' | 'light'
 

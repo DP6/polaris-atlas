@@ -17,7 +17,7 @@ seção 6.2)
 
 ## 1. Motivação
 
-O Hub hoje só observa BigQuery/Cloud Logging/Cloud Billing. Cloud Storage é
+O Atlas hoje só observa BigQuery/Cloud Logging/Cloud Billing. Cloud Storage é
 usado intensamente na stack de engenharia de dados do cliente (landing zone,
 exports, arquivamento) e aparece nos dois sentidos de pipeline real: como
 origem de `LOAD` jobs e como destino de `EXTRACT` jobs do BigQuery. Esta é
@@ -341,7 +341,7 @@ tomada com o usuário depois de identificar que, diferente de tabela,
 bucket não tem "projeto dono" confiável via API pra saber em qual audit
 log procurar quem mais o referencia (o nome do bucket não garante o
 projeto GCP que o possui, e jobs que o tocam podem rodar em qualquer
-projeto observado pelo Hub, não necessariamente "o projeto do bucket").
+projeto observado pelo Atlas, não necessariamente "o projeto do bucket").
 **Bucket é sempre nó folha**: entra no grafo (nó + aresta) quando
 descoberto a partir dos eventos já buscados pro projeto do lado tabela
 (dado que já temos, sem custo extra), mas a travessia nunca tenta
@@ -409,7 +409,7 @@ ver nota abaixo.
 > acesso a objeto). As duas juntas (`bucketViewer` + `objectViewer`) cobrem
 > exatamente as quatro operações de leitura que o domínio usa, sem excesso.
 
-Cross-project: mesma lógica já aplicada a BigQuery/Logging — se o Hub
+Cross-project: mesma lógica já aplicada a BigQuery/Logging — se o Atlas
 observa múltiplos projetos, as duas roles precisam ser concedidas
 cross-project nos dois sentidos, mesmo padrão de dev↔prod já em uso.
 

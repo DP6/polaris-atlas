@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 from google.cloud import firestore
 
-from observability_hub.domains.history import repository
+from atlas.domains.history import repository
 
 
 def _fake_client_with_collections():

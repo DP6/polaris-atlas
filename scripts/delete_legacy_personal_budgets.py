@@ -20,7 +20,7 @@ login`), não a service account de runtime — mesmo racional de
 Uso (a partir de apps/backend, pra usar o venv/uv.lock já resolvido):
     cd apps/backend
     uv run python ../../scripts/delete_legacy_personal_budgets.py \\
-        --project observability-hub --environment dev
+        --project dp6-ci-polaris --environment dev
 
 Por padrão só lista o que seria apagado (--dry-run é o comportamento
 default) — passe --confirm pra apagar de verdade. Rodar primeiro em dev,

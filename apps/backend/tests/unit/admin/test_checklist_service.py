@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 from google.api_core.exceptions import Forbidden, NotFound
 
-from observability_hub.domains.admin import checklist_service
+from atlas.domains.admin import checklist_service
 
 
 def _items_by_name(response):
@@ -29,7 +29,7 @@ def test_check_project_checklist_all_ok(monkeypatch):
 
 
 def test_check_project_checklist_bigquery_denied(monkeypatch):
-    from observability_hub.core.exceptions import ProjectAccessDeniedError
+    from atlas.core.exceptions import ProjectAccessDeniedError
 
     def _raise(project_id, client):
         raise ProjectAccessDeniedError(project_id)
@@ -48,7 +48,7 @@ def test_check_project_checklist_bigquery_denied(monkeypatch):
 
 
 def test_check_project_checklist_bigquery_not_found(monkeypatch):
-    from observability_hub.core.exceptions import ProjectNotFoundError
+    from atlas.core.exceptions import ProjectNotFoundError
 
     def _raise(project_id, client):
         raise ProjectNotFoundError(project_id)

@@ -1,4 +1,4 @@
-from observability_hub.domains.favorites.schemas import (
+from atlas.domains.favorites.schemas import (
     AddFavoriteRequest,
     Favorite,
     FavoritesListResponse,
@@ -7,7 +7,7 @@ from observability_hub.domains.favorites.schemas import (
 
 def test_favorite_matches_spec_example():
     payload = {
-        "project_id": "observability-hub-dev",
+        "project_id": "atlas-dev",
         "dataset_id": "RAW",
         "table_id": "ga4_events",
         "added_at": "2026-08-12T03:00:00Z",

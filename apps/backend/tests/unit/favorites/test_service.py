@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
-from observability_hub.domains.favorites import service
+from atlas.domains.favorites import service
 
 
 def test_list_favorites_builds_response(monkeypatch):

@@ -5,10 +5,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from observability_hub.core.exceptions import InvalidSamplePercentError
-from observability_hub.domains.finops import service, sql_builder
-from observability_hub.domains.finops.repository import ScanEvent
-from observability_hub.domains.finops.schemas import (
+from atlas.core.exceptions import InvalidSamplePercentError
+from atlas.domains.finops import service, sql_builder
+from atlas.domains.finops.repository import ScanEvent
+from atlas.domains.finops.schemas import (
     BudgetGroupBy,
     ColumnTypeScanRequest,
     CostSeriesGranularity,

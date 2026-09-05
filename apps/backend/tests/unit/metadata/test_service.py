@@ -3,9 +3,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from observability_hub.core.exceptions import ColumnNotFoundError
-from observability_hub.domains.metadata import service
-from observability_hub.domains.metadata.schemas import (
+from atlas.core.exceptions import ColumnNotFoundError
+from atlas.domains.metadata import service
+from atlas.domains.metadata.schemas import (
     MetadataColumnUpsertRequest,
     MetadataTableUpsertRequest,
 )

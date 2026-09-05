@@ -1,7 +1,7 @@
 import json
 from unittest.mock import MagicMock, patch
 
-from observability_hub.core import secrets
+from atlas.core import secrets
 
 
 def _fake_secret_client(payload: str) -> MagicMock:
@@ -15,9 +15,9 @@ def _fake_secret_client(payload: str) -> MagicMock:
 def test_get_secret_reads_latest_version_by_project():
     fake_client = _fake_secret_client("shhh")
     with (
-        patch("observability_hub.core.secrets.get_runtime_project", return_value="proj-dev"),
+        patch("atlas.core.secrets.get_runtime_project", return_value="proj-dev"),
         patch(
-            "observability_hub.core.secrets.secretmanager.SecretManagerServiceClient",
+            "atlas.core.secrets.secretmanager.SecretManagerServiceClient",
             return_value=fake_client,
         ),
     ):
@@ -32,9 +32,9 @@ def test_get_secret_reads_latest_version_by_project():
 def test_get_secret_is_cached_per_process():
     fake_client = _fake_secret_client("value")
     with (
-        patch("observability_hub.core.secrets.get_runtime_project", return_value="proj-dev"),
+        patch("atlas.core.secrets.get_runtime_project", return_value="proj-dev"),
         patch(
-            "observability_hub.core.secrets.secretmanager.SecretManagerServiceClient",
+            "atlas.core.secrets.secretmanager.SecretManagerServiceClient",
             return_value=fake_client,
         ),
     ):
@@ -46,7 +46,7 @@ def test_get_secret_is_cached_per_process():
 
 def test_get_oauth_client_id_uses_dev_suffix_when_not_prod(monkeypatch):
     monkeypatch.setattr(secrets.settings, "environment", "dev")
-    with patch("observability_hub.core.secrets.get_secret", return_value="client-id") as mock_get:
+    with patch("atlas.core.secrets.get_secret", return_value="client-id") as mock_get:
         secrets.get_oauth_client_id()
 
     mock_get.assert_called_once_with("GOOGLE_OAUTH_CLIENT_ID_DEV")
@@ -54,7 +54,7 @@ def test_get_oauth_client_id_uses_dev_suffix_when_not_prod(monkeypatch):
 
 def test_get_oauth_client_secret_uses_prod_suffix_when_prod(monkeypatch):
     monkeypatch.setattr(secrets.settings, "environment", "prod")
-    with patch("observability_hub.core.secrets.get_secret", return_value="secret") as mock_get:
+    with patch("atlas.core.secrets.get_secret", return_value="secret") as mock_get:
         secrets.get_oauth_client_secret()
 
     mock_get.assert_called_once_with("GOOGLE_OAUTH_CLIENT_SECRET_PROD")
@@ -62,7 +62,7 @@ def test_get_oauth_client_secret_uses_prod_suffix_when_prod(monkeypatch):
 
 def test_get_jwt_secret_uses_dev_suffix_when_not_prod(monkeypatch):
     monkeypatch.setattr(secrets.settings, "environment", "dev")
-    with patch("observability_hub.core.secrets.get_secret", return_value="shhh") as mock_get:
+    with patch("atlas.core.secrets.get_secret", return_value="shhh") as mock_get:
         secrets.get_jwt_secret()
 
     mock_get.assert_called_once_with("JWT_SECRET_DEV")
@@ -70,14 +70,14 @@ def test_get_jwt_secret_uses_dev_suffix_when_not_prod(monkeypatch):
 
 def test_get_jwt_secret_uses_prod_suffix_when_prod(monkeypatch):
     monkeypatch.setattr(secrets.settings, "environment", "prod")
-    with patch("observability_hub.core.secrets.get_secret", return_value="shhh") as mock_get:
+    with patch("atlas.core.secrets.get_secret", return_value="shhh") as mock_get:
         secrets.get_jwt_secret()
 
     mock_get.assert_called_once_with("JWT_SECRET_PROD")
 
 
 def test_oauth_allowlist_uses_unsuffixed_name():
-    with patch("observability_hub.core.secrets.get_secret") as mock_get:
+    with patch("atlas.core.secrets.get_secret") as mock_get:
         mock_get.return_value = json.dumps(
             {"allowed_domains": ["dp6.com.br"], "allowed_emails": []}
         )

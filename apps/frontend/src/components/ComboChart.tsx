@@ -37,7 +37,7 @@ interface ComboChartProps {
 // Coluna + linha(s) num container `bloco` — extraído do `<ComposedChart>`
 // de BudgetPage. Eixo Y duplo (coluna à esquerda, linha à direita) porque
 // as escalas costumam ser bem diferentes (diário × acumulado). Usado por
-// BudgetPage, FinOps overview e Admin "Acessos ao Hub".
+// BudgetPage, FinOps overview e Admin "Acessos ao Atlas".
 export function ComboChart({
   data,
   xKey,

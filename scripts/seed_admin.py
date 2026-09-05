@@ -15,7 +15,7 @@ localmente, fora do Hub, e não duplica lógica do backend de propósito
 Uso (a partir de apps/backend, pra usar o venv/uv.lock já resolvido):
     cd apps/backend
     uv run python ../../scripts/seed_admin.py \\
-        --project observability-hub --environment dev \\
+        --project dp6-ci-polaris --environment dev \\
         --email primeiro-admin@dp6.com.br
 
 Roda primeiro em dev, valida o fluxo ponta a ponta (login -> /admin

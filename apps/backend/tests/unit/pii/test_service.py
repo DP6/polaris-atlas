@@ -2,13 +2,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from observability_hub.core.exceptions import (
+from atlas.core.exceptions import (
     InvalidSamplePercentError,
     PiiScanTimeoutError,
     TableNotFoundError,
 )
-from observability_hub.domains.pii import service, sql_builder
-from observability_hub.domains.pii.schemas import PiiScanRequest
+from atlas.domains.pii import service, sql_builder
+from atlas.domains.pii.schemas import PiiScanRequest
 
 EXECUTED_BY = "a@dp6.com.br"
 

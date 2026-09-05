@@ -131,7 +131,7 @@ partição.
 **Response 200:**
 ```json
 {
-  "project_id": "observability-hub-dev",
+  "project_id": "atlas-dev",
   "lookback_days": 30,
   "candidates": [
     {
@@ -194,7 +194,7 @@ tabela dentro de um job (dado que não está disponível no audit log).
 ## Estrutura de arquivos
 
 ```
-apps/backend/src/observability_hub/
+apps/backend/src/atlas/
 ├── api/v1/
 │   └── finops.py
 ├── core/
@@ -272,7 +272,7 @@ Cobre `get_scan_events_cached` (usado por `partition-candidates` **e**
   implementado nesta v1.
 - Exclusão automática de tabelas (a funcionalidade só relata, nunca
   apaga/modifica — mesma restrição de escopo somente-leitura de todo o
-  Hub, `docs/prd.md`, "Fora do escopo").
+  Atlas, `docs/prd.md`, "Fora do escopo").
 - Deletar/arquivar tabelas sem uso — só relata, decisão fica com o
   usuário.
 

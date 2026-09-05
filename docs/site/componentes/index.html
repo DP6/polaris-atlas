@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Observability Hub — componentes GCP</title>
+<title>Atlas — componentes GCP</title>
 <link rel="icon" type="image/png" href="../assets/favicon.png" />
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Ubuntu:wght@300;400;700&display=swap');
@@ -368,7 +368,7 @@
 <body>
   <div class="page">
     <header class="site-tabs">
-      <span class="site-tabs-brand"><span class="dot"></span> Observability Hub</span>
+      <span class="site-tabs-brand"><span class="dot"></span> Atlas</span>
       <a href="../produto/">Demonstrativo do produto</a>
       <a href="../tecnico/">Guia técnico</a>
       <a href="../componentes/" class="active">Componentes</a>
@@ -377,8 +377,8 @@
 
     <header class="page-hero">
       <div class="page-hero-inner">
-        <span class="kicker"><span class="dot"></span> Observability Hub</span>
-        <h1>Componentes GCP do Hub</h1>
+        <span class="kicker"><span class="dot"></span> Atlas</span>
+        <h1>Componentes GCP do Atlas</h1>
         <div class="hero-topics">
           <span class="chip">Cloud Run</span>
           <span class="chip">Job de cache + Scheduler</span>
@@ -407,7 +407,7 @@
 
       <main class="content">
         <p class="lede">
-          Inventário de todo recurso GCP que roda o Observability Hub em
+          Inventário de todo recurso GCP que roda o Atlas em
           <code>dp6-ci-polaris</code> — pensado pra responder "de quem é
           esse recurso" no momento em que mais de uma app do Polaris
           dividir o mesmo projeto. Fonte técnica completa, com a mesma
@@ -416,7 +416,7 @@
           no repositório.
         </p>
 
-        <div class="app-banner"><span class="swatch"></span> App neste projeto hoje: <strong>observability-hub</strong> (único até o momento)</div>
+        <div class="app-banner"><span class="swatch"></span> App neste projeto hoje: <strong>atlas</strong> (único até o momento)</div>
 
         <section class="doc-section" id="cloud-run">
           <h2>Cloud Run — serviços</h2>
@@ -452,7 +452,7 @@
 
         <section class="doc-section" id="dados">
           <h2>Firestore &amp; Cloud Storage</h2>
-          <p class="section-summary">Onde o Hub guarda dado derivado (ACL, cache) — nunca o dado observado em si.</p>
+          <p class="section-summary">Onde o Atlas guarda dado derivado (ACL, cache) — nunca o dado observado em si.</p>
           <div class="table-wrap">
             <table class="components">
               <thead><tr><th>Recurso</th><th>Tipo</th><th>Ambiente</th><th>Gerenciado por</th><th>Observações</th></tr></thead>

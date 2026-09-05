@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
-from observability_hub.domains.admin import repository
+from atlas.domains.admin import repository
 
 
 def _fake_client_with_collection():

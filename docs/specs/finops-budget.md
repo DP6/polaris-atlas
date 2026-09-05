@@ -164,17 +164,17 @@ reservados, custo fixo por capacidade), essa estimativa **não reflete o
 gasto real** — nesse modelo o custo é por hora de slot, não por byte
 escaneado. Isso não é uma limitação nova desta feature especificamente:
 é a mesma premissa on-demand que já está embutida em toda estimativa de
-custo do Hub. Documentado aqui porque budget é onde um número errado
+custo do Atlas. Documentado aqui porque budget é onde um número errado
 mais provavelmente vira uma decisão financeira.
 
-### Diferente do mapa de acesso: a SA do próprio Hub CONTA aqui
+### Diferente do mapa de acesso: a SA do próprio Atlas CONTA aqui
 
-`domains/access` exclui a SA de runtime do Hub da agregação porque ali a
+`domains/access` exclui a SA de runtime do Atlas da agregação porque ali a
 pergunta é "quem consome essa tabela de fora" (rodar profiling pela UI
 não é um consumidor externo real). Budget pergunta outra coisa: "quanto
 está sendo gasto de verdade nesse projeto" — e profiling/PII rodados
-pela UI do Hub **custam dinheiro de verdade**, então devem contar tanto
-em `group_by=table` quanto em `group_by=user` (a SA do Hub pode
+pela UI do Atlas **custam dinheiro de verdade**, então devem contar tanto
+em `group_by=table` quanto em `group_by=user` (a SA do Atlas pode
 legitimamente aparecer ali se o usuário rodar muitos scans). Nenhuma
 exclusão é aplicada por identidade do principal.
 
@@ -196,7 +196,7 @@ queries registra `referencedTables[].datasetId="region-US"` (ou
 `.TABLES`, `.TABLE_STORAGE`...) — indistinguível, à primeira vista, de
 uma tabela real de cliente chamada `region-US`. Na amostra investigada,
 **4989 de 5000 jobs (99,8%)** eram esse ruído, todos disparados pela SA
-de runtime do Hub — deixando só ~11 jobs de atividade real.
+de runtime do Atlas — deixando só ~11 jobs de atividade real.
 
 **Fix:** `repository._parse_table_ref()` descarta qualquer referência
 cujo `table_id` comece com `INFORMATION_SCHEMA.`, na origem — benefício
@@ -266,14 +266,14 @@ mais `projection.days_elapsed`.
 **Response 200:**
 ```json
 {
-  "project_id": "observability-hub-dev",
+  "project_id": "atlas-dev",
   "period_start": "2026-08-01T00:00:00Z",
   "period_end": "2026-08-15T00:00:00Z",
   "lookback_days": 15,
   "group_by": "table",
   "groups": [
     {
-      "key": "observability-hub-dev.RAW.ga4_events",
+      "key": "atlas-dev.RAW.ga4_events",
       "cost_usd": 5.68,
       "billed_bytes": 1000000000000,
       "job_count": 12,
@@ -289,7 +289,7 @@ mais `projection.days_elapsed`.
       "executed_at": "2026-08-14T14:33:05Z",
       "billed_bytes": 1000000000000,
       "cost_usd": 5.68,
-      "tables": ["observability-hub-dev.RAW.ga4_events"],
+      "tables": ["atlas-dev.RAW.ga4_events"],
       "query_text": "SELECT ..."
     }
   ],
@@ -403,9 +403,9 @@ in-memory (coleção pequena — um punhado de budgets por usuário — evita
 exigir índice composto no Firestore). Ordenado por `updated_at` desc.
 
 ```json
-{ "project_id": "observability-hub-dev",
+{ "project_id": "atlas-dev",
   "budgets": [
-    { "project_id": "observability-hub-dev", "scope": "project",
+    { "project_id": "atlas-dev", "scope": "project",
       "dataset_id": null, "table_id": null, "amount_usd": 250.0,
       "period": "month", "created_by": "ana@dp6.com.br",
       "created_at": "2026-09-01T12:00:00Z", "updated_at": "2026-09-01T12:00:00Z" } ] }
@@ -515,7 +515,7 @@ custo de **query** e de **storage** por período, filtrável.
 **Response 200 (`CostSeriesResponse`):**
 ```json
 {
-  "project_id": "observability-hub-dev",
+  "project_id": "atlas-dev",
   "granularity": "day",
   "cost_type": "all",
   "period_start": "2026-08-03T00:00:00Z",
@@ -570,7 +570,7 @@ por região. Qualificador de região em **minúscula** (`region-us`).
 ### Por que snapshot, não timeline (R2-11.5)
 
 A primeira versão (R2-10) usou `TABLE_STORAGE_USAGE_TIMELINE_BY_PROJECT`
-pra ter storage *histórico* por dia. Em dev a chamada do Hub caiu em
+pra ter storage *histórico* por dia. Em dev a chamada do Atlas caiu em
 `400 Unrecognized name: total_logical_usage_bytes` — o schema de coluna
 dessa família de views não bate com o que a doc sugere e varia entre
 versões. Trocado por `TABLE_STORAGE` (snapshot atual, coluna
@@ -645,7 +645,7 @@ dias.
 **Response 200 (`CostHistoryResponse`):**
 ```json
 {
-  "project_id": "observability-hub-dev",
+  "project_id": "atlas-dev",
   "months": [
     { "month": "2026-08", "query_cost_usd": 0.28, "storage_cost_usd": 0.03,
       "total_cost_usd": 0.31, "days_recorded": 31 }
@@ -692,7 +692,7 @@ custo" — já prototipado). Mesma escala 0–100, maior = mais eficiente.
 **Response (`TableScoresResponse`):**
 ```json
 {
-  "project_id": "observability-hub-dev",
+  "project_id": "atlas-dev",
   "lookback_days": 30,
   "project_efficiency_score": 78,
   "tables": [
@@ -808,7 +808,7 @@ def get_budget(
 ## Estrutura de arquivos
 
 ```
-apps/backend/src/observability_hub/
+apps/backend/src/atlas/
 ├── api/v1/
 │   └── finops.py          # + GET /finops/{project_id}/budget?group_by=...&include_storage=... (v1.12)
 │                          # + GET/PUT/DELETE /finops/{project_id}/budgets (CRUD, v1.5;
@@ -862,7 +862,7 @@ tinha com o texto da query inline na célula).
 
 | Cenário | Comportamento |
 |---|---|
-| Referência a `INFORMATION_SCHEMA.*` (probes de região do próprio Hub) | Filtrada na origem (`repository._parse_table_ref`) — nunca vira dataset/tabela fantasma em nenhum `group_by` |
+| Referência a `INFORMATION_SCHEMA.*` (probes de região do próprio Atlas) | Filtrada na origem (`repository._parse_table_ref`) — nunca vira dataset/tabela fantasma em nenhum `group_by` |
 | Evento cujas `referenced_tables`, após o filtro acima, não sobra nenhuma do `project_id` (só probe ou só tabela de outro projeto) | Evento inteiro pulado — não entra em `groups` nem em `top_queries` |
 | Evento com `total_billed_bytes <= 0` | Ignorado em toda agregação — não soma custo nem `job_count` |
 | Evento anterior a `period_start` (`now - lookback_days`) | Ignorado |

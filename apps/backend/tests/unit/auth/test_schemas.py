@@ -1,4 +1,4 @@
-from observability_hub.domains.auth.schemas import TokenResponse, UserInfo
+from atlas.domains.auth.schemas import TokenResponse, UserInfo
 
 
 def test_user_info_picture_defaults_to_none():

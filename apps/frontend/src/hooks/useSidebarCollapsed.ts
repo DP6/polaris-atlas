@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 
-const STORAGE_KEY = 'observability-hub:sidebar-collapsed'
+const STORAGE_KEY = 'atlas:sidebar-collapsed'
 
 function readStored(): boolean {
   try {

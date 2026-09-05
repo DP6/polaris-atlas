@@ -17,7 +17,7 @@
 
 Login via Google OAuth (Workspace), restrito a uma allowlist de domínios/
 e-mails, com sessão stateless via JWT em cookie `httpOnly`. Todo outro
-domínio do Hub depende deste para saber quem é o usuário
+domínio do Atlas depende deste para saber quem é o usuário
 (`core/auth.py::get_current_user`) e, combinado com `domains/admin`, se
 ele é admin (`require_admin`) ou tem acesso a um projeto GCP específico
 (`require_project_access`).
@@ -122,7 +122,7 @@ cookie e a deleção é ignorada). `204`, sem body.
 ## Estrutura de arquivos
 
 ```
-apps/backend/src/observability_hub/
+apps/backend/src/atlas/
 ├── api/v1/
 │   └── auth.py             # /login, /callback, /me, /logout
 ├── core/
@@ -182,4 +182,4 @@ apps/backend/src/observability_hub/
   stateless por design; se necessário no futuro, exigiria trocar pra
   sessão com estado (Firestore/Redis) ou reduzir bastante o TTL do JWT.
 - Gestão de quem está na allowlist (isso é `docs/onboarding-cliente.md`
-  + Secret Manager, não uma tela do Hub).
+  + Secret Manager, não uma tela do Atlas).

@@ -20,8 +20,8 @@ interface RequestAccessDialogProps {
   // acesso" do ProjectSelector — poupa o usuário de digitar de novo o
   // project_id que acabou de tentar (e falhou).
   initialProjectId?: string
-  // "access" (default) = pedir acesso a um projeto já onboardado no Hub.
-  // "inclusion" = pedir que o projeto seja registrado no Hub — aprovar
+  // "access" (default) = pedir acesso a um projeto já onboardado no Atlas.
+  // "inclusion" = pedir que o projeto seja registrado no Atlas — aprovar
   // também registra o projeto, não só libera o solicitante (ver
   // docs/specs/admin.md).
   requestType?: AccessRequestType
@@ -30,13 +30,13 @@ interface RequestAccessDialogProps {
 const DIALOG_COPY: Record<AccessRequestType, { title: string; description: string }> = {
   access: {
     title: 'Solicitar acesso a projetos',
-    description: 'Um administrador do Hub vai revisar e liberar (ou negar) cada projeto listado.',
+    description: 'Um administrador do Atlas vai revisar e liberar (ou negar) cada projeto listado.',
   },
   inclusion: {
-    title: 'Solicitar inclusão de projeto novo no Hub',
+    title: 'Solicitar inclusão de projeto novo no Atlas',
     description:
       'Um administrador vai confirmar que o projeto está pronto no GCP (roles concedidas, ' +
-      'ver checklist de onboarding) antes de registrá-lo no Hub e liberar seu acesso.',
+      'ver checklist de onboarding) antes de registrá-lo no Atlas e liberar seu acesso.',
   },
 }
 

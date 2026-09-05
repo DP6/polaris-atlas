@@ -1,6 +1,6 @@
-from observability_hub.domains.quality import sql_builder
-from observability_hub.domains.quality.schemas import Granularity, UniquenessMethod
-from observability_hub.domains.quality.sql_builder import ProfileableColumn
+from atlas.domains.quality import sql_builder
+from atlas.domains.quality.schemas import Granularity, UniquenessMethod
+from atlas.domains.quality.sql_builder import ProfileableColumn
 
 
 def test_is_numeric_type_true_for_known_numeric_types():

@@ -69,7 +69,7 @@ function formatAssetCounts(totalTables: number, totalViews: number): string {
   return tablesLabel
 }
 
-// Nó de topo de um serviço observável (hoje só BigQuery — o Hub existe pra
+// Nó de topo de um serviço observável (hoje só BigQuery — o Atlas existe pra
 // expandir pra outros serviços GCP no futuro, cada um vira um
 // SidebarServiceGroup irmão deste). Visualmente mais forte que
 // SidebarSection (ícone, texto não-muted, sem uppercase) pra marcar a

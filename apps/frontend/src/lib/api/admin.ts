@@ -74,7 +74,7 @@ export const adminApi = {
     httpClient.delete<undefined>(`/api/v1/admin/projects/${encodeURIComponent(projectId)}`),
 
   // Checklist best-effort do onboarding (BigQuery/Logging/Storage) —
-  // probing real de cada API, sem exigir nenhuma role nova da SA do Hub.
+  // probing real de cada API, sem exigir nenhuma role nova da SA do Atlas.
   // Ver docs/specs/admin.md, "Checklist de onboarding".
   getProjectChecklist: (projectId: string) =>
     httpClient.get<ProjectChecklistResponse>(

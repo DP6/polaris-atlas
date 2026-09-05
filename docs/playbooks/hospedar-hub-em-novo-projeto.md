@@ -1,7 +1,7 @@
-# Playbook — Hospedar o Observability Hub em um novo projeto GCP
+# Playbook — Hospedar o Atlas em um novo projeto GCP
 
 **Pergunta que este playbook responde:** "quero rodar minha própria cópia
-do Hub — hospedagem e administração — num projeto GCP diferente do
+do Atlas — hospedagem e administração — num projeto GCP diferente do
 `dp6-ci-polaris` original. O que precisa ser feito, do zero, pra outra
 pessoa replicar isto?"
 
@@ -19,8 +19,8 @@ uma vez e nunca mais. Depois de concluído, o dia a dia é só `git push`
 
 Não confundir com o outro documento,
 [`docs/onboarding-cliente.md`](../onboarding-cliente.md) — aquele é
-sobre liberar acesso a um projeto *que o Hub vai observar*; este é
-sobre onde o Hub *em si* roda.
+sobre liberar acesso a um projeto *que o Atlas vai observar*; este é
+sobre onde o Atlas *em si* roda.
 
 ---
 
@@ -28,7 +28,7 @@ sobre onde o Hub *em si* roda.
 
 **Para quem é esta seção:** o time de TI/infra que administra a conta
 Google Cloud e o GitHub da empresa — não precisa entender o
-funcionamento interno do Hub, só garantir que o essencial abaixo existe
+funcionamento interno do Atlas, só garantir que o essencial abaixo existe
 antes de alguém seguir o resto deste playbook a partir da seção 1.
 
 **Resumo em uma frase:** um projeto Google Cloud novo, com billing
@@ -39,7 +39,7 @@ administrador.
 ### 0.1 Google Cloud
 
 - [ ] Criar (ou autorizar a criação de) **um único projeto Google Cloud**
-      para o Hub — ele hospeda dev e prod dentro do mesmo projeto, não
+      para o Atlas — ele hospeda dev e prod dentro do mesmo projeto, não
       são necessários dois.
 - [ ] Escolher e informar o **ID do projeto** (ex: `acme-hub`) — vira
       referência em vários arquivos de configuração (seção 6).
@@ -83,10 +83,10 @@ melhor descobrir isso antes de começar do que no meio do bootstrap.
 ### 0.3 Google Workspace (tela de login OAuth)
 
 - [ ] Decidir, com quem administra o Google Workspace da empresa: a tela
-      de consentimento OAuth do Hub vai ser **Interna** (só contas do
+      de consentimento OAuth do Atlas vai ser **Interna** (só contas do
       Workspace, mais simples) ou **Externa** (qualquer conta Google,
       publicada como "Em produção" — não exige revisão do Google porque
-      o Hub só pede escopos básicos: `openid`, `email`, `profile`,
+      o Atlas só pede escopos básicos: `openid`, `email`, `profile`,
       nenhum sensível — ver seção 11).
 - [ ] Se for **Interna**: confirmar que quem vai configurar o OAuth
       Client (seção 11) tem permissão pra isso no Workspace — às vezes é
@@ -95,7 +95,7 @@ melhor descobrir isso antes de começar do que no meio do bootstrap.
 ### 0.4 GitHub
 
 - [ ] Criar (ou autorizar a criação de) um **repositório novo**, sob
-      controle de quem vai hospedar o Hub — pode ser um fork ou cópia
+      controle de quem vai hospedar o Atlas — pode ser um fork ou cópia
       direta deste repositório.
 - [ ] Garantir acesso de **administrador** nesse repositório pra essa
       pessoa — vai precisar configurar Secrets (seção 8) e o Environment
@@ -110,7 +110,7 @@ A pessoa responsável segue este playbook a partir da seção 1, do início
 ao fim — autocontido a partir daqui, não precisa de mais nada do time de
 TI além do que já foi concedido acima (a menos que alguma restrição da
 seção 0.2 realmente exista, aí vira uma conversa pontual sobre aquela
-exceção específica). Depois que o Hub estiver no ar, liberar acesso de
+exceção específica). Depois que o Atlas estiver no ar, liberar acesso de
 leitura a outros projetos Google Cloud é um processo **separado**,
 coberto em [`docs/onboarding-cliente.md`](../onboarding-cliente.md).
 
@@ -127,7 +127,7 @@ coberto em [`docs/onboarding-cliente.md`](../onboarding-cliente.md).
   `frontend-dev-run`, `backend-prod-run`, `frontend-prod-run`)
 - Firestore (Native mode), **dois named databases** (`hub-dev` e
   `hub-prod` — prefixo `hub-` porque `database_id` exige 4+ caracteres,
-  "dev" sozinho é rejeitado pela API) — dado próprio do Hub: ACL de
+  "dev" sozinho é rejeitado pela API) — dado próprio do Atlas: ACL de
   usuário×projeto, favoritos, histórico, login events. Nunca o banco
   `(default)` implícito, que seria compartilhado entre os dois
   ambientes.
@@ -178,7 +178,7 @@ push/merge em `main` (ver `CLAUDE.md`, "CI/CD e deploy").
 
 ## 3. Escolher o nome do projeto
 
-Este repositório, como está hoje, **hardcoda** `observability-hub` em
+Este repositório, como está hoje, **hardcoda** `atlas` em
 vários lugares (não é parametrizado via `.tfvars` em CI — os
 `terraform.tfvars.example` existem só como referência para apply manual
 local). Escolha o `project_id` novo agora — todo o restante deste
@@ -189,7 +189,7 @@ substituí-lo consistentemente nos arquivos listados no passo 6.
 > precisa terminar em `-dev`/`-prod`** — esse requisito existia porque
 > `core/secrets.py::_is_prod()` inferia o ambiente do sufixo do
 > `project_id`. Neste repositório o ambiente é sempre explícito
-> (`OBSERVABILITY_HUB_ENVIRONMENT`, injetada pelo Terraform — ver
+> (`ATLAS_ENVIRONMENT`, injetada pelo Terraform — ver
 > ADR-010), então o nome do projeto pode ser qualquer coisa válida pro
 > GCP (ex: `acme-hub`, sem sufixo nenhum — dev e prod são o mesmo
 > projeto de qualquer forma).
@@ -199,7 +199,7 @@ substituí-lo consistentemente nos arquivos listados no passo 6.
 ## 4. Criar o projeto GCP e vincular billing
 
 ```bash
-gcloud projects create {NOVO_PROJETO} --name="Observability Hub"
+gcloud projects create {NOVO_PROJETO} --name="Atlas"
 
 gcloud billing projects link {NOVO_PROJETO} --billing-account={BILLING_ACCOUNT_ID}
 ```
@@ -240,7 +240,7 @@ gcloud firestore databases create \
 
 ## 6. Ajustar os defaults do repositório para o novo projeto
 
-Edite estes arquivos, trocando `observability-hub` pelo nome escolhido
+Edite estes arquivos, trocando `atlas` pelo nome escolhido
 no passo 3 (e o `github_repository` pelo seu `owner/repo`):
 
 | Arquivo | O que trocar |
@@ -486,9 +486,9 @@ Notas:
   tem como criar os dois com o mesmo nome sem sobrescrever um pelo
   outro, mas é fácil copiar/colar o mesmo *valor* nos dois por engano.
   Não faça isso: um token de sessão de dev validaria em prod.
-- `OAUTH_ALLOWLIST` é quem entra no Hub (login), não quem acessa qual
+- `OAUTH_ALLOWLIST` é quem entra no Atlas (login), não quem acessa qual
   projeto — controla só a barreira inicial. Ajuste `allowed_domains`/
-  `allowed_emails` para a realidade de quem vai usar o Hub.
+  `allowed_emails` para a realidade de quem vai usar o Atlas.
 - `secrets.py` lê sempre a versão `latest`, cacheada por processo
   (`lru_cache`) — atualizar um secret exige reiniciar as instâncias do
   Cloud Run (ou aguardar novo deploy/scale) para o valor novo valer.
@@ -591,7 +591,7 @@ Depois de validar dev:
 
 ## 17. Depois de hospedado
 
-O Hub está de pé, mas ainda não observa nenhum dado — ele só enxerga
+O Atlas está de pé, mas ainda não observa nenhum dado — ele só enxerga
 projetos GCP explicitamente liberados. Para cada projeto que ele deve
 observar (incluindo, se quiser, o próprio `{PROJETO}` servindo de alvo
 dele mesmo), siga [`docs/onboarding-cliente.md`](../onboarding-cliente.md).
@@ -677,6 +677,6 @@ na migração pra topologia single-project (ADR-010):
 - [`docs/specs/admin.md`](../specs/admin.md) — bootstrap do primeiro admin, casos de borda do ACL
 - [`docs/onboarding-cliente.md`](../onboarding-cliente.md) — outro
   documento, complementar: como liberar acesso de leitura a um projeto
-  GCP *que o Hub vai observar* (diferente deste, que é sobre onde o Hub
+  GCP *que o Atlas vai observar* (diferente deste, que é sobre onde o Atlas
   *em si* roda)
 - `CHANGELOG.md`, seção "Fase 1" — incidentes reais do bootstrap original

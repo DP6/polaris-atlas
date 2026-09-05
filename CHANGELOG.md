@@ -1,9 +1,60 @@
-# CHANGELOG — Observability Hub
+# CHANGELOG — Atlas
 
 Histórico de fases, decisões, erros cometidos e pivotagens.
 Atualizado ao final de cada fase pelo Claude Code.
 
 ---
+
+### rename-atlas — `rename/atlas` (produto, backend, frontend, infra, docs)
+
+Rename do produto de "Observability Hub" pra **Atlas**, a pedido do
+usuário — ver [ADR-011](docs/adr/ADR-011-rename-atlas.md) pro contexto
+completo e o que ficou fora do escopo (domínio customizado/OAuth,
+Firestore, buckets de cache).
+
+- **Backend:** pacote Python `src/observability_hub/` → `src/atlas/`
+  (rename mecânico de diretório + todos os imports internos, `src/` e
+  `tests/`); `pyproject.toml` (`name`, `description`, `packages`);
+  `Dockerfile`; `env_prefix` do Pydantic Settings
+  `OBSERVABILITY_HUB_` → `ATLAS_` (`core/config.py`) — inclui dois
+  literais de env var em `core/run_client.py` que o find-replace por
+  case-sensitivity não pegaria sozinho (`ATLAS_CACHE_FORCE_FULL`/
+  `_ONLY_PROJECTS`, usados pra override de env do Cloud Run Job). 903
+  testes (`pytest`) e `ruff check`/`format` passando depois do rename.
+- **Frontend:** `package.json`, título da aba, tela de login (único
+  lugar com o nome por extenso), placeholder de exemplo de projeto,
+  chaves de `localStorage` (`observability-hub:*` → `atlas:*` — reseta
+  tema/sidebar/último projeto salvos dos usuários atuais) e ~50
+  menções soltas de "Hub" em textos de admin/copy. `tsc --noEmit`,
+  `biome check` e `vite build` passando.
+- **Infra (Terraform):** env vars `OBSERVABILITY_HUB_*` → `ATLAS_*` em
+  `environments/{dev,prod}/main.tf` (mantendo os valores de
+  `CORS_ORIGINS` com o domínio antigo — migração de domínio é
+  separada, ver ADR-011); comando do Cloud Run Job
+  (`python -m atlas.jobs.refresh_event_cache`); label FinOps `app`
+  `observability-hub` → `atlas` em `versions.tf` (**requer novo
+  `terraform apply` em dev e prod** pra propagar nos recursos já
+  criados — não aplicado nesta sessão). `terraform validate` passando
+  em dev e prod.
+- **Docs:** `CLAUDE.md` (título, tabela de projeto GCP corrigida pra
+  `dp6-ci-polaris` — já estava desatualizada antes deste rename, ver
+  `docs/onboarding-cliente.md`), `docs/gcp-components.md`,
+  `docs/finops-labels.md`, `docs/onboarding-cliente.md` (só as partes
+  vivas — o log histórico de concessões manteve os nomes de projeto da
+  época), `docs/specs/*.md` (path do pacote — preservadas as notas de
+  validação contra dado real datadas, ex. `finops-waste-scanner.md`
+  ASM-002, `lineage.md`/`finops-budget.md`), `docs/playbooks/`,
+  `docs/site/*` (GH Pages — banner e tabela de domínio mantidos como
+  estavam nas duas linhas de domínio customizado).
+- **Não tocado de propósito:** `CHANGELOG.md` (entradas antigas),
+  `SESSIONLOG.md`, ADRs existentes, payloads reais de audit log em
+  `docs/specs/storage.md`, nomes de recurso já em produção (Firestore
+  `hub-dev`/`hub-prod`, buckets de cache) — registro histórico ou
+  recurso vivo que exigiria migração separada.
+- **Pendente, fora desta sessão:** `terraform apply` da label FinOps em
+  dev/prod; rename do repositório GitHub `polaris-hub-gcp` → `atlas`
+  (inclui `terraform apply` manual do bootstrap WIF); migração de
+  domínio customizado/OAuth.
 
 ### finops-cost-detail — `feat/finops-cost-detail` (backend + front-end)
 

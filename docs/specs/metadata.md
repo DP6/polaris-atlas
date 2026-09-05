@@ -49,7 +49,7 @@ sidebar nem só uma aba escondida):
 
 ## Fonte de dados
 
-Nenhuma leitura nova no GCP — este domínio é dado próprio do Hub
+Nenhuma leitura nova no GCP — este domínio é dado próprio do Atlas
 (Firestore), mais reaproveitamento do que já existe:
 
 | Necessidade | Fonte | Novo? |
@@ -163,7 +163,7 @@ válido, não um erro. Gated por `require_project_access`.
 **Response 200:**
 ```json
 {
-  "project_id": "observability-hub-dev",
+  "project_id": "atlas-dev",
   "dataset_id": "RAW",
   "table_id": "ga4_events",
   "description": null,
@@ -231,7 +231,7 @@ projeto, mesmo racional de `list_budgets`).
 **Response 200 (`MetadataOverviewResponse`):**
 ```json
 {
-  "project_id": "observability-hub-dev",
+  "project_id": "atlas-dev",
   "tables": [
     {
       "dataset_id": "RAW", "table_id": "ga4_events",
@@ -276,7 +276,7 @@ escrever essa prosa).
 ## Estrutura de arquivos
 
 ```
-apps/backend/src/observability_hub/
+apps/backend/src/atlas/
 ├── api/v1/
 │   └── metadata.py             # novo — todos os endpoints acima
 ├── domains/metadata/            # novo domínio
@@ -379,7 +379,7 @@ apps/frontend/src/
   `pii.confirmed_by`/`confirmed_at` (que não é um log, é só o último
   estado).
 - **Lock otimista / edição concorrente** — último `PUT` vence, mesma
-  premissa do resto do ACL do Hub.
+  premissa do resto do ACL do Atlas.
 - **Delegação de Admin de projeto pra grupo** — coberto (como fora de
   escopo) em `docs/specs/admin.md` v1.11.
 - **Aprovação/fluxo de revisão pra `certification_status`** — mudar o
@@ -394,6 +394,6 @@ apps/frontend/src/
   editável separado.
 - **Exportar/importar metadados em lote** (CSV, API bulk) — cadastro é
   um a um pela UI nesta v1.
-- **Sincronizar a descrição do Hub de volta pro BigQuery** (escrever em
-  `bq_table.description`) — a descrição do Hub e a descrição nativa do BQ
+- **Sincronizar a descrição do Atlas de volta pro BigQuery** (escrever em
+  `bq_table.description`) — a descrição do Atlas e a descrição nativa do BQ
   continuam duas coisas paralelas, nunca uma sobrescrevendo a outra.

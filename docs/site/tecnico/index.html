@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Observability Hub — guia técnico</title>
+<title>Atlas — guia técnico</title>
 <link rel="icon" type="image/png" href="../assets/favicon.png" />
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Ubuntu:wght@300;400;700&display=swap');
@@ -430,7 +430,7 @@
 <body>
   <div class="page">
     <header class="site-tabs">
-      <span class="site-tabs-brand"><span class="dot"></span> Observability Hub</span>
+      <span class="site-tabs-brand"><span class="dot"></span> Atlas</span>
       <a href="../produto/">Demonstrativo do produto</a>
       <a href="../tecnico/" class="active">Guia técnico</a>
       <a href="../componentes/">Componentes</a>
@@ -439,8 +439,8 @@
 
     <header class="page-hero">
       <div class="page-hero-inner">
-        <span class="kicker"><span class="dot"></span> Observability Hub</span>
-        <h1>Guia técnico do Observability Hub</h1>
+        <span class="kicker"><span class="dot"></span> Atlas</span>
+        <h1>Guia técnico do Atlas</h1>
         <div class="hero-topics">
           <span class="chip">Catálogo de Dados</span>
           <span class="chip">Análise de tabela</span>
@@ -501,7 +501,7 @@
         <p class="lede">
           Referência funcionalidade por funcionalidade: o que cada tela entrega,
           de onde vem o dado e como ela funciona por baixo do capô — pra quem já
-          usa o Hub no dia a dia ou vai começar a usar agora. Pra um tour visual
+          usa o Atlas no dia a dia ou vai começar a usar agora. Pra um tour visual
           rápido pelas telas, veja o
           <a href="../produto/">demonstrativo do produto</a>.
         </p>
@@ -510,21 +510,21 @@
           <span class="domain-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Início</span>
           <h2>Visão geral e arquitetura</h2>
           <p>
-            O Observability Hub observa projetos GCP de fora — a service account
-            de runtime do Hub recebe papéis de <strong>leitura</strong> num
-            projeto-alvo (BigQuery, Cloud Logging, Cloud Storage) e o Hub nunca
+            O Atlas observa projetos GCP de fora — a service account
+            de runtime do Atlas recebe papéis de <strong>leitura</strong> num
+            projeto-alvo (BigQuery, Cloud Logging, Cloud Storage) e o Atlas nunca
             instala nada nesse projeto: nenhum agente, VM ou credencial roda do
-            lado de lá. Um mesmo Hub pode observar vários projetos-alvo ao mesmo
+            lado de lá. Um mesmo Atlas pode observar vários projetos-alvo ao mesmo
             tempo, cada um liberado individualmente.
           </p>
           <p>
-            Dentro do Hub existem dois níveis de controle de acesso, independentes
+            Dentro do Atlas existem dois níveis de controle de acesso, independentes
             do IAM do GCP:
           </p>
           <ul>
             <li><strong>Quem pode entrar</strong> — login via Google OAuth, restrito
               por uma allowlist de domínio/e-mail.</li>
-            <li><strong>Quem pode ver qual projeto</strong> — mesmo com a SA do Hub
+            <li><strong>Quem pode ver qual projeto</strong> — mesmo com a SA do Atlas
               tendo acesso técnico a um projeto, um usuário só o enxerga se um
               admin liberou explicitamente (por e-mail, por grupo do Workspace,
               ou marcando o projeto como público pra todo mundo). Ver
@@ -533,7 +533,7 @@
           <p>
             Todo domínio abaixo lê dado <strong>ao vivo</strong> do GCP a cada
             consulta (metadado via <code>INFORMATION_SCHEMA</code>, amostra de
-            dado real quando declarado, ou audit log via Cloud Logging) — o Hub
+            dado real quando declarado, ou audit log via Cloud Logging) — o Atlas
             não replica nem armazena os dados observados, com a única exceção do
             <strong>cache de audit log de jobs</strong>, que alimenta lineage,
             mapa de acesso, tabelas órfãs, FinOps e o scanner de Storage (ver
@@ -554,7 +554,7 @@
           <h2>Login e acesso</h2>
           <p>
             Autenticação via conta Google (OAuth) — sem senha própria, sem
-            cadastro manual. O Hub decodifica a resposta do Google, confirma que
+            cadastro manual. O Atlas decodifica a resposta do Google, confirma que
             o e-mail está na allowlist configurada e abre uma sessão (cookie
             assinado). Se o e-mail não estiver na allowlist, o login é recusado
             antes de qualquer outra tela aparecer.
@@ -690,7 +690,7 @@
           </figure>
           <figure>
             <img src="../produto/images/21-orfas-resultado.png" alt="Resultado de tabelas sem consumidor" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>Tabelas sem leitura conhecida na janela, com custo de storage estimado. Quando o resultado vem vazio, o Hub explica as causas prováveis com o comando <code>gcloud</code> pronto pra investigar.</figcaption>
+            <figcaption>Tabelas sem leitura conhecida na janela, com custo de storage estimado. Quando o resultado vem vazio, o Atlas explica as causas prováveis com o comando <code>gcloud</code> pronto pra investigar.</figcaption>
           </figure>
           <div class="callout">
             <strong>Como funciona por baixo</strong>
@@ -716,7 +716,7 @@
           <p>
             <strong>Garantia de privacidade estrutural</strong>: o casamento de
             padrão roda inteiramente dentro do BigQuery, via
-            <code>REGEXP_CONTAINS</code> + <code>COUNTIF</code> — a API do Hub
+            <code>REGEXP_CONTAINS</code> + <code>COUNTIF</code> — a API do Atlas
             nunca recebe, processa ou loga um valor de coluna real, só contagens e
             proporções agregadas. O dado bruto nunca sai do BigQuery.
           </p>
@@ -736,7 +736,7 @@
             que leu ou escreveu na tabela, com contagem e data do último acesso.
           </p>
           <p>
-            A própria service account de runtime do Hub é excluída da agregação —
+            A própria service account de runtime do Atlas é excluída da agregação —
             rodar profiling ou PII scan pela interface não deveria contar como
             "um consumidor externo acessou essa tabela".
           </p>
@@ -769,7 +769,7 @@
           <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>Configurar e rodar profiling</h3>
           <p>
             Antes de executar, escolhe amostragem, método de unicidade (exato ou
-            aproximado por <code>HLL</code>) e coluna de data. O Hub então mostra
+            aproximado por <code>HLL</code>) e coluna de data. O Atlas então mostra
             o SQL que vai rodar e estima bytes processados / custo em US$ — o
             usuário decide se vale a pena antes de gastar a query.
           </p>
@@ -983,7 +983,7 @@
           <span class="domain-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" x2="6.01" y1="16" y2="16"/><line x1="10" x2="10.01" y1="16" y2="16"/></svg>Cloud Storage</span>
           <h2>Catálogo e scanner de buckets</h2>
           <p class="section-summary">
-            Extensão do Hub pra além do BigQuery — mesma governança (catálogo +
+            Extensão do Atlas pra além do BigQuery — mesma governança (catálogo +
             scanner de desperdício), agora pra buckets do Cloud Storage. Buckets
             também entram como nó no grafo de lineage quando participam de um
             job de <code>LOAD</code>/<code>EXTRACT</code>.
@@ -1037,29 +1037,29 @@
           <span class="domain-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L18 2"/><path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/></svg>Acesso</span>
           <h2>Solicitar acesso a um projeto</h2>
           <p class="section-summary">
-            Se você digita um <code>project_id</code> que o Hub não libera pra
+            Se você digita um <code>project_id</code> que o Atlas não libera pra
             você, a própria tela já oferece o próximo passo — sem precisar abrir
             um ticket ou mandar mensagem pro time.
           </p>
 
           <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>Projeto já onboardado, só falta liberar pra mim</h3>
           <p>
-            Quando o projeto já está pronto no Hub e só falta você ter permissão
+            Quando o projeto já está pronto no Atlas e só falta você ter permissão
             (caso mais comum), o erro mostra o botão <strong>"Solicitar
             acesso"</strong> — abre um pedido que entra direto na fila de um
             admin aprovar ou negar, com confirmação imediata na tela (sem e-mail
             nem ticket à parte).
           </p>
 
-          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>Projeto ainda não incluído no Hub</h3>
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>Projeto ainda não incluído no Atlas</h3>
           <p>
-            Se o erro for de acesso negado na SA do Hub (o projeto nunca foi
+            Se o erro for de acesso negado na SA do Atlas (o projeto nunca foi
             liberado pra ninguém) ou de projeto inexistente/nome incorreto, o
-            mesmo fluxo oferece <strong>"Solicitar inclusão no Hub"</strong> em
-            vez de "Solicitar acesso" — o Hub não consegue distinguir com certeza
+            mesmo fluxo oferece <strong>"Solicitar inclusão no Atlas"</strong> em
+            vez de "Solicitar acesso" — o Atlas não consegue distinguir com certeza
             os dois casos do lado do usuário, então deixa o admin investigar qual
             é qual ao revisar o pedido. Aprovar um pedido desses registra o
-            projeto no Hub <strong>e</strong> libera quem pediu, num clique só —
+            projeto no Atlas <strong>e</strong> libera quem pediu, num clique só —
             ver <a href="#admin">Administração → Solicitações</a>.
           </p>
           <div class="pending-shot">Captura desta tela em atualização — ver o <a href="../produto/">demonstrativo do produto</a> pro fluxo de solicitação a partir da fila do admin.</div>
@@ -1069,16 +1069,16 @@
           <span class="domain-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Administração</span>
           <h2>Administração</h2>
           <p class="section-summary">
-            Quem é admin do Hub, quais projetos cada usuário/grupo pode ver, fila
+            Quem é admin do Atlas, quais projetos cada usuário/grupo pode ver, fila
             de solicitações, caches e visibilidade de uso — tudo separado do login
             (que continua controlado só pela allowlist do OAuth).
           </p>
 
           <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Por usuário</h3>
           <p>
-            Controla quem é administrador do Hub e a quais projetos GCP cada
+            Controla quem é administrador do Atlas e a quais projetos GCP cada
             usuário tem acesso, num só lugar. <code>"*"</code> na lista de
-            projetos libera qualquer projeto que a service account do Hub
+            projetos libera qualquer projeto que a service account do Atlas
             alcançar.
           </p>
           <figure>
@@ -1093,7 +1093,7 @@
             apagar o registro do projeto (isso só o tira da lista "Por projeto";
             acessos já concedidos individualmente continuam valendo até serem
             revogados à parte). O botão <strong>"Verificar checklist"</strong>
-            testa, na hora, se a service account do Hub consegue ler BigQuery,
+            testa, na hora, se a service account do Atlas consegue ler BigQuery,
             Cloud Logging e Cloud Storage daquele projeto — sem abrir o Console do
             GCP. É "best-effort": ele tenta a operação real e reporta
             sucesso/falha, mas não confirma sozinho a role
@@ -1104,14 +1104,14 @@
           </p>
           <figure>
             <img src="../produto/images/39-admin-por-projeto.png" alt="Admin por projeto" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>Projetos registrados, quem tem acesso a cada um e o checklist da SA do Hub.</figcaption>
+            <figcaption>Projetos registrados, quem tem acesso a cada um e o checklist da SA do Atlas.</figcaption>
           </figure>
 
           <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Grupos</h3>
           <p>
             Grupos do Google Workspace integrados via domain-wide delegation — os
             membros reais são lidos direto do Workspace a cada consulta (cache
-            curto), sem manter uma lista manual duplicada dentro do Hub. Cada
+            curto), sem manter uma lista manual duplicada dentro do Atlas. Cada
             membro herda os projetos liberados do grupo, somando com o que já tem
             individualmente.
           </p>
@@ -1133,9 +1133,9 @@
             <figcaption>Fila de solicitações, com ações de aprovar/negar.</figcaption>
           </figure>
 
-          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>Uso do Hub</h3>
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>Uso do Atlas</h3>
           <p>
-            Visibilidade de adoção sem sair do próprio Hub, com cada seção num
+            Visibilidade de adoção sem sair do próprio Atlas, com cada seção num
             bloco próprio: acessos e usuários únicos (hoje/semana/mês) num gráfico
             de coluna + linha configurável; log de logins recentes; funil de
             retenção (quem só loga vs. quem de fato usa alguma funcionalidade) em
@@ -1145,7 +1145,7 @@
             buscas mais frequentes, scans de PII).
           </p>
           <figure>
-            <img src="../produto/images/44-admin-uso-acessos.png" alt="Uso do Hub — acessos" onclick="openLightbox(this.src, this.alt)" />
+            <img src="../produto/images/44-admin-uso-acessos.png" alt="Uso do Atlas — acessos" onclick="openLightbox(this.src, this.alt)" />
             <figcaption>Acessos e usuários únicos ao longo do tempo, coluna + linha.</figcaption>
           </figure>
           <figure>
@@ -1195,7 +1195,7 @@
           <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 2v4"/><path d="M16 2v4"/></svg>Job incremental diário</h3>
           <ul>
             <li>Um job roda 1× por dia (madrugada, horário UTC) e atualiza o cache
-              de todos os projetos conhecidos pelo Hub.</li>
+              de todos os projetos conhecidos pelo Atlas.</li>
             <li>Cada execução é <strong>incremental</strong>: lê só o que entrou
               no audit log desde a última execução bem-sucedida, junta com o que
               já estava em cache e descarta o que saiu da janela (31 dias pros
@@ -1243,7 +1243,7 @@
           <div class="callout">
             <strong>O que isso muda na prática pra quem usa</strong>
             O dado deixa de ser sempre "ao vivo no segundo" — uma role de acesso
-            revogada no GCP, por exemplo, só deixa de aparecer no Hub depois do
+            revogada no GCP, por exemplo, só deixa de aparecer no Atlas depois do
             próximo ciclo do cache (ou de alguém clicar "Atualizar agora"). Se a
             tela de um projeto ainda não tem cache gerado, ela abre vazia com um
             aviso ("o cache deste projeto ainda não foi gerado — um admin pode

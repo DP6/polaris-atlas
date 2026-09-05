@@ -7,7 +7,7 @@ export interface ProjectValidateResponse {
 }
 
 // Projeto registrado em hub_projects (aba Admin → Projetos) ao qual o
-// usuário atual tem acesso liberado no Hub. A lista já vem filtrada por
+// usuário atual tem acesso liberado no Atlas. A lista já vem filtrada por
 // acesso pelo backend — todo item é acessível.
 export interface AccessibleProject {
   project_id: string

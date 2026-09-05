@@ -1,4 +1,4 @@
-const STORAGE_KEY = 'observability-hub:last-project-id'
+const STORAGE_KEY = 'atlas:last-project-id'
 
 export function setLastProjectId(projectId: string): void {
   try {

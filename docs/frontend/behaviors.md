@@ -75,7 +75,7 @@ Idioma da UI é **pt-BR**.
 
 - `useTheme` (`hooks/useTheme.ts`) — alterna a classe `.dark` em `<html>`.
 - **Dark é o padrão.** Só persiste `"light"` em `localStorage`
-  (`observability-hub:theme`); ausência de valor ou `localStorage`
+  (`atlas:theme`); ausência de valor ou `localStorage`
   indisponível → dark.
 - Um **script bloqueante em `index.html`** aplica a classe `.dark` antes
   do primeiro paint (evita flash do tema errado); o hook só sincroniza o
@@ -86,15 +86,15 @@ Idioma da UI é **pt-BR**.
 
 ## Preferências locais (`localStorage`)
 
-Convenção: chave prefixada `observability-hub:`, toda leitura/escrita em
+Convenção: chave prefixada `atlas:`, toda leitura/escrita em
 `try/catch` (modo privado quebra `localStorage`), sempre com um default
 sensato.
 
 | Hook / módulo | Chave | Default se ausente |
 |---|---|---|
-| `useTheme` | `observability-hub:theme` | `dark` |
-| `useSidebarCollapsed` | `observability-hub:sidebar-collapsed` | expandida (`false`) — persiste; sem script bloqueante (a sidebar só aparece depois do projeto resolvido) |
-| `useLastProject` | `observability-hub:last-project-id` | vazio — só pré-preenche o seletor de projeto |
+| `useTheme` | `atlas:theme` | `dark` |
+| `useSidebarCollapsed` | `atlas:sidebar-collapsed` | expandida (`false`) — persiste; sem script bloqueante (a sidebar só aparece depois do projeto resolvido) |
+| `useLastProject` | `atlas:last-project-id` | vazio — só pré-preenche o seletor de projeto |
 
 ## Sidebar — dois níveis, não confundir
 

@@ -74,7 +74,7 @@ const VISIBILITY_BADGE: Record<
 
 const VISIBILITY_OPTIONS: { value: FolderVisibility; label: string }[] = [
   { value: 'private', label: 'Privada (só você e admins)' },
-  { value: 'shared_all', label: 'Todos os usuários do Hub' },
+  { value: 'shared_all', label: 'Todos os usuários do Atlas' },
   { value: 'shared_emails', label: 'Lista de e-mails específica' },
 ]
 

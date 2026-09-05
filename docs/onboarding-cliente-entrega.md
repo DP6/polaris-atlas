@@ -1,16 +1,16 @@
-# Onboarding de projeto GCP — acesso do Observability Hub
+# Onboarding de projeto GCP — acesso do Atlas
 
 **Objetivo:** checklist completo de tudo que precisa ser configurado no seu
-projeto GCP para que o Observability Hub consiga observá-lo. O Hub cobre
+projeto GCP para que o Atlas consiga observá-lo. O Atlas cobre
 oito frentes — catálogo, freshness, profiling/qualidade, lineage/tabelas
 órfãs, fingerprinting de PII, mapa de acesso, FinOps e Cloud Storage — e
 usa exatamente as roles e APIs listadas abaixo, sem exceção nem role extra.
 
-**Modelo de acesso:** o Hub roda fora do seu projeto GCP e nunca instala
+**Modelo de acesso:** o Atlas roda fora do seu projeto GCP e nunca instala
 nada nele — você (administrador do projeto) concede acesso de **somente
-leitura** às duas service accounts de runtime do Hub (uma da instância de
+leitura** às duas service accounts de runtime do Atlas (uma da instância de
 validação, outra da de produção — ver seção 2), uma única vez. O
-`project_id` do seu projeto é digitado por quem for usar o Hub a cada
+`project_id` do seu projeto é digitado por quem for usar o Atlas a cada
 sessão, sem nenhuma credencial armazenada do seu lado.
 
 **Quem executa:** o administrador do projeto GCP a ser observado. Nosso
@@ -34,20 +34,20 @@ desperdício).
 
 ---
 
-## 2. IAM — conceder acesso às service accounts do Hub
+## 2. IAM — conceder acesso às service accounts do Atlas
 
-O Hub tem duas instâncias: **dev** (usada pelo time DP6 para validar este
+O Atlas tem duas instâncias: **dev** (usada pelo time DP6 para validar este
 onboarding antes de liberar o uso real) e **prod** (uso pelos seus
 usuários). Conceda o **mesmo conjunto de roles às duas** service accounts
 de uma vez — assim o processo não precisa ser repetido depois:
 
-| Instância do Hub | Service account |
+| Instância do Atlas | Service account |
 |---|---|
 | dev (validação DP6) | `backend-dev-run@dp6-ci-polaris.iam.gserviceaccount.com` |
 | prod (uso real) | `backend-prod-run@dp6-ci-polaris.iam.gserviceaccount.com` |
 
 > As duas SAs pertencem ao projeto `dp6-ci-polaris` (número de projeto
-> `209825626529`), onde o Hub roda. Elas são de **somente leitura** — não
+> `209825626529`), onde o Atlas roda. Elas são de **somente leitura** — não
 > recebem nenhuma permissão de escrita em nenhum passo deste documento.
 
 | Role | Por quê |
@@ -71,7 +71,7 @@ de uma vez — assim o processo não precisa ser repetido depois:
 > aplica a constraint `constraints/iam.allowedPolicyMemberDomains`
 > (restringe a quem pode receber binding de IAM ao seu próprio domínio), os
 > comandos abaixo falham com `One or more users named in the policy do not
-> belong to a permitted customer`, porque as SAs do Hub são externas à sua
+> belong to a permitted customer`, porque as SAs do Atlas são externas à sua
 > organização. Nesse caso, um administrador da **organização** precisa,
 > antes: (a) aplicar uma exceção da constraint **neste projeto**, ou (b)
 > adicionar o customer ID do Cloud Identity da DP6 (projeto
@@ -106,7 +106,7 @@ done
 
 Todos os comandos são idempotentes — seguro rodar de novo mesmo que algum
 já tenha sido aplicado. Se faltar qualquer uma das três primeiras de
-BigQuery, o Hub responde com um erro que já traz esses mesmos comandos
+BigQuery, o Atlas responde com um erro que já traz esses mesmos comandos
 prontos; se faltar `logging.viewer`, o mesmo acontece só pras
 funcionalidades de lineage e mapa de acesso; se faltar só
 `logging.privateLogViewer` (com `logging.viewer` presente), não há erro
@@ -115,12 +115,12 @@ se faltar `storage.bucketViewer` e/ou `storage.objectViewer`, a
 funcionalidade de Cloud Storage responde com erro e os comandos prontos —
 **as duas são necessárias juntas**.
 
-> **Custo:** as consultas que o Hub roda no BigQuery (leitura de
+> **Custo:** as consultas que o Atlas roda no BigQuery (leitura de
 > `INFORMATION_SCHEMA`, amostragem de dados) são jobs criados no projeto
-> do Hub (`dp6-ci-polaris`), então os bytes processados são **faturados na
-> conta do Hub, não na sua**. As roles acima dão à SA só o direito de
+> do Atlas (`dp6-ci-polaris`), então os bytes processados são **faturados na
+> conta do Atlas, não na sua**. As roles acima dão à SA só o direito de
 > **ler** metadados e dados das suas tabelas — nenhum custo de query cai
-> na sua fatura por causa do Hub.
+> na sua fatura por causa do Atlas.
 
 ---
 
@@ -176,7 +176,7 @@ habilitar em um bucket de tráfego intenso.
 
 ## 4. O que NÃO é necessário (e o que este processo não faz)
 
-- Nenhum agente, VM ou service account do seu lado rodando código — o Hub
+- Nenhum agente, VM ou service account do seu lado rodando código — o Atlas
   só lê, via API, a partir de fora do seu projeto.
 - Nenhuma permissão de escrita, alteração ou exclusão — toda role deste
   documento é de leitura, em todos os passos.
@@ -184,8 +184,8 @@ habilitar em um bucket de tráfego intenso.
   estimativa de custo (FinOps) usa os bytes processados nos audit logs de
   job já cobertos pelas roles de `logging.*` acima, combinados com o
   preço público on-demand do BigQuery.
-- Nenhum recurso interno do Hub (banco de dados, filas, segredos) vive no
-  seu projeto — tudo isso roda na infraestrutura própria do Hub.
+- Nenhum recurso interno do Atlas (banco de dados, filas, segredos) vive no
+  seu projeto — tudo isso roda na infraestrutura própria do Atlas.
 - Nada permanente — todo acesso concedido aqui é revogável a qualquer
   momento sem efeito colateral no resto do seu projeto (seção 5).
 
@@ -193,7 +193,7 @@ habilitar em um bucket de tráfego intenso.
 
 ## Checklist resumido
 
-As roles abaixo devem ser concedidas às **duas** service accounts do Hub
+As roles abaixo devem ser concedidas às **duas** service accounts do Atlas
 (`backend-dev-run@...` e `backend-prod-run@...`, ver seção 2).
 
 ```
@@ -202,11 +202,11 @@ As roles abaixo devem ser concedidas às **duas** service accounts do Hub
 [ ] (se aplicável) exceção da constraint iam.allowedPolicyMemberDomains
     aplicada neste projeto, ou customer ID da DP6 na allowlist — sem isso
     o add-iam-policy-binding das SAs externas falha (ver seção 2)
-[ ] roles/bigquery.metadataViewer concedida às 2 SAs do Hub (dev + prod)
-[ ] roles/bigquery.jobUser concedida às 2 SAs do Hub
-[ ] roles/bigquery.dataViewer concedida às 2 SAs do Hub
-[ ] roles/logging.viewer concedida às 2 SAs do Hub
-[ ] roles/logging.privateLogViewer concedida às 2 SAs do Hub —
+[ ] roles/bigquery.metadataViewer concedida às 2 SAs do Atlas (dev + prod)
+[ ] roles/bigquery.jobUser concedida às 2 SAs do Atlas
+[ ] roles/bigquery.dataViewer concedida às 2 SAs do Atlas
+[ ] roles/logging.viewer concedida às 2 SAs do Atlas
+[ ] roles/logging.privateLogViewer concedida às 2 SAs do Atlas —
     sem ela, logging.viewer sozinha NÃO mostra Data Access audit logs
     (falha silenciosa, sem erro, só resultado sempre vazio)
 [ ] Data Access audit logs (DATA_READ + DATA_WRITE) do BigQuery
@@ -214,9 +214,9 @@ As roles abaixo devem ser concedidas às **duas** service accounts do Hub
     órfãs/mapa de acesso/FinOps (budget)
 [ ] storage.googleapis.com habilitada no projeto — só necessário se for
     usar a funcionalidade de Cloud Storage
-[ ] roles/storage.bucketViewer concedida às 2 SAs do Hub — idem,
+[ ] roles/storage.bucketViewer concedida às 2 SAs do Atlas — idem,
     necessária pro catálogo listar buckets
-[ ] roles/storage.objectViewer concedida às 2 SAs do Hub — idem,
+[ ] roles/storage.objectViewer concedida às 2 SAs do Atlas — idem,
     necessária pro tamanho agregado do catálogo e pelo scanner de
     desperdício
 [ ] storage.googleapis.com — Data Access audit log DATA_READ habilitado
@@ -224,7 +224,7 @@ As roles abaixo devem ser concedidas às **duas** service accounts do Hub
     Cloud Storage (ver seção 3)
 [ ] gcloud projects get-iam-policy confirmado para as 2 SAs (não só
     "rodei o comando")
-[ ] Testado no Hub com um usuário já autorizado pelo seu contato DP6
+[ ] Testado no Atlas com um usuário já autorizado pelo seu contato DP6
 ```
 
 ---
@@ -233,7 +233,7 @@ As roles abaixo devem ser concedidas às **duas** service accounts do Hub
 
 Para encerrar o acesso a qualquer momento, remova as mesmas roles
 concedidas na seção 2 — sem efeito colateral no restante do seu projeto (a
-service account do Hub nunca ganha nenhuma permissão de escrita, então
+service account do Atlas nunca ganha nenhuma permissão de escrita, então
 revogar é só desfazer os `add-iam-policy-binding` de leitura):
 
 ```bash
@@ -254,7 +254,7 @@ done
 ```
 
 Os Data Access audit logs (seção 3) não precisam ser desabilitados — não
-são específicos da service account do Hub, e desligá-los pode afetar
+são específicos da service account do Atlas, e desligá-los pode afetar
 outras integrações do seu projeto que dependam deles.
 
 ---
@@ -279,7 +279,7 @@ outras integrações do seu projeto que dependam deles.
    `logging.privateLogViewer`) — mais as 2 de `storage.*` se for usar Cloud
    Storage, e `browser` se tiver concedido a opcional.
 2. **Avise seu contato DP6** de que o acesso foi concedido, pra testarmos
-   pelo Hub. Se faltar alguma role de IAM, o erro já vem com os comandos
+   pelo Atlas. Se faltar alguma role de IAM, o erro já vem com os comandos
    de correção prontos.
 
 ---
@@ -289,18 +289,18 @@ outras integrações do seu projeto que dependam deles.
 | Sintoma | Causa provável |
 |---|---|
 | `add-iam-policy-binding` falha com `...do not belong to a permitted customer` | Constraint de organização `iam.allowedPolicyMemberDomains` bloqueando SA externa — precisa de exceção no projeto ou allowlist do customer ID da DP6 (ver aviso na seção 2) |
-| Erro de permissão ao selecionar o projeto no Hub | Falta alguma das 3 primeiras roles de BigQuery (seção 2) na SA daquele ambiente — a própria resposta já traz o comando pronto |
+| Erro de permissão ao selecionar o projeto no Atlas | Falta alguma das 3 primeiras roles de BigQuery (seção 2) na SA daquele ambiente — a própria resposta já traz o comando pronto |
 | Funciona no ambiente de validação (dev) mas não em produção (ou vice-versa) | As roles foram concedidas só a uma das 2 SAs — repita a seção 2 para a outra (`backend-dev-run@...` **e** `backend-prod-run@...`) |
 | Lineage/tabelas órfãs/mapa de acesso/FinOps (budget) sempre "sem atividade", mesmo com dados reais | `logging.viewer` presente mas `logging.privateLogViewer` faltando — a API responde normalmente, mas nunca mostra Data Access audit logs (falha silenciosa) |
 | Lineage responde com erro de permissão em vez de vazio | Falta `logging.viewer` |
 | Tudo liberado mas ainda "sem atividade" | Confirme se os Data Access audit logs (seção 3) estão realmente habilitados — o campo `auditConfigs` pode ter sido sobrescrito por outra alteração de política depois |
 | Erro de permissão no catálogo de buckets (Cloud Storage) | Falta `roles/storage.bucketViewer` e/ou `roles/storage.objectViewer` — a própria resposta traz os dois comandos |
 | Scanner de desperdício de Cloud Storage nunca confirma uso real, só estimativa por configuração | Data Access audit log `DATA_READ` de `storage.googleapis.com` não habilitado — opcional, não bloqueia o resto da funcionalidade |
-| Projeto não aparece no seletor, mas digitar manualmente funciona normalmente | O projeto ainda não foi cadastrado no Hub pelo seu contato DP6, ou o seu usuário não tem acesso liberado a ele — o campo de texto livre valida o `project_id` normalmente enquanto isso |
+| Projeto não aparece no seletor, mas digitar manualmente funciona normalmente | O projeto ainda não foi cadastrado no Atlas pelo seu contato DP6, ou o seu usuário não tem acesso liberado a ele — o campo de texto livre valida o `project_id` normalmente enquanto isso |
 
 ---
 
 ## Suporte
 
 Em caso de dúvida durante a configuração, entre em contato com o time
-responsável pelo Observability Hub na DP6.
+responsável pelo Atlas na DP6.

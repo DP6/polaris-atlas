@@ -1,12 +1,12 @@
 # Labels de FinOps — taxonomia e consulta de custo
 
 **Objetivo:** este projeto GCP (`dp6-ci-polaris`, ver `CLAUDE.md`) roda
-dev e prod do Observability Hub hoje, e pode vir a hospedar outras
+dev e prod do Atlas hoje, e pode vir a hospedar outras
 iniciativas do Polaris no mesmo projeto amanhã — a topologia
 single-project não separa custo por fronteira de projeto (ver
 `CLAUDE.md`, "Projetos e ambientes GCP"). Sem label, o custo de uma app
 não se distingue do de outra na mesma fatura. Este documento define a
-taxonomia de label obrigatória em todo recurso GCP do Hub e como usá-la
+taxonomia de label obrigatória em todo recurso GCP do Atlas e como usá-la
 depois pra consultar/filtrar custo.
 
 Não confundir com convenção de **nome** de recurso — isso é outro assunto
@@ -32,7 +32,7 @@ frente ao risco de renomear recurso já em produção).
 | Chave | Valores válidos | Obrigatório em |
 |---|---|---|
 | `environment` | `dev` \| `prod` | Todo recurso que suporte label |
-| `app` | `observability-hub` (slug técnico já usado nos nomes de recurso — ex.: `backend-dev`, `backend-dev-run` — desacoplado de qualquer nome de marca/produto ainda não decidido) | Todo recurso do Hub |
+| `app` | `atlas` (nome do produto, ver rename registrado no `CHANGELOG.md`) | Todo recurso do Atlas |
 | `managed-by` | `terraform` \| `manual` | Todo recurso |
 
 Não usar nenhuma outra chave sem atualizar esta tabela primeiro — em
@@ -59,7 +59,7 @@ provider "google" {
   region  = var.region
   default_labels = {
     environment = "dev"  # ou "prod", conforme o ambiente
-    app         = "observability-hub"
+    app         = "atlas"
     managed-by  = "terraform"
   }
 }
@@ -69,7 +69,7 @@ provider "google-beta" {
   region  = var.region
   default_labels = {
     environment = "dev"
-    app         = "observability-hub"
+    app         = "atlas"
     managed-by  = "terraform"
   }
 }
@@ -92,12 +92,15 @@ qualquer binding/config manual documentado em `docs/onboarding-cliente.md`)
 
 ```bash
 gcloud secrets update NOME_DO_SECRET \
-  --update-labels=environment=prod,app=observability-hub,managed-by=manual
+  --update-labels=environment=prod,app=atlas,managed-by=manual
 ```
 
 **Status:** ✅ aplicado via `default_labels` em dev e prod em 2026-08-26
 (dev confirmado via CI: `Apply complete! Resources: 0 added, 5 changed,
-0 destroyed.`; prod aplica no merge do PR correspondente). Cobre os 4
+0 destroyed.`; prod aplica no merge do PR correspondente). Valor de `app`
+atualizado de `observability-hub` para `atlas` no rename do produto —
+requer novo `terraform apply` em dev e prod pra refletir nos recursos já
+criados (ver `CHANGELOG.md`). Cobre os 4
 serviços Cloud Run, os 2 Cloud Run Jobs, os 2 buckets de cache e o
 Artifact Registry — confirmado no `terraform plan` real. **Service
 accounts e Firestore não suportam `default_labels` neste provider**
@@ -105,7 +108,7 @@ accounts e Firestore não suportam `default_labels` neste provider**
 ver `docs/gcp-components.md` pra status por recurso. Secrets no Secret
 Manager continuam pendentes (comando manual acima, ainda não executado).
 
-## 4. Billing Export pro BigQuery (passo manual, fora do que a SA do Hub alcança)
+## 4. Billing Export pro BigQuery (passo manual, fora do que a SA do Atlas alcança)
 
 Sem isso, a única forma de investigar custo é o Console (Billing Report)
 ou um resumo do Gemini Cloud Assist — como foi feito na investigação do
@@ -115,7 +118,7 @@ labels junto.
 
 **Quem faz:** alguém com papel de billing account admin/user na conta de
 billing vinculada a `dp6-ci-polaris` — não é uma permissão que a service
-account de runtime do Hub tem ou deveria ter.
+account de runtime do Atlas tem ou deveria ter.
 
 **Status:** 🔴 bloqueado, aguardando TI (desde 2026-08-26). Billing
 account vinculada identificada: **DP6 Self Billing (Voucher)**,
@@ -135,7 +138,7 @@ e/ou o export for de fato habilitado.
    data export**.
 4. Escolher (ou criar) um dataset BigQuery de destino — recomendado um
    dataset dedicado no próprio `dp6-ci-polaris` (ex.: `billing_export`),
-   já que a SA do Hub tem acesso de BigQuery nesse projeto.
+   já que a SA do Atlas tem acesso de BigQuery nesse projeto.
 5. Aguardar até 24h pela primeira exportação — export é incremental daí
    em diante (não retroage antes da data de ativação).
 
@@ -159,7 +162,7 @@ FROM `dp6-ci-polaris.billing_export.gcp_billing_export_v1_XXXXXX`
 WHERE DATE(usage_start_time) >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
   AND EXISTS (
     SELECT 1 FROM UNNEST(labels) AS l
-    WHERE l.key = 'app' AND l.value = 'observability-hub'
+    WHERE l.key = 'app' AND l.value = 'atlas'
   )
   AND EXISTS (
     SELECT 1 FROM UNNEST(labels) AS l

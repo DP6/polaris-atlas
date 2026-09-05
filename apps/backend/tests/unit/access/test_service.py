@@ -1,8 +1,8 @@
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
-from observability_hub.domains.access import service
-from observability_hub.domains.access.repository import AccessEvent
+from atlas.domains.access import service
+from atlas.domains.access.repository import AccessEvent
 
 
 def _event(

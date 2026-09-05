@@ -27,8 +27,8 @@ export function ProjectSelector() {
   const [submittedProjectId, setSubmittedProjectId] = useState<string | undefined>(undefined)
   const [isRestoring, setIsRestoring] = useState(false)
   const [requestAccessOpen, setRequestAccessOpen] = useState(false)
-  // "access" (sem acesso no Hub a um projeto já onboardado) vs.
-  // "inclusion" (projeto sem IAM concedido à SA do Hub, ou nem
+  // "access" (sem acesso no Atlas a um projeto já onboardado) vs.
+  // "inclusion" (projeto sem IAM concedido à SA do Atlas, ou nem
   // existente) — mesmo dialog, textos e efeito de aprovação diferentes.
   const [requestType, setRequestType] = useState<'access' | 'inclusion'>('access')
   // Alterna entre o Select (projetos registrados no ADM que o usuário
@@ -100,7 +100,7 @@ export function ProjectSelector() {
   const isNotAuthorized =
     validateQuery.error instanceof ApiError &&
     validateQuery.error.body?.error === 'project_not_authorized'
-  // access_denied (SA do Hub sem IAM no GCP) e project_not_found (404)
+  // access_denied (SA do Atlas sem IAM no GCP) e project_not_found (404)
   // ganham a mesma CTA — o usuário comum não consegue diferenciar "não
   // onboardado" de "nome errado/inexistente"; o admin investiga qual é
   // qual ao triar o pedido de inclusão.
@@ -121,7 +121,7 @@ export function ProjectSelector() {
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="observability-hub-dev"
+              placeholder="atlas-dev"
               className="h-7 w-56 text-sm"
             />
             <Button type="submit" size="sm" disabled={!input.trim() || validateQuery.isFetching}>
@@ -187,7 +187,7 @@ export function ProjectSelector() {
                 {validateQuery.data.is_native ? 'Projeto nativo' : 'Projeto externo'}
               </TooltipTrigger>
               <TooltipContent>
-                Nativo = projeto onde o Hub está hospedado. Externo = projeto de cliente ou outro
+                Nativo = projeto onde o Atlas está hospedado. Externo = projeto de cliente ou outro
                 ambiente.
               </TooltipContent>
             </Tooltip>
@@ -215,7 +215,7 @@ export function ProjectSelector() {
                   }
                 : isNotOnboarded
                   ? {
-                      label: 'Solicitar inclusão no Hub',
+                      label: 'Solicitar inclusão no Atlas',
                       onClick: () => {
                         setRequestType('inclusion')
                         setRequestAccessOpen(true)

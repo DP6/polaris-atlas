@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 from google.cloud import firestore
 
-from observability_hub.domains.pii import history_repository
+from atlas.domains.pii import history_repository
 
 
 def _fake_client_with_scans_collection():
@@ -32,7 +32,7 @@ def test_save_scan_writes_to_scans_subcollection_not_runs():
 
     history_repository.save_scan(
         client,
-        "observability-hub-dev",
+        "atlas-dev",
         "RAW",
         "clientes",
         executed_by="a@dp6.com.br",
@@ -41,16 +41,14 @@ def test_save_scan_writes_to_scans_subcollection_not_runs():
     )
 
     client.collection.assert_called_once_with("pii_scan_history")
-    client.collection.return_value.document.assert_called_once_with(
-        "observability-hub-dev_RAW_clientes"
-    )
+    client.collection.return_value.document.assert_called_once_with("atlas-dev_RAW_clientes")
     # nome da subcoleção precisa ser "scans", não "runs" — evita colidir
     # com o collection_group("runs") do profiling.
     client.collection.return_value.document.return_value.collection.assert_called_once_with("scans")
 
     scans.add.assert_called_once()
     added = scans.add.call_args[0][0]
-    assert added["project_id"] == "observability-hub-dev"
+    assert added["project_id"] == "atlas-dev"
     assert added["dataset_id"] == "RAW"
     assert added["table_id"] == "clientes"
     assert added["executed_by"] == "a@dp6.com.br"

@@ -4,14 +4,14 @@ from unittest.mock import MagicMock
 import pytest
 from google.api_core.exceptions import Forbidden, NotFound
 
-from observability_hub.core import bigquery as bigquery_module
-from observability_hub.core.bigquery import (
+from atlas.core import bigquery as bigquery_module
+from atlas.core.bigquery import (
     discover_regions,
     get_table_cached,
     get_tables_metadata,
     resolve_dataset_region,
 )
-from observability_hub.core.exceptions import (
+from atlas.core.exceptions import (
     DatasetNotFoundError,
     ProjectAccessDeniedError,
     ProjectNotFoundError,

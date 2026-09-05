@@ -20,7 +20,7 @@ export interface UpsertHubUserRequest {
 
 export interface HubGroup {
   group_id: string
-  // E-mails cadastrados manualmente na Hub — editável.
+  // E-mails cadastrados manualmente no Atlas — editável.
   manual_members: string[]
   // Membros reais do grupo no Google Workspace — só leitura, resolvido
   // no backend a cada consulta (cache curto), nunca editado aqui. Vazio
@@ -56,7 +56,7 @@ export interface WorkspaceGroupsListResponse {
 
 export interface HubProject {
   project_id: string
-  // Libera o projeto pra QUALQUER usuário do Hub, inclusive quem ainda
+  // Libera o projeto pra QUALQUER usuário do Atlas, inclusive quem ainda
   // não tem doc em hub_users (usuário futuro) — eixo independente de
   // allowed_projects de cada usuário.
   is_public: boolean
@@ -89,8 +89,8 @@ export interface ProjectUsersResponse {
 
 export type AccessRequestStatus = 'pending' | 'approved' | 'denied'
 
-// "access" = pedir acesso a um projeto já onboardado no Hub (fluxo
-// original); "inclusion" = pedir que o projeto seja registrado no Hub —
+// "access" = pedir acesso a um projeto já onboardado no Atlas (fluxo
+// original); "inclusion" = pedir que o projeto seja registrado no Atlas —
 // aprovar também registra o projeto (hub_projects), não só libera o
 // solicitante.
 export type AccessRequestType = 'access' | 'inclusion'

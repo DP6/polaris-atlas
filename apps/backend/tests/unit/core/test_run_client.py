@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from observability_hub.core import run_client
+from atlas.core import run_client
 
 
 def test_trigger_job_execution_without_force_full_uses_plain_name():
@@ -22,7 +22,7 @@ def test_trigger_job_execution_force_full_injects_env_override():
     assert client.run_job.call_count == 1
     request = client.run_job.call_args.kwargs["request"]
     env = request.overrides.container_overrides[0].env
-    assert [(e.name, e.value) for e in env] == [("OBSERVABILITY_HUB_CACHE_FORCE_FULL", "1")]
+    assert [(e.name, e.value) for e in env] == [("ATLAS_CACHE_FORCE_FULL", "1")]
     assert request.name == "projects/p/locations/r/jobs/j"
 
 
@@ -33,9 +33,7 @@ def test_trigger_job_execution_only_projects_injects_env_override():
     run_client.trigger_job_execution(client, "p", "r", "j", only_projects=["proj-a", "proj-b"])
 
     env = client.run_job.call_args.kwargs["request"].overrides.container_overrides[0].env
-    assert [(e.name, e.value) for e in env] == [
-        ("OBSERVABILITY_HUB_CACHE_ONLY_PROJECTS", "proj-a,proj-b")
-    ]
+    assert [(e.name, e.value) for e in env] == [("ATLAS_CACHE_ONLY_PROJECTS", "proj-a,proj-b")]
 
 
 def test_trigger_job_execution_combines_force_full_and_only_projects():
@@ -48,8 +46,8 @@ def test_trigger_job_execution_combines_force_full_and_only_projects():
 
     env = client.run_job.call_args.kwargs["request"].overrides.container_overrides[0].env
     assert [(e.name, e.value) for e in env] == [
-        ("OBSERVABILITY_HUB_CACHE_FORCE_FULL", "1"),
-        ("OBSERVABILITY_HUB_CACHE_ONLY_PROJECTS", "proj-a"),
+        ("ATLAS_CACHE_FORCE_FULL", "1"),
+        ("ATLAS_CACHE_ONLY_PROJECTS", "proj-a"),
     ]
 
 

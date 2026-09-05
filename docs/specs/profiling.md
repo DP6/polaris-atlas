@@ -102,7 +102,7 @@ Executa profiling e retorna métricas completas.
 **Response 200:**
 ```json
 {
-  "project_id": "observability-hub-dev",
+  "project_id": "atlas-dev",
   "dataset_id": "RAW",
   "table_id": "crm_leads",
   "executed_at": "2026-08-05T10:00:00Z",
@@ -180,7 +180,7 @@ Coleção compartilhada entre usuários, não por quem rodou.
 **Response 200:**
 ```json
 {
-  "project_id": "observability-hub-dev",
+  "project_id": "atlas-dev",
   "dataset_id": "RAW",
   "table_id": "crm_leads",
   "runs": [
@@ -256,7 +256,7 @@ a entry ficar órfã se o run original for apagado pelo trim-to-30 de
 
 ### Regra de acesso
 
-- **Dono** (`created_by`) e **admin do Hub** (`admin_service.is_admin`):
+- **Dono** (`created_by`) e **admin do Atlas** (`admin_service.is_admin`):
   veem, editam nome/compartilhamento, apagam a pasta e gerenciam entries
   (salvar/remover).
 - **Visualização** (só ver + comparar, não gerenciar): qualquer usuário
@@ -265,7 +265,7 @@ a entry ficar órfã se o run original for apagado pelo trim-to-30 de
 - `visibility == "private"` (padrão ao criar): só dono + admin.
 - Salvar uma entry confirma `admin_service.has_project_access` pro
   `project_id` do run — mesma defesa em profundidade de outros endpoints
-  de escrita do Hub (o usuário não pode "salvar" resultado de um projeto
+  de escrita do Atlas (o usuário não pode "salvar" resultado de um projeto
   que ele não teria acesso pra rodar o profile).
 
 ### Endpoints
@@ -389,7 +389,7 @@ Apenas para INTEGER, FLOAT, NUMERIC: `CV = stddev / avg * 100`
 ## Estrutura de arquivos
 
 ```
-apps/backend/src/observability_hub/
+apps/backend/src/atlas/
 ├── api/v1/
 │   └── profiling.py
 ├── domains/quality/

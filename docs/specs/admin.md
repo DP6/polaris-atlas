@@ -23,11 +23,11 @@ tabela filtrável/paginada no cliente, retenção de 200 execuções; ver
 
 ## Objetivo
 
-Controle de acesso do Hub em duas camadas, administradas por uma tela
+Controle de acesso do Atlas em duas camadas, administradas por uma tela
 nova (`/admin`), sem senha nova e sem serviço novo — reaproveita 100% da
 sessão Google OAuth já existente:
 
-1. **Quem é administrador do Hub** — pode gerenciar a allowlist de
+1. **Quem é administrador do Atlas** — pode gerenciar a allowlist de
    acesso a projeto de outros usuários.
 2. **A quais `project_id` cada usuário tem acesso** — o buraco de
    segurança real que motivou esta spec: até aqui, qualquer usuário
@@ -42,8 +42,8 @@ erro mais visíveis, visão inversa projeto→usuários com opção de liberar
 um projeto pra todo mundo (`hub_projects`), e um fluxo de solicitação de
 acesso self-service (`access_requests`) — ver seções abaixo.
 
-**Novo na v1.2**: painel de uso/gestão pra admins — aba "Uso do Hub" em
-`/admin` com acessos ao Hub (contagem por dia/semana/mês, quem acessou e
+**Novo na v1.2**: painel de uso/gestão pra admins — aba "Uso do Atlas" em
+`/admin` com acessos ao Atlas (contagem por dia/semana/mês, quem acessou e
 quando), bases mais favoritadas e favoritos com drill-down bidirecional
 (usuário → itens, base → usuários) e histórico global de execuções de
 profiling (tabela, quem, quando) — ver "Analytics de uso (v1.2)" abaixo.
@@ -70,7 +70,7 @@ são extensões da mesma decisão, não mudança de arquitetura).
 
 ## Como se relaciona com o login (OAUTH_ALLOWLIST)
 
-Login (**quem pode entrar no Hub**) continua controlado pelo secret
+Login (**quem pode entrar no Atlas**) continua controlado pelo secret
 `OAUTH_ALLOWLIST` (Secret Manager, `domains/auth`) — domínio ou e-mail
 específico, sem mudança nesta spec. O que muda: passar no login **não dá
 mais acesso implícito a nenhum projeto**. Acesso a `project_id` é
@@ -125,7 +125,7 @@ Coleção `hub_projects/{project_id}` — eixo **independente** do
 }
 ```
 
-`is_public: true` libera o projeto pra **qualquer** usuário do Hub —
+`is_public: true` libera o projeto pra **qualquer** usuário do Atlas —
 inclusive quem ainda não tem doc em `hub_users` (usuário futuro, criado
 depois da liberação). `has_project_access` checa `hub_projects` primeiro,
 antes de olhar o usuário:
@@ -176,7 +176,7 @@ esquecer de atualizar todo mundo se a lista mudar).
 **Modelo híbrido (v1.5)**: cada grupo tem dois eixos de membro,
 somados:
 
-- **`manual_members`** — e-mails cadastrados direto na Hub, persistidos
+- **`manual_members`** — e-mails cadastrados direto no Atlas, persistidos
   em `hub_groups`. Editável pela UI.
 - **`workspace_members`** — membros reais de um grupo do Google
   Workspace, lidos ao vivo via Admin SDK Directory API (domain-wide
@@ -213,7 +213,7 @@ runtime assina o JWT de delegação usando sua própria identidade
 (`google.auth.iam.Signer`, que chama a IAM Credentials API — `signBlob`
 — em vez de precisar de uma chave privada baixada), depois impersona
 `settings.workspace_impersonate_email` (novo setting,
-`OBSERVABILITY_HUB_WORKSPACE_IMPERSONATE_EMAIL`) pra ler o grupo via
+`ATLAS_WORKSPACE_IMPERSONATE_EMAIL`) pra ler o grupo via
 `google.oauth2.service_account.Credentials.with_subject(...)`.
 
 Pré-requisitos, nenhum gerenciado pelo Terraform/código deste domínio:
@@ -297,7 +297,7 @@ antigo pra quem quer um grupo só com `manual_members`.
 - `DELETE /api/v1/admin/groups/{group_id}` — remove o documento
   (idempotente). Membros perdem só o acesso concedido por este grupo —
   acesso individual (`hub_users`) não é afetado. Não afeta o grupo no
-  Workspace em si (a Hub nunca escreve lá, só lê).
+  Workspace em si (a Atlas nunca escreve lá, só lê).
 - `GET /api/v1/admin/workspace-groups` (v1.6) — lista `{email, name}` de
   todos os grupos do domínio do Workspace (não filtrado por já-importado
   como `hub_group` — o frontend faz esse filtro). Lista vazia se a
@@ -465,14 +465,14 @@ nada.
 
 `request_type: "access"` (default — cobre também docs antigos no
 Firestore, gravados antes deste campo existir) é o fluxo original acima:
-o projeto já está onboardado no Hub, o usuário só precisa de um grant
+o projeto já está onboardado no Atlas, o usuário só precisa de um grant
 individual.
 
 `request_type: "inclusion"` cobre o caso em que o projeto **não está
 onboardado** — o seletor de projeto (`ProjectSelector.tsx`) oferece essa
 opção quando a validação (`GET /api/v1/projects/{id}/validate`) devolve
-`access_denied` (SA do Hub sem IAM no projeto-alvo) ou `project_not_found`
-(404) — os dois casos ganham a mesma CTA "Solicitar inclusão no Hub",
+`access_denied` (SA do Atlas sem IAM no projeto-alvo) ou `project_not_found`
+(404) — os dois casos ganham a mesma CTA "Solicitar inclusão no Atlas",
 já que o usuário comum não consegue diferenciá-los; o admin investiga
 qual é qual ao revisar o pedido (ver "Checklist de onboarding" abaixo).
 
@@ -480,7 +480,7 @@ Aprovar (`_resolve_access_request`) um pedido `"inclusion"` faz **dois
 passos num clique só**: `repository.upsert_project(project_id, is_public=False)`
 (registra o projeto em `hub_projects`) seguido de `grant_project_to_user`
 (libera o solicitante) — pressupõe que o admin já fez o onboarding real
-no GCP (`docs/onboarding-cliente.md`) fora do Hub antes de clicar
+no GCP (`docs/onboarding-cliente.md`) fora do Atlas antes de clicar
 aprovar. Negar um pedido `"inclusion"` não registra nada, igual ao fluxo
 `"access"`.
 
@@ -488,7 +488,7 @@ aprovar. Negar um pedido `"inclusion"` não registra nada, igual ao fluxo
 
 ## Acompanhamento do cache de audit log (aba "Caches")
 
-O Hub mantém um cache diário de audit log de Cloud Logging pra lineage,
+O Atlas mantém um cache diário de audit log de Cloud Logging pra lineage,
 mapa de acesso, FinOps (budget) e Storage (waste scanner) — ver
 `docs/specs/lineage.md`, "Cache pré-computado". A aba **Caches** de
 Administração dá visibilidade granular disso:
@@ -502,11 +502,11 @@ Administração dá visibilidade granular disso:
   `run_v2.RunJobRequest.Overrides` (o ciclo diário do Scheduler nunca os
   seta):
   - `?force_full=true` (toggle **"forçar completo"** da tela) →
-    `OBSERVABILITY_HUB_CACHE_FORCE_FULL=1`: o Job ignora o delta
+    `ATLAS_CACHE_FORCE_FULL=1`: o Job ignora o delta
     incremental e re-escaneia a janela inteira
     (`core/config.py::settings.cache_force_full`).
   - `?project=a&project=b` (multi-seleção de projetos na tela) →
-    `OBSERVABILITY_HUB_CACHE_ONLY_PROJECTS=a,b`: o Job roda **só** esses
+    `ATLAS_CACHE_ONLY_PROJECTS=a,b`: o Job roda **só** esses
     projetos, **substituindo** a união `hub_projects` ∪ "vistos"
     (`settings.cache_only_projects` / `_list`). Ausente = todos. A tela
     lista os `project_id` que já aparecem na freshness (dropdown, sem
@@ -590,7 +590,7 @@ faz 2-3 leituras reais no GCP.
 ## Analytics de uso (v1.2)
 
 Três leituras cross-usuário/cross-tabela pra dar visão gerencial em
-`/admin` → aba "Uso do Hub". Diferente do resto do domínio (`hub_users`,
+`/admin` → aba "Uso do Atlas". Diferente do resto do domínio (`hub_users`,
 `hub_projects`, `access_requests`, todos com dado próprio), essas
 analytics leem/agregam dado que **já existe em outros domínios**
 (favorites, quality) mais uma coleção nova (login events) — service.py
@@ -598,9 +598,9 @@ deste domínio orquestra, mas o dado de origem não pertence a `admin`.
 
 ### Login events (novo)
 
-Antes da v1.2, login no Hub era 100% stateless (JWT em cookie,
+Antes da v1.2, login no Atlas era 100% stateless (JWT em cookie,
 `domains/auth`) — nenhum registro de quem/quando. Nova coleção
-`login_events/{auto_id}` (top-level, dado gerencial do Hub, mesmo
+`login_events/{auto_id}` (top-level, dado gerencial do Atlas, mesmo
 raciocínio de `hub_users`/`hub_projects`):
 
 ```json
@@ -647,7 +647,7 @@ desc em Python.
 
 ## Analytics de uso (v1.3)
 
-Mais 3 leituras na mesma aba "Uso do Hub", dois casos sem gravação nova
+Mais 3 leituras na mesma aba "Uso do Atlas", dois casos sem gravação nova
 e um com:
 
 ### Solicitações de acesso (zero gravação nova)
@@ -695,7 +695,7 @@ nenhum domínio usava esse nome.
 
 ## Analytics de uso — visualizações (v1.7, ranking removido na v1.8)
 
-Mais 2 leituras na aba "Uso do Hub", nenhuma com gravação nova — as 2
+Mais 2 leituras na aba "Uso do Atlas", nenhuma com gravação nova — as 2
 combinam sinais já rastreados pelas seções anteriores (login, profiling,
 scan de PII, table view, busca).
 
@@ -778,8 +778,8 @@ Distinção importante de mensagem de erro:
 - `ProjectAccessDeniedError` (já existia) — a service account não tem
   IAM no GCP; orienta rodar `gcloud add-iam-policy-binding`.
 - `ProjectNotAuthorizedError` (nova) — a SA pode até ter IAM, mas o
-  **usuário não está autorizado no ACL do Hub**; orienta pedir a um
-  admin do Hub, não rodar `gcloud`.
+  **usuário não está autorizado no ACL do Atlas**; orienta pedir a um
+  admin do Atlas, não rodar `gcloud`.
 
 ---
 
@@ -932,7 +932,7 @@ primeiro registro pela UI (problema de ovo-e-galinha). Resolvido com
 
 ```bash
 cd apps/backend
-uv run python ../../scripts/seed_admin.py --project observability-hub-dev --email <primeiro-admin>
+uv run python ../../scripts/seed_admin.py --project atlas-dev --email <primeiro-admin>
 ```
 
 Rodar em dev primeiro, validar o fluxo ponta a ponta, só depois em prod.
@@ -942,7 +942,7 @@ Rodar em dev primeiro, validar o fluxo ponta a ponta, só depois em prod.
 ## Estrutura de arquivos
 
 ```
-apps/backend/src/observability_hub/
+apps/backend/src/atlas/
 ├── api/v1/
 │   ├── admin.py                # GET/PUT/DELETE users + projects + access-requests
 │   ├── access_requests.py      # novo (v1.1) — POST público, fora de /admin
@@ -1036,7 +1036,7 @@ ser superadmin administre; ver `docs/specs/metadata.md`, "Frontend".
 | `DELETE` de e-mail inexistente | Idempotente, 204 |
 | E-mail digitado com maiúsculas no formulário de admin | Normalizado pra lowercase em `service.py` antes de gravar/consultar |
 | Primeiro deploy, `hub_users` vazio | Fail closed total (login funciona, nenhum projeto acessível, `/admin` inacessível) até rodar `scripts/seed_admin.py` |
-| SA tem IAM no projeto mas usuário não tem ACL no Hub | `ProjectNotAuthorizedError` (403) — nunca chega a tentar a query real no BigQuery |
+| SA tem IAM no projeto mas usuário não tem ACL no Atlas | `ProjectNotAuthorizedError` (403) — nunca chega a tentar a query real no BigQuery |
 | `hub_projects/{id}.is_public = true` | Libera geral, inclusive usuário sem doc em `hub_users` — checado antes de qualquer coisa em `has_project_access` |
 | Solicitar acesso a projeto que já tem (explícito, wildcard ou público) | Filtrado silenciosamente pelo backend, não cria pedido |
 | Solicitar acesso a projeto com pedido `pending` já existente do mesmo usuário | Filtrado, não duplica |
@@ -1091,7 +1091,7 @@ ser superadmin administre; ver `docs/specs/metadata.md`, "Frontend".
 | ID | Suposição | Status |
 |---|---|---|
 | ASM-001 | Checklist não detecta `logging.privateLogViewer` faltando — só `logging.viewer` (mesma ambiguidade de lineage/access) | confirmada |
-| ASM-002 | Checklist não lê a IAM policy do projeto-alvo (probing, não introspecção) — não exige nenhuma role nova da SA do Hub além do que já está em `docs/onboarding-cliente.md` | confirmada |
+| ASM-002 | Checklist não lê a IAM policy do projeto-alvo (probing, não introspecção) — não exige nenhuma role nova da SA do Atlas além do que já está em `docs/onboarding-cliente.md` | confirmada |
 | ASM-003 | Apagar `hub_projects/{id}` não cascateia pra `allowed_projects` de usuários/grupos — mesmo racional de eixos independentes já documentado nesta spec | confirmada |
 | ASM-004 | `access_denied` e `project_not_found` no seletor de projeto ganham a mesma CTA de inclusão — usuário comum não distingue os dois casos, admin investiga ao revisar o pedido | confirmada com o usuário |
 | ASM-005 | Revogação entre Admins de projeto é simétrica (qualquer um revoga qualquer outro do mesmo projeto), sem hierarquia por escopo nem proteção de "último admin" — superadmin é fallback permanente, então não há aqui um `LastAdminLockoutError` equivalente. | confirmada com o usuário (aprovação do plano da spec, 2026-09-05) |
@@ -1131,7 +1131,7 @@ ser superadmin administre; ver `docs/specs/metadata.md`, "Frontend".
   — só o admin vê/gerencia `access_requests`; quem solicita só recebe a
   confirmação de envio no momento, sem histórico de status depois.
 - **Notificação por e-mail** ao aprovar/negar uma solicitação — só
-  reflete dentro do Hub (badge de pendentes some da visão do admin; o
+  reflete dentro do Atlas (badge de pendentes some da visão do admin; o
   solicitante percebe na próxima vez que tentar acessar o projeto).
 - **Delegação de Admin de projeto pra um `hub_groups` inteiro** — só
   indivíduo (e-mail) nesta versão.
@@ -1141,7 +1141,7 @@ ser superadmin administre; ver `docs/specs/metadata.md`, "Frontend".
   racional do resto do domínio (`updated_at`/`granted_by` cobrem "por
   último", não um log completo ao longo do tempo).
 - **Expiração automática do papel** — permanente até alguém revogar,
-  mesma premissa do resto do ACL do Hub.
+  mesma premissa do resto do ACL do Atlas.
 
 
 ---
@@ -1153,7 +1153,7 @@ Ver brief `frontend-visual-refresh.md` (sec. Administracao) e
 
 | ID | Comportamento | Teste |
 |---|---|---|
-| AC-ADM-RV-01 | ✅ (R2-5) "Acessos ao Hub" = `<ComboChart>` coluna + linha; `<ChoiceToggle>` "Coluna: Acumulado / Período" troca qual série é coluna e qual é linha (eixo Y duplo). | `LoginAnalyticsSection` — visual |
+| AC-ADM-RV-01 | ✅ (R2-5) "Acessos ao Atlas" = `<ComboChart>` coluna + linha; `<ChoiceToggle>` "Coluna: Acumulado / Período" troca qual série é coluna e qual é linha (eixo Y duplo). | `LoginAnalyticsSection` — visual |
 | AC-ADM-RV-02 | ✅ (R2-5) `<ChoiceToggle>` "Granularidade: Dia / Mês" — usa os buckets `daily`/`monthly` que a resposta já traz. | `LoginAnalyticsSection` — visual |
 | AC-ADM-RV-03 | ✅ (R2-5) dois `<DateField>` "De"/"Até" → `?from=&to=` no endpoint (backend B7). Sem eles, janela `lookback_days=90`. | `test_get_login_analytics_from_to_window` |
 | AC-ADM-RV-04 | ✅ (R2-5; reescrito na rodada 3) `<Funnel>` = barras horizontais **centradas** afunilando de cima pra baixo (largura ∝ contagem), rótulo + valor + % **acima** de cada barra. A versão R2-5 usava `<polygon>` SVG esticado, que distorcia dentro do container de altura fixa (`h-56`) — trocado por `<div>`s com `width: %` + `mx-auto`. `role="img"` + `aria-label` + `<table>` sr-only. | `Funnel` — visual |

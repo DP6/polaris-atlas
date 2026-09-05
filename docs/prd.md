@@ -1,4 +1,4 @@
-# PRD — Observability Hub
+# PRD — Atlas
 
 Versão: 1.0
 Status: Draft
@@ -12,7 +12,7 @@ Equipes de consultoria de dados que recebem acesso a projetos GCP já existentes
 2. **Observabilidade reativa** — SLAs de recebimento de bases são monitorados manualmente ou não são monitorados, e falhas só são percebidas quando alguém nota ausência de dados.
 3. **Qualidade de dados cara** — perfilar colunas e tabelas exige escrever queries específicas para cada caso, repetindo esforço a cada novo projeto ou análise.
 
-O Observability Hub resolve esses três gargalos em uma única interface, conectada diretamente ao BigQuery via metadados e audit logs — sem mover dados, sem pipelines adicionais.
+O Atlas resolve esses três gargalos em uma única interface, conectada diretamente ao BigQuery via metadados e audit logs — sem mover dados, sem pipelines adicionais.
 
 ## 2. Usuários
 
@@ -150,7 +150,7 @@ nunca amostragem de dado real de objeto):
 - A ferramenta roda no GCP (Cloud Run) e acessa BigQuery via `INFORMATION_SCHEMA` e APIs de metadados — sem queries em dados reais, exceto no profiling onde o usuário explicitamente solicita
 - Custo de operação deve ser mínimo — preferir metadados e HLL a full table scans
 - O usuário autenticado precisa ter no mínimo permissão de `bigquery.dataViewer` no projeto alvo
-- Ambientes separados: dev (`observability-hub-dev`) e prod (`observability-hub-prod`)
+- Ambientes separados: dev (`atlas-dev`) e prod (`atlas-prod`)
 
 ## 7. Roadmap de fases
 

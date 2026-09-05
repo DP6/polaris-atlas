@@ -3,9 +3,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from observability_hub.core.exceptions import ProjectAdminRequiredError
-from observability_hub.domains.budget import service
-from observability_hub.domains.budget.schemas import BudgetScope, BudgetUpsertRequest
+from atlas.core.exceptions import ProjectAdminRequiredError
+from atlas.domains.budget import service
+from atlas.domains.budget.schemas import BudgetScope, BudgetUpsertRequest
 
 
 def _raw(**overrides) -> dict:

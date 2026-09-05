@@ -1,4 +1,4 @@
-# Plano de execução — Refresh visual do Hub
+# Plano de execução — Refresh visual do Atlas
 
 > Companion de [`frontend-visual-refresh.md`](frontend-visual-refresh.md) (o
 > brief). O brief traz as **decisões de design**; este arquivo traz o
@@ -85,7 +85,7 @@ puro, sem sparkline, até o domínio de schema-drift existir. Registrado como
 > ou é mudança de backend."
 
 **Resultado: é mudança de backend.** `DatasetSummary`
-(`apps/backend/src/observability_hub/domains/catalog/schemas.py`) **não tem**
+(`apps/backend/src/atlas/domains/catalog/schemas.py`) **não tem**
 campo `description`. O endpoint de listagem de datasets (`GET
 /api/v1/catalog/.../datasets`) não expõe a `description` do dataset do
 BigQuery. Existe `description` só em nível de **tabela** e **coluna**

@@ -36,7 +36,7 @@ Visão consolidada de todos os datasets do projeto.
 **Response 200:**
 ```json
 {
-  "project_id": "observability-hub-dev",
+  "project_id": "atlas-dev",
   "evaluated_at": "2026-08-05T10:00:00Z",
   "datasets": [
     {
@@ -63,7 +63,7 @@ Freshness detalhado de todas as tabelas de um dataset.
 **Response 200:**
 ```json
 {
-  "project_id": "observability-hub-dev",
+  "project_id": "atlas-dev",
   "dataset_id": "RAW",
   "location": "US",
   "evaluated_at": "2026-08-05T10:00:00Z",
@@ -160,7 +160,7 @@ Custo: $0
 ## Estrutura de arquivos
 
 ```
-apps/backend/src/observability_hub/
+apps/backend/src/atlas/
 ├── api/v1/
 │   └── freshness.py
 ├── domains/freshness/
