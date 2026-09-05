@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
-from observability_hub.core import pricing
-from observability_hub.core.config import settings
+from atlas.core import pricing
+from atlas.core.config import settings
 
 
 def test_estimate_bigquery_storage_cost_usd_uses_active_price_for_recently_modified():

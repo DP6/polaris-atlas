@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Observability Hub — demonstrativo do produto</title>
+<title>Atlas — demonstrativo do produto</title>
 <link rel="icon" type="image/png" href="../assets/favicon.png" />
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Ubuntu:wght@300;400;700&display=swap');
@@ -355,7 +355,7 @@
   }
 
   /* Os domínios do app em chips — o eco da faixa "Nossas áreas" da hero do
-     Polaris, citando o que o Hub cobre. */
+     Polaris, citando o que o Atlas cobre. */
   .cover-topics { margin-top: 28px; }
 
   .cover-topics-label {
@@ -494,7 +494,7 @@
 <body>
   <div class="page">
     <header class="site-tabs">
-      <span class="site-tabs-brand"><span class="dot"></span> Observability Hub</span>
+      <span class="site-tabs-brand"><span class="dot"></span> Atlas</span>
       <a href="../produto/" class="active">Demonstrativo do produto</a>
       <a href="../tecnico/">Guia técnico</a>
       <a href="../componentes/">Componentes</a>
@@ -539,9 +539,9 @@
     // ausente + com image = tela normal do produto) }.
     const slides = [
       {
-        title: "Observability Hub",
+        title: "Atlas",
         description: "Plataforma de observabilidade de dados no GCP: um só lugar pra saber o que existe nos datasets, se está saudável, quem usou, quanto custa e o que dá pra economizar — sem escrever uma query. Este é um tour pelas telas do produto.",
-        topicsLabel: "O que o Hub cobre",
+        topicsLabel: "O que o Atlas cobre",
         topics: ["Catálogo de Dados", "Qualidade e schema drift", "Lineage e tabelas órfãs", "Fingerprint de PII", "Mapa de acesso", "Freshness com SLA", "FinOps", "Cloud Storage", "Favoritos e Recentes", "Administração"],
       },
       {
@@ -554,7 +554,7 @@
       {
         type: "divider",
         title: "BigQuery",
-        description: "Catálogo de Dados, análise de tabela (qualidade, PII, lineage), governança e FinOps — tudo que o Hub observa em datasets e tabelas do BigQuery.",
+        description: "Catálogo de Dados, análise de tabela (qualidade, PII, lineage), governança e FinOps — tudo que o Atlas observa em datasets e tabelas do BigQuery.",
       },
       {
         title: "Catálogo de Dados — visão geral",
@@ -602,7 +602,7 @@
       {
         title: "SQL gerado e custo estimado",
         domain: "Qualidade",
-        description: "O Hub mostra o SQL exato que vai rodar e estima bytes processados e custo em US$ — a decisão de gastar a query é sempre do usuário, nunca surpresa na fatura.",
+        description: "O Atlas mostra o SQL exato que vai rodar e estima bytes processados e custo em US$ — a decisão de gastar a query é sempre do usuário, nunca surpresa na fatura.",
         image: "09-qualidade-sql-custo.png",
       },
       {
@@ -626,7 +626,7 @@
       {
         title: "Fingerprint de PII",
         domain: "Qualidade",
-        description: "Escaneia por heurística de nome + amostra real de dado (via TABLESAMPLE), contando matches de padrão dentro do próprio BigQuery — a API do Hub só recebe contagens agregadas, nunca o valor da coluna.",
+        description: "Escaneia por heurística de nome + amostra real de dado (via TABLESAMPLE), contando matches de padrão dentro do próprio BigQuery — a API do Atlas só recebe contagens agregadas, nunca o valor da coluna.",
         image: "13-pii.png",
       },
       {
@@ -791,18 +791,18 @@
       {
         type: "divider",
         title: "Administração",
-        description: "Solicitação e liberação de acesso, usuários, grupos do Workspace, caches e uso do próprio Hub — quem pode ver o quê, e quem está usando.",
+        description: "Solicitação e liberação de acesso, usuários, grupos do Workspace, caches e uso do próprio Atlas — quem pode ver o quê, e quem está usando.",
       },
       {
         title: "Admin — por usuário",
         domain: "Administração",
-        description: "Quem é administrador do Hub e a quais projetos GCP cada usuário tem acesso. O login em si continua controlado pela allowlist do OAuth, fora daqui.",
+        description: "Quem é administrador do Atlas e a quais projetos GCP cada usuário tem acesso. O login em si continua controlado pela allowlist do OAuth, fora daqui.",
         image: "38-admin-usuarios.png",
       },
       {
         title: "Admin — por projeto",
         domain: "Administração",
-        description: "A visão inversa — escolhe um projeto e vê quem tem acesso, com a opção de liberar pra todo mundo de uma vez e um checklist que testa na hora se a service account do Hub consegue ler aquele projeto.",
+        description: "A visão inversa — escolhe um projeto e vê quem tem acesso, com a opção de liberar pra todo mundo de uma vez e um checklist que testa na hora se a service account do Atlas consegue ler aquele projeto.",
         image: "39-admin-por-projeto.png",
       },
       {
@@ -830,31 +830,31 @@
         image: "43-admin-caches-historico.png",
       },
       {
-        title: "Uso do Hub — acessos",
+        title: "Uso do Atlas — acessos",
         domain: "Administração",
         description: "Acessos e usuários únicos (hoje / semana / mês) num gráfico de coluna + linha, com granularidade e período configuráveis, e o log de acessos recentes.",
         image: "44-admin-uso-acessos.png",
       },
       {
-        title: "Uso do Hub — funil e horário",
+        title: "Uso do Atlas — funil e horário",
         domain: "Administração",
         description: "Funil de retenção (quem só loga vs. quem de fato usa) em barras proporcionais, e o mapa de calor de dia × hora — sinal de quando é seguro fazer manutenção.",
         image: "45-admin-uso-funil-horario.png",
       },
       {
-        title: "Uso do Hub — favoritos e profiling",
+        title: "Uso do Atlas — favoritos e profiling",
         domain: "Administração",
         description: "Bases mais favoritadas e toda execução de profiling registrada — quem rodou, quando, densidade e duplicatas.",
         image: "46-admin-uso-favoritos-profiling.png",
       },
       {
-        title: "Uso do Hub — solicitações",
+        title: "Uso do Atlas — solicitações",
         domain: "Administração",
         description: "Volume e taxa de aprovação de pedidos de acesso e quais projetos são mais pedidos.",
         image: "47-admin-uso-solicitacoes.png",
       },
       {
-        title: "Uso do Hub — navegação",
+        title: "Uso do Atlas — navegação",
         domain: "Administração",
         description: "Tabelas mais vistas, buscas mais frequentes e scans de PII — o que as pessoas procuram no catálogo, sem precisar perguntar.",
         image: "48-admin-uso-navegacao.png",
@@ -862,7 +862,7 @@
 
       {
         title: "Obrigado",
-        description: "Esse foi um resumo das principais telas do Observability Hub. Dúvidas ou sugestões? Fale com o time responsável pelo Hub na DP6.",
+        description: "Esse foi um resumo das principais telas do Atlas. Dúvidas ou sugestões? Fale com o time responsável pelo Atlas na DP6.",
         topicsLabel: "Tudo isso num só lugar",
         topics: ["Catálogo de Dados", "Qualidade e schema drift", "Lineage e tabelas órfãs", "Fingerprint de PII", "Mapa de acesso", "Freshness com SLA", "FinOps", "Cloud Storage", "Favoritos e Recentes", "Administração"],
       },
@@ -881,7 +881,7 @@
 
     function renderSlides() {
       slidesEl.innerHTML = '';
-      sidebarEl.innerHTML = '<div class="sidebar-brand"><span class="dot"></span> Observability Hub</div>';
+      sidebarEl.innerHTML = '<div class="sidebar-brand"><span class="dot"></span> Atlas</div>';
 
       let lastGroupLabel = null;
 

@@ -1,4 +1,4 @@
-from observability_hub.domains.history.schemas import (
+from atlas.domains.history.schemas import (
     HistoryResponse,
     SearchEvent,
     SearchEventRequest,
@@ -9,7 +9,7 @@ from observability_hub.domains.history.schemas import (
 
 def test_table_view_event_matches_spec_example():
     payload = {
-        "project_id": "observability-hub-dev",
+        "project_id": "atlas-dev",
         "dataset_id": "RAW",
         "table_id": "ga4_events",
         "viewed_at": "2026-08-12T03:00:00Z",
@@ -22,7 +22,7 @@ def test_search_event_matches_spec_example():
     payload = {
         "query": "events_20260812",
         "mode": "exact",
-        "project_id": "observability-hub-dev",
+        "project_id": "atlas-dev",
         "searched_at": "2026-08-12T03:00:00Z",
     }
     model = SearchEvent(**payload)

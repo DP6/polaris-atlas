@@ -3,9 +3,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from observability_hub.core.exceptions import AccessRequestNotFoundError, LastAdminLockoutError
-from observability_hub.domains.admin import service
-from observability_hub.domains.admin.schemas import (
+from atlas.core.exceptions import AccessRequestNotFoundError, LastAdminLockoutError
+from atlas.domains.admin import service
+from atlas.domains.admin.schemas import (
     UpsertHubGroupRequest,
     UpsertHubProjectRequest,
     UpsertHubUserRequest,

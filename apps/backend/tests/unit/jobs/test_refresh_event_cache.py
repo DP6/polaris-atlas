@@ -4,8 +4,8 @@ from unittest.mock import MagicMock
 
 from google.api_core.exceptions import NotFound
 
-from observability_hub.core.exceptions import LoggingAccessDeniedError, LoggingQuotaExceededError
-from observability_hub.jobs import refresh_event_cache
+from atlas.core.exceptions import LoggingAccessDeniedError, LoggingQuotaExceededError
+from atlas.jobs import refresh_event_cache
 
 
 def _event(job_id="j1", ts=None):

@@ -39,6 +39,55 @@ wheels = [
 ]
 
 [[package]]
+name = "atlas-backend"
+version = "0.2.2"
+source = { editable = "." }
+dependencies = [
+    { name = "authlib" },
+    { name = "fastapi" },
+    { name = "google-auth" },
+    { name = "google-cloud-bigquery" },
+    { name = "google-cloud-firestore" },
+    { name = "google-cloud-logging" },
+    { name = "google-cloud-run" },
+    { name = "google-cloud-secret-manager" },
+    { name = "google-cloud-storage" },
+    { name = "pydantic-settings" },
+    { name = "python-jose", extra = ["cryptography"] },
+    { name = "requests" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "authlib", specifier = ">=1.3" },
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "google-auth", specifier = ">=2.35" },
+    { name = "google-cloud-bigquery", specifier = ">=3.25" },
+    { name = "google-cloud-firestore", specifier = ">=2.19" },
+    { name = "google-cloud-logging", specifier = ">=3.16.2" },
+    { name = "google-cloud-run", specifier = ">=0.10" },
+    { name = "google-cloud-secret-manager", specifier = ">=2.20" },
+    { name = "google-cloud-storage", specifier = ">=3.13.1" },
+    { name = "pydantic-settings", specifier = ">=2.5" },
+    { name = "python-jose", extras = ["cryptography"], specifier = ">=3.3" },
+    { name = "requests", specifier = ">=2.32" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.3" },
+    { name = "ruff", specifier = ">=0.8" },
+]
+
+[[package]]
 name = "authlib"
 version = "1.7.2"
 source = { registry = "https://pypi.org/simple" }
@@ -688,55 +737,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c7/e0/27a6a081ae25420eda6768ceae05d7022a7f2447f420588843f2a44e4298/joserfc-1.7.4.tar.gz", hash = "sha256:b3bc561672ae541b17a9237053b48a03dacddd92d68047b3ecdfb4b5714a88ed", size = 234027, upload-time = "2026-07-19T15:43:02.739Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f9/bf/249dcd99b3376375910b7fa922383b57792975c8758f50d44612e749226c/joserfc-1.7.4-py3-none-any.whl", hash = "sha256:32d46c2cd5e3203c13e87a6c61333cab310b1ba80cd54b4c4f386a848a122463", size = 71000, upload-time = "2026-07-19T15:43:01.299Z" },
-]
-
-[[package]]
-name = "observability-hub-backend"
-version = "0.2.2"
-source = { editable = "." }
-dependencies = [
-    { name = "authlib" },
-    { name = "fastapi" },
-    { name = "google-auth" },
-    { name = "google-cloud-bigquery" },
-    { name = "google-cloud-firestore" },
-    { name = "google-cloud-logging" },
-    { name = "google-cloud-run" },
-    { name = "google-cloud-secret-manager" },
-    { name = "google-cloud-storage" },
-    { name = "pydantic-settings" },
-    { name = "python-jose", extra = ["cryptography"] },
-    { name = "requests" },
-    { name = "uvicorn", extra = ["standard"] },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "authlib", specifier = ">=1.3" },
-    { name = "fastapi", specifier = ">=0.115" },
-    { name = "google-auth", specifier = ">=2.35" },
-    { name = "google-cloud-bigquery", specifier = ">=3.25" },
-    { name = "google-cloud-firestore", specifier = ">=2.19" },
-    { name = "google-cloud-logging", specifier = ">=3.16.2" },
-    { name = "google-cloud-run", specifier = ">=0.10" },
-    { name = "google-cloud-secret-manager", specifier = ">=2.20" },
-    { name = "google-cloud-storage", specifier = ">=3.13.1" },
-    { name = "pydantic-settings", specifier = ">=2.5" },
-    { name = "python-jose", extras = ["cryptography"], specifier = ">=3.3" },
-    { name = "requests", specifier = ">=2.32" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=8.3" },
-    { name = "ruff", specifier = ">=0.8" },
 ]
 
 [[package]]

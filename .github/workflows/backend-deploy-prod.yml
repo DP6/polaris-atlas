@@ -27,7 +27,7 @@ env:
   # Cloud Run Job de refresh do cache de audit log (lineage/access) —
   # mesma imagem do Service, promovida junto (ver
   # infra/terraform/modules/cloud-run-job e
-  # apps/backend/src/observability_hub/jobs/refresh_event_cache.py).
+  # apps/backend/src/atlas/jobs/refresh_event_cache.py).
   REFRESH_CACHE_JOB: backend-prod-refresh-cache
 
 jobs:

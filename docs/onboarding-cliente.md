@@ -1,4 +1,4 @@
-# Onboarding de projeto GCP — acesso do Observability Hub
+# Onboarding de projeto GCP — acesso do Atlas
 
 > **Uso interno.** Este documento acumula o log vivo de concessões (seção
 > "Registro de acessos concedidos" no fim) e notas de processo — não deve
@@ -9,20 +9,20 @@
 
 **Objetivo:** checklist completo de tudo que precisa ser configurado em um
 projeto GCP "alvo" (projeto de cliente, ou qualquer projeto que não seja
-o próprio projeto onde o Hub roda — `dp6-ci-polaris`, hospedando dev
-e prod juntos nesta topologia, ver `CLAUDE.md`) para que o Hub consiga
+o próprio projeto onde o Atlas roda — `dp6-ci-polaris`, hospedando dev
+e prod juntos nesta topologia, ver `CLAUDE.md`) para que o Atlas consiga
 observá-lo — os oito domínios (catálogo, freshness, profiling/qualidade,
 lineage/tabelas órfãs, fingerprinting de PII, mapa de acesso, FinOps e
 Cloud Storage, ver `CLAUDE.md`) usam exatamente as roles e APIs listadas
 abaixo, sem exceção nem role extra por domínio.
 
 Modelo de acesso: **Modelo A — service account com acesso cross-project**
-(ver [ADR-006](adr/ADR-006-cross-project.md)). O Hub nunca instala nada no
+(ver [ADR-006](adr/ADR-006-cross-project.md)). O Atlas nunca instala nada no
 projeto alvo — o administrador do lado do cliente concede acesso de leitura
-à service account de runtime do Hub, uma vez, e o `project_id` é digitado
+à service account de runtime do Atlas, uma vez, e o `project_id` é digitado
 pelo usuário no frontend a cada sessão.
 
-**Quem executa:** o administrador do projeto alvo (cliente). O time do Hub
+**Quem executa:** o administrador do projeto alvo (cliente). O time do Atlas
 só fornece os comandos prontos — nunca tem credenciais próprias do lado do
 cliente.
 
@@ -43,12 +43,12 @@ de lineage que usa bucket como nó).
 
 ---
 
-## 2. IAM — conceder acesso à service account de runtime do Hub
+## 2. IAM — conceder acesso à service account de runtime do Atlas
 
-Qual service account usar depende de qual ambiente do Hub vai consultar o
+Qual service account usar depende de qual ambiente do Atlas vai consultar o
 projeto:
 
-| Ambiente do Hub | Service account |
+| Ambiente do Atlas | Service account |
 |---|---|
 | Produção (uso real com cliente) | `backend-prod-run@dp6-ci-polaris.iam.gserviceaccount.com` |
 | Dev (teste interno) | `backend-dev-run@dp6-ci-polaris.iam.gserviceaccount.com` |
@@ -83,7 +83,7 @@ domínio hoje opera com IAM a nível de dataset ou tabela):
 
 > **Org policy do cliente (`iam.allowedPolicyMemberDomains`):** num projeto
 > de cliente cuja organização restringe binding de IAM ao próprio domínio,
-> o `add-iam-policy-binding` das SAs do Hub (externas ao cliente) falha com
+> o `add-iam-policy-binding` das SAs do Atlas (externas ao cliente) falha com
 > `One or more users named in the policy do not belong to a permitted
 > customer`. É o mesmo tipo de barreira que já mordeu o próprio repo em
 > 2026-08-21 (`iam.allowedPolicyMemberDomains` bloqueando `allUsers` no
@@ -94,7 +94,7 @@ domínio hoje opera com IAM a nível de dataset ou tabela):
 > allowlist. Documentado no `onboarding-cliente-entrega.md` como aviso
 > antes dos comandos da seção 2.
 
-**Cliente real recebe as duas SAs.** A instância `dev` do Hub é usada pelo
+**Cliente real recebe as duas SAs.** A instância `dev` do Atlas é usada pelo
 time DP6 pra validar o onboarding antes de liberar o `prod` pro cliente —
 conceder o mesmo conjunto de roles às duas SAs de uma vez evita um segundo
 round-trip com o admin do cliente. O `onboarding-cliente-entrega.md` já
@@ -193,7 +193,7 @@ motivo.
 ## 4. O que NÃO é necessário (e o que este processo não faz)
 
 - Nenhum agente, VM ou service account do lado do cliente rodando código —
-  o Hub só lê, via API, a partir de fora do projeto.
+  o Atlas só lê, via API, a partir de fora do projeto.
 - Nenhuma permissão de escrita, alteração ou exclusão — toda role deste
   documento é de leitura, em todos os passos.
 - `roles/billing.viewer` / Cloud Billing API — FinOps (budget, scanner de
@@ -204,12 +204,12 @@ motivo.
   custo por projeto+SKU, nunca por dataset/tabela — não resolveria a
   pergunta que a feature responde").
 - Secret Manager, Artifact Registry, Cloud Run, Firestore — recursos
-  internos do Hub, vivem só em `dp6-ci-polaris` (ou no par de projetos
-  usado pra hospedar aquela instância do Hub), nunca no projeto alvo.
+  internos do Atlas, vivem só em `dp6-ci-polaris` (ou no par de projetos
+  usado pra hospedar aquela instância do Atlas), nunca no projeto alvo.
 - Cache pré-computado de audit log de lineage/mapa de acesso/FinOps/
   Storage (job diário D-1 incremental + bucket GCS, ver
   `docs/specs/lineage.md`) — mesmo racional: o bucket, o Cloud Run Job e
-  o Cloud Scheduler vivem só no projeto do Hub. As roles
+  o Cloud Scheduler vivem só no projeto do Atlas. As roles
   `logging.viewer`/`logging.privateLogViewer` desta seção continuam sendo
   as únicas necessárias no projeto alvo; nenhuma concessão nova é exigida
   dele por causa do cache.
@@ -226,11 +226,11 @@ motivo.
     add-iam-policy-binding das SAs externas falha (ver seção 2)
 [ ] bigquery.googleapis.com habilitada no projeto alvo
 [ ] logging.googleapis.com habilitada no projeto alvo
-[ ] roles/bigquery.metadataViewer concedida à(s) SA(s) do Hub
-[ ] roles/bigquery.jobUser concedida à(s) SA(s) do Hub
-[ ] roles/bigquery.dataViewer concedida à(s) SA(s) do Hub
-[ ] roles/logging.viewer concedida à(s) SA(s) do Hub
-[ ] roles/logging.privateLogViewer concedida à(s) SA(s) do Hub — sem ela,
+[ ] roles/bigquery.metadataViewer concedida à(s) SA(s) do Atlas
+[ ] roles/bigquery.jobUser concedida à(s) SA(s) do Atlas
+[ ] roles/bigquery.dataViewer concedida à(s) SA(s) do Atlas
+[ ] roles/logging.viewer concedida à(s) SA(s) do Atlas
+[ ] roles/logging.privateLogViewer concedida à(s) SA(s) do Atlas — sem ela,
     logging.viewer sozinha NÃO mostra Data Access audit logs (falha
     silenciosa, sem erro, só resultado sempre vazio)
 [ ] (cliente real) as roles acima concedidas às DUAS SAs (backend-dev-run
@@ -240,10 +240,10 @@ motivo.
     acesso/FinOps (budget)
 [ ] storage.googleapis.com habilitada no projeto alvo — só necessário se o
     cliente for usar o domínio storage
-[ ] roles/storage.bucketViewer concedida à SA do Hub — idem, necessária
+[ ] roles/storage.bucketViewer concedida à SA do Atlas — idem, necessária
     pro catálogo listar buckets (storage.objectViewer sozinha NÃO cobre
     metadado de bucket, só de objeto)
-[ ] roles/storage.objectViewer concedida à SA do Hub — idem, necessária
+[ ] roles/storage.objectViewer concedida à SA do Atlas — idem, necessária
     pro tamanho agregado do catálogo e pra checagem 6.1 do waste scanner
     (metadado e leitura de objeto)
 [ ] storage.googleapis.com — Data Access audit log DATA_READ habilitado
@@ -255,7 +255,7 @@ motivo.
     ser alto em bucket de tráfego intenso. Medir volume esperado antes
     de habilitar em projeto de produção ou projeto-cliente com uso real.
 [ ] gcloud projects get-iam-policy confirmado (não só "rodei o comando")
-[ ] Testado na UI do Hub com um usuário já autorizado no ACL interno
+[ ] Testado na UI do Atlas com um usuário já autorizado no ACL interno
 [ ] Linha registrada na tabela "Registro de acessos concedidos" abaixo
 ```
 
@@ -265,7 +265,7 @@ motivo.
 
 Para encerrar o acesso a qualquer momento, remova as mesmas roles
 concedidas na seção 2 — sem efeito colateral no restante do projeto
-alvo (a SA do Hub nunca ganha nenhuma permissão de escrita, então
+alvo (a SA do Atlas nunca ganha nenhuma permissão de escrita, então
 revogar é só desfazer os `add-iam-policy-binding` de leitura):
 
 ```bash
@@ -281,7 +281,7 @@ done
 ```
 
 Os Data Access audit logs (seção 3) não precisam ser desabilitados —
-não são específicos da SA do Hub, e desligá-los pode afetar outras
+não são específicos da SA do Atlas, e desligá-los pode afetar outras
 integrações do projeto alvo que dependam deles.
 
 ---
@@ -296,14 +296,14 @@ integrações do projeto alvo que dependam deles.
      --filter="bindings.members:${SA_EMAIL}" \
      --format="table(bindings.role)"
    ```
-2. **Teste pela UI do Hub**: logado como um usuário com acesso liberado
-   a esse `project_id` no ACL interno do Hub (ver
+2. **Teste pela UI do Atlas**: logado como um usuário com acesso liberado
+   a esse `project_id` no ACL interno do Atlas (ver
    [`docs/specs/admin.md`](specs/admin.md)), digite (ou selecione, ver
    spec `catalog.md` v1.6) o `project_id` no seletor. Se faltar alguma
    role de IAM, o erro (`ProjectAccessDeniedError`) já vem com os
    comandos de correção prontos no corpo da resposta. Se a IAM estiver
-   certa mas o usuário não estiver autorizado no Hub, o erro é outro
-   (`ProjectNotAuthorizedError`) e orienta pedir a um admin do Hub — não
+   certa mas o usuário não estiver autorizado no Atlas, o erro é outro
+   (`ProjectNotAuthorizedError`) e orienta pedir a um admin do Atlas — não
    rodar `gcloud` de novo.
 3. **Registre a concessão** na tabela "Registro de acessos concedidos"
    abaixo — obrigatório por convenção do `CLAUDE.md` ("Registro de
@@ -316,7 +316,7 @@ integrações do projeto alvo que dependam deles.
 | Sintoma | Causa provável |
 |---|---|
 | 403 `ProjectAccessDeniedError` ao digitar/selecionar o projeto no seletor | Falta alguma das 3 primeiras roles de BigQuery (seção 2) — a própria resposta já traz o comando pronto |
-| 403 `ProjectNotAuthorizedError` | IAM do GCP está OK, mas o usuário não está liberado no ACL interno do Hub — pedir a um admin do Hub, não rodar `gcloud` |
+| 403 `ProjectNotAuthorizedError` | IAM do GCP está OK, mas o usuário não está liberado no ACL interno do Atlas — pedir a um admin do Atlas, não rodar `gcloud` |
 | Lineage/tabelas órfãs/mapa de acesso sempre "sem atividade", mesmo com dados reais | `logging.viewer` presente mas `logging.privateLogViewer` faltando — a API responde 200, mas nunca mostra Data Access audit logs (falha silenciosa) |
 | Lineage responde 403 em vez de vazio | Falta `logging.viewer` (erro `LoggingAccessDeniedError`, já sugere as duas roles de logging juntas) |
 | Tudo liberado mas ainda "sem atividade" | Confirmar se os Data Access audit logs (seção 3) estão realmente habilitados — checar o campo `auditConfigs` via `get-iam-policy`, não só assumir que a config aplicada anteriormente ainda está lá |
@@ -339,7 +339,7 @@ integrações do projeto alvo que dependam deles.
 
 Nenhum projeto de cliente real foi onboardado ainda. As únicas concessões
 cross-project existentes até agora (no repositório de origem) são entre
-os dois ambientes do próprio Hub (`observability-hub-dev` ↔
+os dois ambientes do próprio Atlas (`observability-hub-dev` ↔
 `observability-hub-prod`), usadas como projeto "alvo" de teste um do
 outro — seguem exatamente este mesmo checklist, e servem de precedente
 real de que o processo funciona.
@@ -365,7 +365,7 @@ real de que o processo funciona.
 | 2026-08-21 | `dp6-ci-polaris` | `gh-deploy-dev@...` e `gh-deploy-prod@...` | `roles/iap.admin` — fix da linha acima: adicionado a `deployer_roles` em `infra/terraform/bootstrap/modules/wif-bootstrap/main.tf`, aplicado via `terraform apply` no bootstrap (fora do CI, mesmo padrão dos demais papéis das SAs de deploy) | `terraform apply` confirmou criação dos 2 bindings (`...deployer_roles["dev-roles/iap.admin"]`/`["prod-roles/iap.admin"]`) |
 | 2026-08-21 | `dp6-ci-polaris` | — | Google Group `gcp-ci-polaris@dp6.com.br` criado pela TI — recebe `roles/iap.httpsResourceAccessor` nos 4 serviços Cloud Run (backend/frontend × dev/prod) via `google_iap_web_cloud_run_service_iam_member`, substitui o antigo `allUsers` como controle de acesso | Não confirmado via `gcloud` — mesma ressalva da linha acima (o binding em si depende da role acima existir na SA de deploy) |
 | 2026-08-21 | `dp6-ci-polaris` | — | `roles/run.invoker` concedido manualmente (via `gcloud`, sessão pessoal `matheus.fuzati@dp6.com.br`, **não** pela SA de deploy) ao service agent do IAP (`service-209825626529@gcp-sa-iap.iam.gserviceaccount.com`) — necessário pro IAP nativo do Cloud Run repassar a requisição autenticada ao serviço. **Não gerenciado pelo Terraform** (exige `resourcemanager.projects.setIamPolicy`, que a SA de deploy do CI não tem e não deve ganhar só pra isso — ver comentário em `modules/cloud-run/main.tf`); tratado como passo manual único, mesmo padrão de `infra/terraform/bootstrap`. Replicar em prod não é necessário — grant de projeto único, já cobre os dois ambientes nesta topologia single-project. | `terraform apply` local confirmou criação (`...iap_service_agent_invoker[0]: Creation complete...`) — não reconfirmado depois via `gcloud get-iam-policy` (sessão expirou nesta sessão) |
-| 2026-08-21 | `dp6-ci-polaris` | `backend-dev-run@...` e `backend-prod-run@...` (self) | `roles/bigquery.jobUser` — gap do playbook (passo 10 nunca incluiu essa role): sem ela no próprio projeto do Hub, `core/bigquery.py::get_client()` não consegue criar job de query em nenhum projeto alvo, mesmo com as roles do checklist corretas lá. Descoberto testando `observability-hub-dev` como primeiro projeto alvo real (erro `ProjectAccessDeniedError` mesmo com as 7 roles do checklist confirmadas no alvo) | `gcloud projects get-iam-policy dp6-ci-polaris --flatten='bindings[].members' --filter='bindings.members:backend-dev-run@...'` confirmou a role presente após o `add-iam-policy-binding` |
+| 2026-08-21 | `dp6-ci-polaris` | `backend-dev-run@...` e `backend-prod-run@...` (self) | `roles/bigquery.jobUser` — gap do playbook (passo 10 nunca incluiu essa role): sem ela no próprio projeto do Atlas, `core/bigquery.py::get_client()` não consegue criar job de query em nenhum projeto alvo, mesmo com as roles do checklist corretas lá. Descoberto testando `observability-hub-dev` como primeiro projeto alvo real (erro `ProjectAccessDeniedError` mesmo com as 7 roles do checklist confirmadas no alvo) | `gcloud projects get-iam-policy dp6-ci-polaris --flatten='bindings[].members' --filter='bindings.members:backend-dev-run@...'` confirmou a role presente após o `add-iam-policy-binding` |
 | 2026-08-21 | `dp6-ci-polaris` | `group:gcp-ci-polaris@dp6.com.br` (self) | `roles/iam.serviceAccountAdmin` — necessária pra gerenciar IAM policy a nível de recurso SA individual (`iam.serviceAccounts.{get,set}IamPolicy`), diferente de `resourcemanager.projectIamAdmin` (que o grupo já tinha, mas não cobre isso). Motivo: preparar o self-binding abaixo pra integração com grupos do Workspace (v1.5 da spec admin) | `gcloud projects get-iam-policy dp6-ci-polaris --flatten='bindings[].members' --filter='bindings.members:gcp-ci-polaris@dp6.com.br AND bindings.role:serviceAccountAdmin'` confirmou a role presente |
 | 2026-08-21 | `dp6-ci-polaris` | `backend-dev-run@...` e `backend-prod-run@...` (self, nível de recurso da própria SA — não nível de projeto) | `roles/iam.serviceAccountTokenCreator` concedida por cada SA a si mesma — permite assinar o JWT de domain-wide delegation (`google.auth.iam.Signer`/`signBlob`) sem precisar de chave baixada. Propagação anormalmente lenta (~21min) e `gcloud ... add-iam-policy-binding` seguiu falhando mesmo depois de `get-iam-policy` já funcionar — contornado com `get-iam-policy` + editar JSON + `set-iam-policy` explícito, que funcionou de primeira. Causa exata do `add-iam-policy-binding` falhar mesmo com a leitura já liberada não totalmente esclarecida | `gcloud iam service-accounts get-iam-policy <SA>` confirmou a role presente nas duas SAs |
 | 2026-08-21 | `dp6-ci-polaris` | `backend-dev-run@...` e `backend-prod-run@...` (self) | `roles/browser` — visibilidade via Cloud Resource Manager pra este projeto aparecer no seletor de projeto do frontend (`GET /api/v1/projects`, v1.6 da spec catalog). Opcional/não-bloqueante, ver linha da tabela de roles na seção 2 | `gcloud projects get-iam-policy dp6-ci-polaris --flatten='bindings[].members' --filter='bindings.role:roles/browser'` confirmou as duas SAs presentes |
@@ -391,14 +391,14 @@ especificamente. As duas roles voltaram a fazer parte do checklist
 oficial (seção 2 acima). Erro registrado aqui de propósito, como exemplo
 do próprio processo que este documento existe pra evitar.
 
-Roles concedidas às SAs do Hub que **não fazem parte deste checklist**
-(específicas da infraestrutura própria do Hub, nunca pedidas a um projeto
+Roles concedidas às SAs do Atlas que **não fazem parte deste checklist**
+(específicas da infraestrutura própria do Atlas, nunca pedidas a um projeto
 cliente): `roles/datastore.user`, `roles/secretmanager.secretAccessor`,
 `roles/bigquery.jobUser` (cada uma só no próprio projeto, `dev` na SA de
 dev e `prod` na SA de prod).
 
 > **Gap descoberto em 2026-08-21:** `roles/bigquery.jobUser` faltava no
-> próprio projeto do Hub (`dp6-ci-polaris`) — só tinha sido concedida no
+> próprio projeto do Atlas (`dp6-ci-polaris`) — só tinha sido concedida no
 > projeto **alvo** (parte do checklist acima), mas `core/bigquery.py::
 > get_client()` cria `bigquery.Client()` sem projeto explícito, então o
 > job de query é criado/cobrado no projeto de casa da SA (`dp6-ci-polaris`),
@@ -414,7 +414,7 @@ dev e `prod` na SA de prod).
 
 Ver CLAUDE.md, seção "Registro de acessos e configurações" — toda vez que
 um acesso, role, API ou audit config for concedido/alterado em qualquer
-projeto (cliente real ou os próprios `dev`/`prod` do Hub servindo de
+projeto (cliente real ou os próprios `dev`/`prod` do Atlas servindo de
 projeto-alvo um do outro), a linha correspondente entra na tabela acima
 antes de considerar a tarefa concluída.
 
@@ -425,8 +425,8 @@ antes de considerar a tarefa concluída.
 - [ADR-006 — Modelo de acesso cross-project](adr/ADR-006-cross-project.md)
 - [ADR-009 — ACL de usuário × projeto](adr/ADR-009-acl-usuario-projeto.md)
 - [`docs/specs/admin.md`](specs/admin.md) — como liberar um usuário do
-  Hub para um `project_id` já autorizado a nível de infraestrutura por
+  Atlas para um `project_id` já autorizado a nível de infraestrutura por
   este documento
 - [`docs/playbooks/hospedar-hub-em-novo-projeto.md`](playbooks/hospedar-hub-em-novo-projeto.md)
-  — playbook complementar, sobre onde o Hub *em si* roda (este documento
-  é sobre os projetos que o Hub *observa*)
+  — playbook complementar, sobre onde o Atlas *em si* roda (este documento
+  é sobre os projetos que o Atlas *observa*)

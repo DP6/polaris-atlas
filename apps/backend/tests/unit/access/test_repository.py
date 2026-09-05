@@ -5,8 +5,8 @@ from unittest.mock import MagicMock
 import pytest
 from google.api_core.exceptions import Forbidden
 
-from observability_hub.core.exceptions import EventCacheNotReadyError
-from observability_hub.domains.access import repository
+from atlas.core.exceptions import EventCacheNotReadyError
+from atlas.domains.access import repository
 
 
 def _entry(payload: dict | None):
@@ -30,7 +30,7 @@ REAL_CTAS_PROTO_PAYLOAD = {
                     "query": {
                         "destinationTable": {
                             "datasetId": "TRUSTED",
-                            "projectId": "observability-hub-dev",
+                            "projectId": "atlas-dev",
                             "tableId": "ga4_sessions",
                         },
                         "statementType": "CREATE_TABLE_AS_SELECT",
@@ -39,7 +39,7 @@ REAL_CTAS_PROTO_PAYLOAD = {
                 "jobName": {
                     "jobId": "bqjob_r5bf5dfa96120dc26_000001a000b0cfae_1",
                     "location": "US",
-                    "projectId": "observability-hub-dev",
+                    "projectId": "atlas-dev",
                 },
                 "jobStatistics": {
                     "createTime": "2026-08-14T14:33:03.171Z",
@@ -47,7 +47,7 @@ REAL_CTAS_PROTO_PAYLOAD = {
                     "referencedTables": [
                         {
                             "datasetId": "RAW",
-                            "projectId": "observability-hub-dev",
+                            "projectId": "atlas-dev",
                             "tableId": "ga4_events",
                         }
                     ],
@@ -110,8 +110,8 @@ def test_parse_entry_extracts_fields_and_timestamp_from_real_payload():
     assert event is not None
     assert event.job_id == "bqjob_r5bf5dfa96120dc26_000001a000b0cfae_1"
     assert event.principal_email == "fuzatimatheus.cloud@gmail.com"
-    assert event.destination_table == ("observability-hub-dev", "TRUSTED", "ga4_sessions")
-    assert event.referenced_tables == [("observability-hub-dev", "RAW", "ga4_events")]
+    assert event.destination_table == ("atlas-dev", "TRUSTED", "ga4_sessions")
+    assert event.referenced_tables == [("atlas-dev", "RAW", "ga4_events")]
     assert event.timestamp == datetime(2026, 8, 14, 14, 33, 5, 199000, tzinfo=UTC)
 
 

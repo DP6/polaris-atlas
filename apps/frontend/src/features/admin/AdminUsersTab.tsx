@@ -214,7 +214,7 @@ function UpsertUserDialog({
         <DialogHeader>
           <DialogTitle>{isEditing ? 'Editar usuário' : 'Adicionar usuário'}</DialogTitle>
           <DialogDescription>
-            Controla se este usuário é administrador do Hub e a quais projetos GCP ele tem acesso.
+            Controla se este usuário é administrador do Atlas e a quais projetos GCP ele tem acesso.
           </DialogDescription>
         </DialogHeader>
 
@@ -237,7 +237,7 @@ function UpsertUserDialog({
               onCheckedChange={(checked) => setIsAdmin(checked === true)}
             />
             <Label htmlFor="admin-user-is-admin" className="cursor-pointer font-normal">
-              Administrador do Hub
+              Administrador do Atlas
             </Label>
           </div>
 
@@ -289,9 +289,9 @@ function DeleteUserDialog({
         <DialogHeader>
           <DialogTitle>Remover acesso</DialogTitle>
           <DialogDescription>
-            {email} perde o acesso administrado a todos os projetos do Hub. O login continua valendo
-            se o e-mail/domínio dele estiver na allowlist do OAuth — só o acesso a projeto (e/ou
-            admin) é removido.
+            {email} perde o acesso administrado a todos os projetos do Atlas. O login continua
+            valendo se o e-mail/domínio dele estiver na allowlist do OAuth — só o acesso a projeto
+            (e/ou admin) é removido.
           </DialogDescription>
         </DialogHeader>
         {errorMessage && <p className="text-sm text-status-error-foreground">{errorMessage}</p>}

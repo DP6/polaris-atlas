@@ -59,8 +59,8 @@ export function AdminProjectsTab() {
   return (
     <div className="mt-4 flex flex-col gap-4">
       <p className="text-xs text-muted-foreground">
-        "Liberado a todos" vale pra qualquer usuário do Hub, inclusive quem ainda não tem cadastro —
-        independente da lista de projetos de cada usuário na aba "Por usuário".
+        "Liberado a todos" vale pra qualquer usuário do Atlas, inclusive quem ainda não tem cadastro
+        — independente da lista de projetos de cada usuário na aba "Por usuário".
       </p>
 
       <div className="flex flex-col gap-2">

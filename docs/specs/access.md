@@ -53,7 +53,7 @@ recente primeiro.
 **Response 200:**
 ```json
 {
-  "project_id": "observability-hub-dev",
+  "project_id": "atlas-dev",
   "dataset_id": "RAW",
   "table_id": "crm_leads",
   "lookback_days": 30,
@@ -66,7 +66,7 @@ recente primeiro.
       "access_types": ["read"]
     },
     {
-      "principal_email": "backend-run@observability-hub-dev.iam.gserviceaccount.com",
+      "principal_email": "backend-run@atlas-dev.iam.gserviceaccount.com",
       "is_service_account": true,
       "last_accessed_at": "2026-08-13T22:00:00Z",
       "access_count": 12,
@@ -120,30 +120,30 @@ def get_table_access(
 `get_table_lineage`/`get_orphans` (domínio `lineage`) não mudam — este é
 um domínio novo e independente, só compartilhando a fonte de dados.
 
-### Exclusão da SA do próprio Hub
+### Exclusão da SA do próprio Atlas
 
 Antes de agregar, todo evento cujo `principal_email` seja
 `backend-run@<projeto-do-hub>.iam.gserviceaccount.com` (`<projeto-do-hub>`
 = `core/bigquery.py::get_client().project`, o projeto onde a instância
-do Hub está rodando — dev ou prod, não o projeto da tabela consultada)
+do Atlas está rodando — dev ou prod, não o projeto da tabela consultada)
 é descartado antes de entrar em `by_principal`.
 
 Motivo: toda vez que o usuário roda profiling ou scan de PII numa
-tabela pela própria UI do Hub, quem executa a query real no BigQuery é
+tabela pela própria UI do Atlas, quem executa a query real no BigQuery é
 essa SA de runtime (`core/bigquery.py::get_client()`), não o usuário.
-Sem esse filtro, o simples ato de inspecionar uma tabela pelo Hub faria
+Sem esse filtro, o simples ato de inspecionar uma tabela pelo Atlas faria
 ela aparecer como "acesso recente" no próprio mapa de acesso — ruído
 que mascararia os consumidores externos reais, o oposto do que a
 funcionalidade existe pra mostrar. Outras service accounts (pipelines
 externos, Glue, etc.) continuam contando normalmente — só a SA do
-próprio Hub é excluída.
+próprio Atlas é excluída.
 
 ---
 
 ## Estrutura de arquivos
 
 ```
-apps/backend/src/observability_hub/
+apps/backend/src/atlas/
 ├── api/v1/
 │   └── access.py          # GET /access/{project_id}/{dataset_id}/{table_id}
 ├── domains/access/
@@ -198,7 +198,7 @@ duplicado aqui. Diferenças específicas deste domínio:
 | Job rodando em outro projeto, lendo esta tabela via cross-project | Não aparece — audit log vive no projeto onde o job rodou, não no da tabela (ver "Fonte de dados") |
 | Nenhum evento de job no projeto | `warning` populado (mesmo texto/causas de lineage), `users: []` |
 | `limit` fora do intervalo 1–100 | HTTP 422 (validação do `Query(ge=1, le=100)`) |
-| Job executado pela própria SA de runtime do Hub (`backend-run@<projeto-do-hub>.iam.gserviceaccount.com`) | Excluído da agregação — profiling/PII rodado pela UI usa essa SA pra consultar o BigQuery, não é um consumidor externo real (ver "Exclusão da SA do próprio Hub") |
+| Job executado pela própria SA de runtime do Atlas (`backend-run@<projeto-do-hub>.iam.gserviceaccount.com`) | Excluído da agregação — profiling/PII rodado pela UI usa essa SA pra consultar o BigQuery, não é um consumidor externo real (ver "Exclusão da SA do próprio Atlas") |
 | Job de outra service account (ex: pipeline externo) | Conta normalmente, `is_service_account: true` |
 | Projeto nunca varrido pelo Job de refresh (cache miss) | Request path **não escaneia ao vivo** (v1.2): registra o projeto e levanta `EventCacheNotReadyError` → `get_table_access` degrada pra `users: []` + `warning` "cache ainda não gerado". O próximo run do Job popula |
 | `429 TooManyRequests` (cota `read_requests`/min) — só no Job de refresh | Retry exponencial em `list_entries_with_retry`; o 429 persistente marca o projeto como `quota_exceeded` naquele run e o próximo ciclo tenta de novo. O request path de acesso não escaneia mais, então não vê 429 |

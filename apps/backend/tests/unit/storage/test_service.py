@@ -2,13 +2,13 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from observability_hub.core.exceptions import (
+from atlas.core.exceptions import (
     EventCacheNotReadyError,
     LoggingAccessDeniedError,
     LoggingQuotaExceededError,
 )
-from observability_hub.domains.storage import service
-from observability_hub.domains.storage.schemas import BucketSummary
+from atlas.domains.storage import service
+from atlas.domains.storage.schemas import BucketSummary
 
 _CREATED = datetime(2026, 1, 1, tzinfo=UTC)
 _UPDATED = datetime(2026, 8, 17, tzinfo=UTC)
@@ -88,7 +88,7 @@ def test_list_buckets_builds_response(monkeypatch):
         lambda client, project_id, names: {"landing": (1000, 1), "processed": (500, 1)},
     )
 
-    result = service.list_buckets(MagicMock(), "observability-hub-dev")
+    result = service.list_buckets(MagicMock(), "atlas-dev")
 
     assert result.buckets == [
         BucketSummary(
@@ -120,7 +120,7 @@ def test_list_buckets_empty_project(monkeypatch):
         service.repository, "get_buckets_sizes_and_counts", lambda client, project_id, names: {}
     )
 
-    result = service.list_buckets(MagicMock(), "observability-hub-dev")
+    result = service.list_buckets(MagicMock(), "atlas-dev")
 
     assert result.buckets == []
 
@@ -163,9 +163,7 @@ def test_get_waste_candidates_skips_buckets_with_lifecycle_rule(monkeypatch):
     called = MagicMock()
     monkeypatch.setattr(service.repository, "get_eligible_waste_objects", called)
 
-    result = service.get_waste_candidates(
-        MagicMock(), MagicMock(), MagicMock(), "observability-hub-dev", 60
-    )
+    result = service.get_waste_candidates(MagicMock(), MagicMock(), MagicMock(), "atlas-dev", 60)
 
     assert result.candidates == []
     called.assert_not_called()
@@ -175,9 +173,7 @@ def test_get_waste_candidates_skips_bucket_without_eligible_objects(monkeypatch)
     buckets = [_bucket("processed", lifecycle_rules=[])]
     _mock_waste_deps(monkeypatch, buckets, {}, read_keys={("processed", "obj.csv")})
 
-    result = service.get_waste_candidates(
-        MagicMock(), MagicMock(), MagicMock(), "observability-hub-dev", 60
-    )
+    result = service.get_waste_candidates(MagicMock(), MagicMock(), MagicMock(), "atlas-dev", 60)
 
     assert result.candidates == []
 
@@ -190,9 +186,7 @@ def test_get_waste_candidates_computes_savings_range(monkeypatch):
         monkeypatch, buckets, {"processed": eligible}, read_keys={("processed", "obj.csv")}
     )
 
-    result = service.get_waste_candidates(
-        MagicMock(), MagicMock(), MagicMock(), "observability-hub-dev", 60
-    )
+    result = service.get_waste_candidates(MagicMock(), MagicMock(), MagicMock(), "atlas-dev", 60)
 
     assert len(result.candidates) == 1
     candidate = result.candidates[0]
@@ -214,9 +208,7 @@ def test_get_waste_candidates_usage_confirmed_when_all_unread(monkeypatch):
         monkeypatch, buckets, {"processed": eligible}, read_keys={("other-bucket", "x.csv")}
     )
 
-    result = service.get_waste_candidates(
-        MagicMock(), MagicMock(), MagicMock(), "observability-hub-dev", 60
-    )
+    result = service.get_waste_candidates(MagicMock(), MagicMock(), MagicMock(), "atlas-dev", 60)
 
     candidate = result.candidates[0]
     assert candidate.confidence == "usage_confirmed"
@@ -233,9 +225,7 @@ def test_get_waste_candidates_config_based_when_partially_read(monkeypatch):
         monkeypatch, buckets, {"processed": eligible}, read_keys={("processed", "a.csv")}
     )
 
-    result = service.get_waste_candidates(
-        MagicMock(), MagicMock(), MagicMock(), "observability-hub-dev", 60
-    )
+    result = service.get_waste_candidates(MagicMock(), MagicMock(), MagicMock(), "atlas-dev", 60)
 
     candidate = result.candidates[0]
     assert candidate.confidence == "config_based"
@@ -249,9 +239,7 @@ def test_get_waste_candidates_degrades_gracefully_on_forbidden(monkeypatch):
     eligible = [_blob(100, name="a.csv")]
     _mock_waste_deps(monkeypatch, buckets, {"processed": eligible}, forbidden=True)
 
-    result = service.get_waste_candidates(
-        MagicMock(), MagicMock(), MagicMock(), "observability-hub-dev", 60
-    )
+    result = service.get_waste_candidates(MagicMock(), MagicMock(), MagicMock(), "atlas-dev", 60)
 
     candidate = result.candidates[0]
     assert candidate.confidence == "config_based"
@@ -268,9 +256,7 @@ def test_get_waste_candidates_degrades_gracefully_on_quota_exceeded(monkeypatch)
     eligible = [_blob(100, name="a.csv")]
     _mock_waste_deps(monkeypatch, buckets, {"processed": eligible}, quota_exceeded=True)
 
-    result = service.get_waste_candidates(
-        MagicMock(), MagicMock(), MagicMock(), "observability-hub-dev", 60
-    )
+    result = service.get_waste_candidates(MagicMock(), MagicMock(), MagicMock(), "atlas-dev", 60)
 
     candidate = result.candidates[0]
     assert candidate.confidence == "config_based"
@@ -285,9 +271,7 @@ def test_get_waste_candidates_degrades_gracefully_when_cache_not_ready(monkeypat
     eligible = [_blob(100, name="a.csv")]
     _mock_waste_deps(monkeypatch, buckets, {"processed": eligible}, cache_not_ready=True)
 
-    result = service.get_waste_candidates(
-        MagicMock(), MagicMock(), MagicMock(), "observability-hub-dev", 60
-    )
+    result = service.get_waste_candidates(MagicMock(), MagicMock(), MagicMock(), "atlas-dev", 60)
 
     candidate = result.candidates[0]
     assert candidate.confidence == "config_based"
@@ -301,9 +285,7 @@ def test_get_waste_candidates_degrades_gracefully_on_empty_read_keys(monkeypatch
     eligible = [_blob(100, name="a.csv")]
     _mock_waste_deps(monkeypatch, buckets, {"processed": eligible}, read_keys=set())
 
-    result = service.get_waste_candidates(
-        MagicMock(), MagicMock(), MagicMock(), "observability-hub-dev", 60
-    )
+    result = service.get_waste_candidates(MagicMock(), MagicMock(), MagicMock(), "atlas-dev", 60)
 
     candidate = result.candidates[0]
     assert candidate.confidence == "config_based"

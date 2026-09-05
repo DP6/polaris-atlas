@@ -33,7 +33,7 @@ provider "google" {
   # em google-beta por causa de iap_enabled (ver modules/cloud-run/main.tf).
   default_labels = {
     environment = "prod"
-    app         = "observability-hub"
+    app         = "atlas"
     managed-by  = "terraform"
   }
 }
@@ -44,7 +44,7 @@ provider "google-beta" {
 
   default_labels = {
     environment = "prod"
-    app         = "observability-hub"
+    app         = "atlas"
     managed-by  = "terraform"
   }
 }

@@ -2,14 +2,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from observability_hub.core import auth as auth_module
-from observability_hub.core.exceptions import (
+from atlas.core import auth as auth_module
+from atlas.core.exceptions import (
     AdminAccessRequiredError,
     InvalidSessionError,
     ProjectAdminRequiredError,
     ProjectNotAuthorizedError,
 )
-from observability_hub.domains.auth.schemas import UserInfo
+from atlas.domains.auth.schemas import UserInfo
 
 
 def test_get_current_user_decodes_session_cookie(monkeypatch):

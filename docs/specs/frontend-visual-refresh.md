@@ -1,4 +1,4 @@
-# Brief — Refresh visual do Hub (protótipo → app real, dev → prod)
+# Brief — Refresh visual do Atlas (protótipo → app real, dev → prod)
 
 > **Isto não é uma spec formal ainda.** É o brief organizado de decisões de
 > design tomadas em cima de um protótipo visual, pronto pra outra sessão
@@ -12,7 +12,7 @@
 Depois de construir um protótipo visual fora do repo (não funcional,
 `~/polaris-hub-mockup/index.html`, servido em `localhost:4477`, ~1200
 linhas de HTML/CSS/JS auto-contido) explorando uma direção mais
-"moderna" pro Hub — gradientes sutis, glow amarelo, glassmorphism leve,
+"moderna" pro Atlas — gradientes sutis, glow amarelo, glassmorphism leve,
 tooltips flutuantes, micro-animações — sobre a mesma paleta/identidade
 dp6 já usada no app, o usuário quer levar essas decisões pro app real
 (`apps/frontend/`), começando em dev e só indo pra prod com aprovação.
@@ -186,7 +186,7 @@ princípio em qualquer tela nova.
 
 - **"Acessos"**: gráfico combo linha + coluna (diário × acumulado), mas
   **sem mapeamento fixo** — confirmado com o usuário: quem decide qual
-  métrica vira linha e qual vira coluna é **o usuário final do Hub**, via
+  métrica vira linha e qual vira coluna é **o usuário final do Atlas**, via
   um controle de troca na própria tela (não uma convenção travada no
   design).
 - Selecionar granularidade por **dia ou mês**.

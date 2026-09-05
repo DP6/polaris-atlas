@@ -53,11 +53,11 @@ ordenada.
 ```json
 {
   "recent_tables": [
-    { "project_id": "observability-hub-dev", "dataset_id": "RAW", "table_id": "crm_leads",
+    { "project_id": "atlas-dev", "dataset_id": "RAW", "table_id": "crm_leads",
       "viewed_at": "2026-08-24T10:00:00Z" }
   ],
   "recent_searches": [
-    { "query": "crm", "mode": "table", "project_id": "observability-hub-dev",
+    { "query": "crm", "mode": "table", "project_id": "atlas-dev",
       "searched_at": "2026-08-24T09:30:00Z" }
   ]
 }
@@ -108,7 +108,7 @@ estive".
 ## Estrutura de arquivos
 
 ```
-apps/backend/src/observability_hub/
+apps/backend/src/atlas/
 ├── api/v1/
 │   └── history.py           # GET /history, POST /table-view, POST /search
 ├── domains/history/
@@ -160,7 +160,7 @@ renderizar, um recorte de exibição, não de armazenamento).
 - Histórico compartilhado/sincronizado entre dispositivos além do que já
   é (é por usuário via Firestore, então já "sincroniza", mas sem
   indicação de qual dispositivo gerou cada evento).
-- Analytics agregado de uso do Hub (login, frequência de acesso por
+- Analytics agregado de uso do Atlas (login, frequência de acesso por
   domínio) — isso é `domains/admin/analytics_service`, domínio
   separado.
 - Deduplicação de visitas repetidas à mesma tabela dentro da janela.

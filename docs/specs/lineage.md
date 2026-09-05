@@ -61,7 +61,7 @@ Cloud Logging — audit logs de jobs do BigQuery (`jobservice.jobcompleted`),
 **Diferença da v1**: a travessia agora pode precisar consultar o Cloud
 Logging de **mais de um projeto** — um por projeto distinto encontrado
 durante a expansão do grafo, não só o projeto da tabela raiz. Isso não é
-uma mudança de modelo de acesso: o ADR-006 já prevê a SA do Hub com
+uma mudança de modelo de acesso: o ADR-006 já prevê a SA do Atlas com
 acesso simultâneo a múltiplos projetos-alvo (é só rodar o comando de
 concessão uma vez por projeto, ver `docs/onboarding-cliente.md`) — é um
 novo *padrão de uso* de um acesso que já podia existir. Cada projeto
@@ -91,11 +91,11 @@ Retorna o grafo de lineage transitivo em torno da tabela informada.
 **Response 200:**
 ```json
 {
-  "root": { "project_id": "observability-hub-dev", "dataset_id": "GOLD", "table_id": "daily_summary" },
+  "root": { "project_id": "atlas-dev", "dataset_id": "GOLD", "table_id": "daily_summary" },
   "nodes": [
     {
-      "id": "observability-hub-dev:TRUSTED:ga4_sessions",
-      "project_id": "observability-hub-dev",
+      "id": "atlas-dev:TRUSTED:ga4_sessions",
+      "project_id": "atlas-dev",
       "dataset_id": "TRUSTED",
       "table_id": "ga4_sessions",
       "hop_distance": -1,
@@ -103,8 +103,8 @@ Retorna o grafo de lineage transitivo em torno da tabela informada.
       "access_denied": false
     },
     {
-      "id": "observability-hub-dev:RAW:ga4_events",
-      "project_id": "observability-hub-dev",
+      "id": "atlas-dev:RAW:ga4_events",
+      "project_id": "atlas-dev",
       "dataset_id": "RAW",
       "table_id": "ga4_events",
       "hop_distance": -2,
@@ -113,8 +113,8 @@ Retorna o grafo de lineage transitivo em torno da tabela informada.
     }
   ],
   "edges": [
-    { "source": "observability-hub-dev:RAW:ga4_events", "target": "observability-hub-dev:TRUSTED:ga4_sessions", "job_id": "job-abc" },
-    { "source": "observability-hub-dev:TRUSTED:ga4_sessions", "target": "observability-hub-dev:GOLD:daily_summary", "job_id": "job-def" }
+    { "source": "atlas-dev:RAW:ga4_events", "target": "atlas-dev:TRUSTED:ga4_sessions", "job_id": "job-abc" },
+    { "source": "atlas-dev:TRUSTED:ga4_sessions", "target": "atlas-dev:GOLD:daily_summary", "job_id": "job-def" }
   ],
   "lookback_days": 30,
   "max_hops": 8,
@@ -281,7 +281,7 @@ devolver um erro HTTP — o browser reporta isso como `TypeError: Failed
 to fetch`, sem status e sem mensagem útil. Era o problema real por trás
 de "failed to fetch" recorrente em Lineage, Órfãs e Mapa de Acesso.
 
-**Mecanismo**: um Cloud Run Job (`apps/backend/src/observability_hub/jobs/refresh_event_cache.py`,
+**Mecanismo**: um Cloud Run Job (`apps/backend/src/atlas/jobs/refresh_event_cache.py`,
 infra em `infra/terraform/modules/cloud-run-job`) roda 1x/dia (D-1, cron
 `"0 3 * * *"` UTC via Cloud Scheduler) e, para cada projeto registrado no
 ADM (`domains/admin` `hub_projects` — a única fonte, ver
@@ -322,7 +322,7 @@ O **full scan** da janela inteira só roda quando não há base incremental:
 primeira execução do projeto, metadado sem `last_scan_receive_ts`, blob
 sumido (lifecycle do bucket) — ou quando o toggle **"forçar completo"** do
 gatilho de admin está ligado (`?force_full=true` → env
-`OBSERVABILITY_HUB_CACHE_FORCE_FULL=1` só naquela execução, via
+`ATLAS_CACHE_FORCE_FULL=1` só naquela execução, via
 `run_v2.RunJobRequest.Overrides`; `core/config.py::settings.cache_force_full`).
 `JobEvent` passou a carregar `timestamp` (`endTime or startTime or
 createTime`) só pra a evicção de janela funcionar.
@@ -361,7 +361,7 @@ nova, porque é essa identidade que já tem `roles/logging.privateLogViewer`
 concedida manualmente em cada projeto-alvo onboardado
 (`docs/onboarding-cliente.md`). Nenhum recurso novo é criado em nenhum
 projeto-alvo/cliente — bucket, Job e Scheduler vivem só no projeto do
-próprio Hub, preservando "o Hub nunca instala nada no projeto alvo"
+próprio Atlas, preservando "o Atlas nunca instala nada no projeto alvo"
 (ADR-006).
 
 `GET .../{dataset_id}/{table_id}`, `GET .../orphans` e
@@ -375,7 +375,7 @@ da última escrita via fallback) quando veio do cache.
 ## Estrutura de arquivos
 
 ```
-apps/backend/src/observability_hub/
+apps/backend/src/atlas/
 ├── api/v1/
 │   └── lineage.py         # GET /lineage/{project_id}/{dataset_id}/{table_id}, /orphans
 ├── core/
@@ -449,9 +449,9 @@ apps/backend/src/observability_hub/
 |---|---|---|
 | ASM-001 | GCS (não Firestore) para o payload de eventos — Firestore tem limite de 1MiB/doc, facilmente ultrapassado por 30 dias de audit log num projeto com uso real de BigQuery numa org inteira | confirmada com o usuário durante a implementação |
 | ASM-002 | Job roda com a mesma SA de runtime do Cloud Run Service (nunca uma SA nova) — evita reabrir o onboarding manual de IAM cross-project (`docs/onboarding-cliente.md`) de todo cliente já liberado | confirmada |
-| ASM-003 | ~~`hub_projects` não é uma lista exaustiva de projetos consultados (acesso via wildcard `"*"` não gera doc lá) — por isso o job também cobre projetos "vistos" via cache miss no request path~~ | **invalidada** (2026-08-31, decisão de produto confirmada com o usuário): `hub_projects` passou a ser a **única** fonte de projetos operados pelo Hub. O wildcard `"*"` controla só *acesso* — um projeto acessível só por wildcard precisa ser cadastrado em Admin → Projetos pra entrar no ciclo do cache e nos seletores. A coleção `event_cache_seen_projects` e `record_project_seen` foram removidas; resíduos limpos por `scripts/cleanup_unregistered_project_cache.py` |
+| ASM-003 | ~~`hub_projects` não é uma lista exaustiva de projetos consultados (acesso via wildcard `"*"` não gera doc lá) — por isso o job também cobre projetos "vistos" via cache miss no request path~~ | **invalidada** (2026-08-31, decisão de produto confirmada com o usuário): `hub_projects` passou a ser a **única** fonte de projetos operados pelo Atlas. O wildcard `"*"` controla só *acesso* — um projeto acessível só por wildcard precisa ser cadastrado em Admin → Projetos pra entrar no ciclo do cache e nos seletores. A coleção `event_cache_seen_projects` e `record_project_seen` foram removidas; resíduos limpos por `scripts/cleanup_unregistered_project_cache.py` |
 | ASM-004 | Gatilho manual de admin não precisa de deduplicação de execuções concorrentes na v1 — o resultado é idempotente (regrava o mesmo cache), então uma segunda execução em paralelo não corrompe nada, só desperdiça uma chamada a mais | confirmada |
-| ASM-005 | Cloud Logging devolve `404 NotFound` (não `403 Forbidden`) quando a SA do Hub não tem **nenhum** binding de IAM no projeto — diferente de "tem acesso mas falta a role certa" (`LoggingAccessDeniedError`). `hub_projects` pode conter entradas obsoletas (projeto descontinuado/renomeado); o job trata os dois casos (e qualquer outro erro de API) como "pula e segue" | confirmada em produção — causou `Container called exit(1)` na primeira execução real do job em dev, ver CHANGELOG |
+| ASM-005 | Cloud Logging devolve `404 NotFound` (não `403 Forbidden`) quando a SA do Atlas não tem **nenhum** binding de IAM no projeto — diferente de "tem acesso mas falta a role certa" (`LoggingAccessDeniedError`). `hub_projects` pode conter entradas obsoletas (projeto descontinuado/renomeado); o job trata os dois casos (e qualquer outro erro de API) como "pula e segue" | confirmada em produção — causou `Container called exit(1)` na primeira execução real do job em dev, ver CHANGELOG |
 | ASM-006 | O bucket do cache não concede acesso a nenhuma SA por padrão só por estar no mesmo projeto — a SA de runtime do backend precisa de um `google_storage_bucket_iam_member` explícito (`roles/storage.objectAdmin`); sem ele, `read_cache_bytes`/`write_cache_bytes` levantam `Forbidden`, não capturado pelo `except NotFound` original. `get_job_events_cached`/`get_access_events_cached` passaram a capturar qualquer exceção (não só `NotFound`) ao redor do read/write do cache, caindo pro scan ao vivo | confirmada em produção — causou um "Failed to fetch" novo (mais rápido, HTTP 500 sem CORS) na primeira consulta real pós-deploy, ver CHANGELOG |
 
 ## Perguntas em aberto

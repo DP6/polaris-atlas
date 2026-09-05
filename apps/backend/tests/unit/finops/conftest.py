@@ -11,6 +11,6 @@ def _default_no_project_budget(monkeypatch):
     MagicMock. Testes que querem testar o valor injetado sobrescrevem via
     monkeypatch no próprio corpo do teste (roda depois desta fixture)."""
     monkeypatch.setattr(
-        "observability_hub.domains.finops.service.budget_repository.get_project_budget_amount",
+        "atlas.domains.finops.service.budget_repository.get_project_budget_amount",
         lambda client, project_id: None,
     )

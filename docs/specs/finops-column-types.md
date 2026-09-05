@@ -138,7 +138,7 @@ execução"; o frontend sempre manda a lista explícita).
 **Response 200:**
 ```json
 {
-  "project_id": "observability-hub-dev",
+  "project_id": "atlas-dev",
   "tables_scanned": 42,
   "tables_skipped_view": 3,
   "columns_scanned": 187,
@@ -165,7 +165,7 @@ tabela só em PII/quality, onde parcial não faz sentido).
 **Response 200:**
 ```json
 {
-  "project_id": "observability-hub-dev",
+  "project_id": "atlas-dev",
   "executed_at": "2026-08-17T10:00:00Z",
   "sample_percent": 10,
   "tables_scanned": 42,
@@ -203,7 +203,7 @@ por projeto, então ruído (`0 sugestões`) não ajuda).
 ## Estrutura de arquivos
 
 ```
-apps/backend/src/observability_hub/
+apps/backend/src/atlas/
 ├── api/v1/
 │   └── finops.py               # + POST .../column-type-suggestions/{estimate,run}
 ├── domains/finops/
@@ -274,7 +274,7 @@ aberta no modal.
   confiança aceitável, não faz parte desta v1.
 - **Aplicar a mudança de tipo de fato** — a ferramenta é somente
   leitura (`docs/prd.md`, "Fora do escopo" do produto); isso aqui é só
-  sugestão, a migração de schema é manual, fora do Hub.
+  sugestão, a migração de schema é manual, fora do Atlas.
 - **Validação de dígito verificador ou qualquer regra de negócio
   específica de domínio** — só compatibilidade de tipo bruto
   (`SAFE_CAST`), sem julgar se um `INT64` sugerido faz sentido

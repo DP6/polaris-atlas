@@ -5,11 +5,11 @@ from unittest.mock import MagicMock
 import pytest
 from google.api_core.exceptions import Forbidden, GoogleAPICallError
 
-from observability_hub.core.exceptions import (
+from atlas.core.exceptions import (
     EventCacheNotReadyError,
     ProjectAccessDeniedError,
 )
-from observability_hub.domains.finops import repository
+from atlas.domains.finops import repository
 
 
 def _row(**kwargs):

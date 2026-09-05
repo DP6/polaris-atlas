@@ -13,7 +13,7 @@ export function LoginPage() {
         <div className="mb-6 flex items-center gap-3">
           <span className="dp6-divider h-8 w-0.5 bg-primary" />
           <div>
-            <h1 className="text-2xl font-bold">Observability Hub</h1>
+            <h1 className="text-2xl font-bold">Atlas</h1>
             <p className="text-sm text-muted-foreground">dp6</p>
           </div>
         </div>

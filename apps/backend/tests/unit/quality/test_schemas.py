@@ -1,4 +1,4 @@
-from observability_hub.domains.quality.schemas import (
+from atlas.domains.quality.schemas import (
     ColumnProfile,
     EstimateResponse,
     ExcludedColumn,
@@ -121,7 +121,7 @@ def test_excluded_column_shape():
 
 def test_profiling_run_response_matches_spec_example():
     payload = {
-        "project_id": "observability-hub-dev",
+        "project_id": "atlas-dev",
         "dataset_id": "RAW",
         "table_id": "crm_leads",
         "executed_at": "2026-08-05T10:00:00Z",

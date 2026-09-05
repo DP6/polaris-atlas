@@ -50,9 +50,9 @@ descendente (mais recente primeiro).
 ```json
 {
   "favorites": [
-    { "project_id": "observability-hub-dev", "dataset_id": "RAW", "table_id": "crm_leads",
+    { "project_id": "atlas-dev", "dataset_id": "RAW", "table_id": "crm_leads",
       "nickname": "Leads brutos", "added_at": "2026-08-20T10:00:00Z" },
-    { "project_id": "observability-hub-dev", "dataset_id": "RAW", "table_id": null,
+    { "project_id": "atlas-dev", "dataset_id": "RAW", "table_id": null,
       "nickname": null, "added_at": "2026-08-19T09:00:00Z" }
   ]
 }
@@ -65,7 +65,7 @@ sem `nickname`) quanto pelo editor de apelido (`FavoriteNickname.tsx`).
 
 **Request body:**
 ```json
-{ "project_id": "observability-hub-dev", "dataset_id": "RAW", "table_id": "crm_leads", "nickname": "Leads brutos" }
+{ "project_id": "atlas-dev", "dataset_id": "RAW", "table_id": "crm_leads", "nickname": "Leads brutos" }
 ```
 
 `nickname` tem **três estados**, não dois:
@@ -110,7 +110,7 @@ levanta erro — `delete()` do Firestore em doc inexistente é no-op).
 ## Estrutura de arquivos
 
 ```
-apps/backend/src/observability_hub/
+apps/backend/src/atlas/
 ├── api/v1/
 │   └── favorites.py         # GET/POST/DELETE /favorites
 ├── domains/favorites/
@@ -161,7 +161,7 @@ Frontend: `features/favorites/hooks.ts` (`useFavorites`, `useToggleFavorite`,
 ## Fora do escopo desta spec
 
 - Favoritar objetos além de dataset/tabela (ex: uma query salva, um
-  bucket do GCS) — cada extensão futura de escopo do Hub (Storage,
+  bucket do GCS) — cada extensão futura de escopo do Atlas (Storage,
   Scheduler, Workflows) decide se ganha favoritos próprios ou reaproveita
   este schema.
 - Compartilhar favoritos entre usuários.

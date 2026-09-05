@@ -3,8 +3,8 @@ from unittest.mock import MagicMock
 
 from google.cloud import firestore
 
-from observability_hub.domains.budget import repository
-from observability_hub.domains.budget.schemas import BudgetScope
+from atlas.domains.budget import repository
+from atlas.domains.budget.schemas import BudgetScope
 
 
 def _fake_client_with_collection():

@@ -1,7 +1,7 @@
 from datetime import UTC, date, datetime, timedelta
 from unittest.mock import MagicMock
 
-from observability_hub.domains.admin import analytics_service as service
+from atlas.domains.admin import analytics_service as service
 
 
 def test_record_login_delegates_to_repository(monkeypatch):

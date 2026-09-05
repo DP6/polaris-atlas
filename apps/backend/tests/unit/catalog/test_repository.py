@@ -4,8 +4,8 @@ from unittest.mock import MagicMock
 import pytest
 from google.api_core.exceptions import NotFound
 
-from observability_hub.core.exceptions import TableNotFoundError
-from observability_hub.domains.catalog import repository
+from atlas.core.exceptions import TableNotFoundError
+from atlas.domains.catalog import repository
 
 
 def _row(**kwargs):
@@ -130,7 +130,7 @@ def test_resolve_dataset_region_is_reexported_from_core_bigquery():
     """Cobertura de comportamento mora em tests/unit/core/test_bigquery.py —
     aqui só garantimos que repository.resolve_dataset_region (usado por
     service.py) continua sendo o mesmo objeto de core.bigquery."""
-    from observability_hub.core.bigquery import resolve_dataset_region
+    from atlas.core.bigquery import resolve_dataset_region
 
     assert repository.resolve_dataset_region is resolve_dataset_region
 

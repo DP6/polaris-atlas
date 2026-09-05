@@ -5,14 +5,14 @@ from unittest.mock import MagicMock
 import pytest
 from google.api_core.exceptions import Forbidden
 
-from observability_hub.core.exceptions import (
+from atlas.core.exceptions import (
     EventCacheNotReadyError,
     LoggingAccessDeniedError,
     StorageAccessDeniedError,
 )
-from observability_hub.domains.storage import repository
+from atlas.domains.storage import repository
 
-_PROJECT_ID = "observability-hub-dev"
+_PROJECT_ID = "atlas-dev"
 _NOW = datetime(2026, 8, 17, tzinfo=UTC)
 
 

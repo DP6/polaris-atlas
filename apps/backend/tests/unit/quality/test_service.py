@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from observability_hub.core.exceptions import (
+from atlas.core.exceptions import (
     FolderAccessDeniedError,
     FolderNotFoundError,
     InvalidDateColumnError,
@@ -11,8 +11,8 @@ from observability_hub.core.exceptions import (
     ProfilingTimeoutError,
     TableNotFoundError,
 )
-from observability_hub.domains.quality import service
-from observability_hub.domains.quality.schemas import (
+from atlas.domains.quality import service
+from atlas.domains.quality.schemas import (
     CreateProfilingFolderRequest,
     FolderVisibility,
     Granularity,
@@ -265,9 +265,7 @@ def test_estimate_profiling_returns_dry_run_bytes_and_cost(monkeypatch):
     )
     monkeypatch.setattr(service.repository, "dry_run", lambda client, project_id, sql: 849813)
 
-    result = service.estimate_profiling(
-        client, "observability-hub-dev", "RAW", "crm_leads", ProfilingRequest()
-    )
+    result = service.estimate_profiling(client, "atlas-dev", "RAW", "crm_leads", ProfilingRequest())
 
     assert result.estimated_bytes == 849813
     assert "KB" in result.estimated_bytes_human
@@ -287,7 +285,7 @@ def test_estimate_profiling_omits_tablesample_for_view(monkeypatch):
     monkeypatch.setattr(service.repository, "dry_run", lambda client, project_id, sql: 0)
 
     result = service.estimate_profiling(
-        client, "observability-hub-dev", "RAW", "crm_leads_view", ProfilingRequest()
+        client, "atlas-dev", "RAW", "crm_leads_view", ProfilingRequest()
     )
 
     assert "TABLESAMPLE" not in result.sql
@@ -298,7 +296,7 @@ def test_estimate_profiling_raises_for_invalid_sample_percent(monkeypatch):
     with pytest.raises(InvalidSamplePercentError):
         service.estimate_profiling(
             client,
-            "observability-hub-dev",
+            "atlas-dev",
             "RAW",
             "crm_leads",
             ProfilingRequest(sample_percent=0.5),
@@ -315,9 +313,7 @@ def test_estimate_profiling_raises_table_not_found_when_no_columns(monkeypatch):
     )
 
     with pytest.raises(TableNotFoundError):
-        service.estimate_profiling(
-            client, "observability-hub-dev", "RAW", "ghost", ProfilingRequest()
-        )
+        service.estimate_profiling(client, "atlas-dev", "RAW", "ghost", ProfilingRequest())
 
 
 def test_estimate_profiling_raises_invalid_date_column(monkeypatch):
@@ -334,7 +330,7 @@ def test_estimate_profiling_raises_invalid_date_column(monkeypatch):
     with pytest.raises(InvalidDateColumnError):
         service.estimate_profiling(
             client,
-            "observability-hub-dev",
+            "atlas-dev",
             "RAW",
             "crm_leads",
             ProfilingRequest(date_column="ghost", date_window_days=30),
@@ -397,7 +393,7 @@ def test_run_profiling_builds_full_response(monkeypatch):
     result = service.run_profiling(
         client,
         MagicMock(),
-        "observability-hub-dev",
+        "atlas-dev",
         "RAW",
         "crm_leads",
         ProfilingRequest(),
@@ -461,7 +457,7 @@ def test_run_profiling_zero_rows_has_zeroed_metrics_without_error(monkeypatch):
     result = service.run_profiling(
         client,
         MagicMock(),
-        "observability-hub-dev",
+        "atlas-dev",
         "RAW",
         "empty_table",
         ProfilingRequest(),
@@ -513,7 +509,7 @@ def test_run_profiling_all_null_column_is_critical(monkeypatch):
     result = service.run_profiling(
         client,
         MagicMock(),
-        "observability-hub-dev",
+        "atlas-dev",
         "RAW",
         "crm_leads",
         ProfilingRequest(),
@@ -562,7 +558,7 @@ def test_run_profiling_uses_exact_distinct_alias_when_requested(monkeypatch):
     result = service.run_profiling(
         client,
         MagicMock(),
-        "observability-hub-dev",
+        "atlas-dev",
         "RAW",
         "crm_leads",
         ProfilingRequest(uniqueness_method=UniquenessMethod.EXACT),
@@ -612,7 +608,7 @@ def test_run_profiling_omits_tablesample_for_view(monkeypatch):
     result = service.run_profiling(
         client,
         MagicMock(),
-        "observability-hub-dev",
+        "atlas-dev",
         "RAW",
         "crm_leads_view",
         ProfilingRequest(),
@@ -669,7 +665,7 @@ def test_get_null_distribution_builds_series(monkeypatch):
 
     result = service.get_null_distribution(
         client,
-        "observability-hub-dev",
+        "atlas-dev",
         "RAW",
         "crm_leads",
         "email",
@@ -697,7 +693,7 @@ def test_get_null_distribution_raises_invalid_date_column(monkeypatch):
     with pytest.raises(InvalidDateColumnError):
         service.get_null_distribution(
             client,
-            "observability-hub-dev",
+            "atlas-dev",
             "RAW",
             "crm_leads",
             "email",
@@ -728,7 +724,7 @@ def test_get_null_distribution_handles_zero_total_rows_period(monkeypatch):
 
     result = service.get_null_distribution(
         client,
-        "observability-hub-dev",
+        "atlas-dev",
         "RAW",
         "crm_leads",
         "email",
@@ -784,7 +780,7 @@ def test_run_profiling_saves_run_to_history(monkeypatch):
     service.run_profiling(
         client,
         firestore_client,
-        "observability-hub-dev",
+        "atlas-dev",
         "RAW",
         "crm_leads",
         ProfilingRequest(),
@@ -794,7 +790,7 @@ def test_run_profiling_saves_run_to_history(monkeypatch):
     assert len(save_calls) == 1
     args, kwargs = save_calls[0]
     assert args[0] is firestore_client
-    assert args[1:4] == ("observability-hub-dev", "RAW", "crm_leads")
+    assert args[1:4] == ("atlas-dev", "RAW", "crm_leads")
     assert kwargs["executed_by"] == "a@dp6.com.br"
     assert kwargs["overall_density"] == 100.0
     assert kwargs["estimated_duplicate_pct"] == 0.0
@@ -811,12 +807,10 @@ def test_get_quality_history_returns_empty_when_never_profiled(monkeypatch):
     firestore_client = MagicMock()
     monkeypatch.setattr(service.history_repository, "list_runs", lambda *a, **kw: [])
 
-    result = service.get_quality_history(
-        firestore_client, "observability-hub-dev", "RAW", "crm_leads"
-    )
+    result = service.get_quality_history(firestore_client, "atlas-dev", "RAW", "crm_leads")
 
     assert result.runs == []
-    assert result.project_id == "observability-hub-dev"
+    assert result.project_id == "atlas-dev"
     assert result.dataset_id == "RAW"
     assert result.table_id == "crm_leads"
 
@@ -840,9 +834,7 @@ def test_get_quality_history_maps_raw_runs_to_response(monkeypatch):
         ],
     )
 
-    result = service.get_quality_history(
-        firestore_client, "observability-hub-dev", "RAW", "crm_leads"
-    )
+    result = service.get_quality_history(firestore_client, "atlas-dev", "RAW", "crm_leads")
 
     assert len(result.runs) == 1
     run = result.runs[0]
@@ -878,9 +870,7 @@ def test_get_quality_history_includes_parameters_when_present(monkeypatch):
         ],
     )
 
-    result = service.get_quality_history(
-        firestore_client, "observability-hub-dev", "RAW", "crm_leads"
-    )
+    result = service.get_quality_history(firestore_client, "atlas-dev", "RAW", "crm_leads")
 
     parameters = result.runs[0].parameters
     assert parameters is not None

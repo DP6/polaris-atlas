@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 from google.api_core.exceptions import NotFound
 
-from observability_hub.domains.metadata import repository
+from atlas.domains.metadata import repository
 
 
 def _fake_client_with_subcollection():

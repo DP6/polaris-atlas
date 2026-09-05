@@ -25,7 +25,7 @@ export function AdminPage() {
       <PageHeader
         back={{ to: '/', label: 'Voltar ao Catálogo de Dados' }}
         title="Administração — usuários e acesso"
-        description="Controla quem é administrador do Hub e a quais projetos GCP cada usuário tem acesso. O login em si continua controlado pela allowlist do OAuth (fora daqui) — isto aqui só controla acesso a projeto dentro do Hub."
+        description="Controla quem é administrador do Atlas e a quais projetos GCP cada usuário tem acesso. O login em si continua controlado pela allowlist do OAuth (fora daqui) — isto aqui só controla acesso a projeto dentro do Atlas."
       />
 
       <Tabs defaultValue={USERS_TAB}>
@@ -45,7 +45,7 @@ export function AdminPage() {
             )}
           </TabsTrigger>
           <TabsTrigger value={CACHES_TAB}>Caches</TabsTrigger>
-          <TabsTrigger value={USAGE_TAB}>Uso do Hub</TabsTrigger>
+          <TabsTrigger value={USAGE_TAB}>Uso do Atlas</TabsTrigger>
         </TabsList>
 
         <TabsContent value={USERS_TAB}>

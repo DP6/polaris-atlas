@@ -4,12 +4,12 @@ from unittest.mock import MagicMock
 import pytest
 from google.api_core.exceptions import Forbidden, TooManyRequests
 
-from observability_hub.core.exceptions import (
+from atlas.core.exceptions import (
     EventCacheNotReadyError,
     LoggingAccessDeniedError,
     LoggingQuotaExceededError,
 )
-from observability_hub.domains.lineage import repository
+from atlas.domains.lineage import repository
 
 
 def _entry(payload: dict | None):
@@ -17,7 +17,7 @@ def _entry(payload: dict | None):
 
 
 # Payload real, capturado via `gcloud logging read --format=json` em
-# observability-hub-dev (2026-08-14) para o CTAS de
+# atlas-dev (2026-08-14) para o CTAS de
 # `TRUSTED.ga4_sessions AS SELECT ... FROM RAW.ga4_events`. É o campo
 # `protoPayload` do log entry, formato legado `AuditData`/
 # `jobCompletedEvent` — não o `BigQueryAuditMetadata`/`jobChange` da doc
@@ -35,7 +35,7 @@ REAL_CTAS_PROTO_PAYLOAD = {
         "destinationAttributes": {},
         "requestAttributes": {},
     },
-    "resourceName": "projects/observability-hub-dev/jobs/bqjob_r5bf5dfa96120dc26_000001a000b0cfae_1",
+    "resourceName": "projects/atlas-dev/jobs/bqjob_r5bf5dfa96120dc26_000001a000b0cfae_1",
     "serviceData": {
         "@type": "type.googleapis.com/google.cloud.bigquery.logging.v1.AuditData",
         "jobCompletedEvent": {
@@ -47,14 +47,14 @@ REAL_CTAS_PROTO_PAYLOAD = {
                         "defaultDataset": {},
                         "destinationTable": {
                             "datasetId": "TRUSTED",
-                            "projectId": "observability-hub-dev",
+                            "projectId": "atlas-dev",
                             "tableId": "ga4_sessions",
                         },
                         "query": (
-                            "CREATE OR REPLACE TABLE `observability-hub-dev.TRUSTED.ga4_sessions` AS "
+                            "CREATE OR REPLACE TABLE `atlas-dev.TRUSTED.ga4_sessions` AS "
                             "SELECT event_date, user_pseudo_id, COUNT(*) AS total_events, "
                             "SUM(CASE WHEN event_name = 'purchase' THEN revenue ELSE 0 END) AS revenue "
-                            "FROM `observability-hub-dev.RAW.ga4_events` GROUP BY 1, 2;"
+                            "FROM `atlas-dev.RAW.ga4_events` GROUP BY 1, 2;"
                         ),
                         "queryPriority": "QUERY_INTERACTIVE",
                         "statementType": "CREATE_TABLE_AS_SELECT",
@@ -64,7 +64,7 @@ REAL_CTAS_PROTO_PAYLOAD = {
                 "jobName": {
                     "jobId": "bqjob_r5bf5dfa96120dc26_000001a000b0cfae_1",
                     "location": "US",
-                    "projectId": "observability-hub-dev",
+                    "projectId": "atlas-dev",
                 },
                 "jobStatistics": {
                     "billingTier": 1,
@@ -74,7 +74,7 @@ REAL_CTAS_PROTO_PAYLOAD = {
                     "referencedTables": [
                         {
                             "datasetId": "RAW",
-                            "projectId": "observability-hub-dev",
+                            "projectId": "atlas-dev",
                             "tableId": "ga4_events",
                         }
                     ],
@@ -127,8 +127,8 @@ def test_parse_entry_extracts_referenced_and_destination_tables_from_real_payloa
     assert event is not None
     assert event.job_id == "bqjob_r5bf5dfa96120dc26_000001a000b0cfae_1"
     assert event.principal_email == "fuzatimatheus.cloud@gmail.com"
-    assert event.destination_table == ("observability-hub-dev", "TRUSTED", "ga4_sessions")
-    assert event.referenced_tables == [("observability-hub-dev", "RAW", "ga4_events")]
+    assert event.destination_table == ("atlas-dev", "TRUSTED", "ga4_sessions")
+    assert event.referenced_tables == [("atlas-dev", "RAW", "ga4_events")]
 
 
 def test_parse_entry_falls_back_to_load_config_destination():
@@ -194,14 +194,14 @@ def test_parse_entry_treats_anonymous_dataset_destination_as_no_destination():
     assert event.referenced_tables == [("proj", "TRUSTED", "ga4_sessions")]
 
 
-# Payloads reais capturados ao vivo em observability-hub-dev
+# Payloads reais capturados ao vivo em atlas-dev
 # (2026-08-17/18, ver docs/specs/storage.md seção 7.1) — jobConfiguration
 # de LOAD (GCS -> BQ) e EXTRACT (BQ -> GCS), chaves irmãs de "query".
 REAL_LOAD_JOB_CONFIG = {
     "load": {
-        "sourceUris": ["gs://observability-hub-dev-landing/crm_leads/2026-08-17/part-0001.csv"],
+        "sourceUris": ["gs://atlas-dev-landing/crm_leads/2026-08-17/part-0001.csv"],
         "destinationTable": {
-            "projectId": "observability-hub-dev",
+            "projectId": "atlas-dev",
             "datasetId": "RAW",
             "tableId": "crm_leads_staging",
         },
@@ -212,9 +212,9 @@ REAL_LOAD_JOB_CONFIG = {
 
 REAL_EXTRACT_JOB_CONFIG = {
     "extract": {
-        "destinationUris": ["gs://observability-hub-dev-processed/exports/crm_leads_staging.csv"],
+        "destinationUris": ["gs://atlas-dev-processed/exports/crm_leads_staging.csv"],
         "sourceTable": {
-            "projectId": "observability-hub-dev",
+            "projectId": "atlas-dev",
             "datasetId": "RAW",
             "tableId": "crm_leads_staging",
         },
@@ -263,8 +263,8 @@ def test_parse_entry_extracts_source_bucket_from_real_load_payload():
     event = repository._parse_entry(_entry(payload))
 
     assert event is not None
-    assert event.destination_table == ("observability-hub-dev", "RAW", "crm_leads_staging")
-    assert event.source_buckets == ["observability-hub-dev-landing"]
+    assert event.destination_table == ("atlas-dev", "RAW", "crm_leads_staging")
+    assert event.source_buckets == ["atlas-dev-landing"]
     assert event.destination_buckets == []
 
 
@@ -285,8 +285,8 @@ def test_parse_entry_extracts_destination_bucket_and_source_table_from_real_extr
 
     assert event is not None
     assert event.destination_table is None
-    assert event.referenced_tables == [("observability-hub-dev", "RAW", "crm_leads_staging")]
-    assert event.destination_buckets == ["observability-hub-dev-processed"]
+    assert event.referenced_tables == [("atlas-dev", "RAW", "crm_leads_staging")]
+    assert event.destination_buckets == ["atlas-dev-processed"]
     assert event.source_buckets == []
 
 
@@ -300,7 +300,7 @@ def test_parse_entry_does_not_duplicate_extract_source_already_in_referenced_tab
                     "jobStatistics": {
                         "referencedTables": [
                             {
-                                "projectId": "observability-hub-dev",
+                                "projectId": "atlas-dev",
                                 "datasetId": "RAW",
                                 "tableId": "crm_leads_staging",
                             }
@@ -314,7 +314,7 @@ def test_parse_entry_does_not_duplicate_extract_source_already_in_referenced_tab
     event = repository._parse_entry(_entry(payload))
 
     assert event is not None
-    assert event.referenced_tables == [("observability-hub-dev", "RAW", "crm_leads_staging")]
+    assert event.referenced_tables == [("atlas-dev", "RAW", "crm_leads_staging")]
 
 
 def test_parse_entry_returns_none_when_payload_is_not_a_dict():
@@ -358,7 +358,7 @@ def test_list_job_events_raises_logging_access_denied():
     client.list_entries.side_effect = Forbidden("denied")
 
     with pytest.raises(LoggingAccessDeniedError):
-        repository.list_job_events(client, "observability-hub-dev")
+        repository.list_job_events(client, "atlas-dev")
 
 
 def test_list_job_events_raises_when_permission_denied_during_iteration():
@@ -366,7 +366,7 @@ def test_list_job_events_raises_when_permission_denied_during_iteration():
     um iterador preguiçoso) — não só na chamada inicial. É a exceção real
     do transporte REST (_use_grpc=False, ver core/logging_client.py) para
     um 403 — não PermissionDenied, que é a classe usada para o código gRPC
-    equivalente; confirmado no log de erro real de observability-hub-dev
+    equivalente; confirmado no log de erro real de atlas-dev
     ao consultar lineage de um projeto sem roles/logging.viewer."""
 
     def _raise_on_iter():
@@ -377,7 +377,7 @@ def test_list_job_events_raises_when_permission_denied_during_iteration():
     client.list_entries.return_value = _raise_on_iter()
 
     with pytest.raises(LoggingAccessDeniedError):
-        repository.list_job_events(client, "observability-hub-dev")
+        repository.list_job_events(client, "atlas-dev")
 
 
 def test_list_job_events_parses_valid_entries_and_skips_invalid_ones():
@@ -394,13 +394,13 @@ def test_list_job_events_parses_valid_entries_and_skips_invalid_ones():
     client = MagicMock()
     client.list_entries.return_value = [_entry(valid_payload), _entry(None)]
 
-    events = repository.list_job_events(client, "observability-hub-dev")
+    events = repository.list_job_events(client, "atlas-dev")
 
     assert len(events) == 1
     assert events[0].job_id == "job1"
     client.list_entries.assert_called_once()
     call_kwargs = client.list_entries.call_args.kwargs
-    assert call_kwargs["resource_names"] == ["projects/observability-hub-dev"]
+    assert call_kwargs["resource_names"] == ["projects/atlas-dev"]
     assert 'resource.type="bigquery_resource"' in call_kwargs["filter_"]
 
 

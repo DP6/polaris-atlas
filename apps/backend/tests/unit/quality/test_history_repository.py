@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 from google.cloud import firestore
 
-from observability_hub.domains.quality import history_repository
+from atlas.domains.quality import history_repository
 
 
 def _fake_client_with_runs_collection():
@@ -31,7 +31,7 @@ def test_save_run_writes_then_trims():
 
     history_repository.save_run(
         client,
-        "observability-hub-dev",
+        "atlas-dev",
         "RAW",
         "crm_leads",
         overall_density=91.3,
@@ -42,12 +42,10 @@ def test_save_run_writes_then_trims():
     )
 
     client.collection.assert_called_once_with("profiling_history")
-    client.collection.return_value.document.assert_called_once_with(
-        "observability-hub-dev_RAW_crm_leads"
-    )
+    client.collection.return_value.document.assert_called_once_with("atlas-dev_RAW_crm_leads")
     runs.add.assert_called_once()
     added = runs.add.call_args[0][0]
-    assert added["project_id"] == "observability-hub-dev"
+    assert added["project_id"] == "atlas-dev"
     assert added["dataset_id"] == "RAW"
     assert added["table_id"] == "crm_leads"
     assert added["overall_density"] == 91.3
@@ -74,7 +72,7 @@ def test_trim_to_max_deletes_only_overflow_docs():
 
     history_repository.save_run(
         client,
-        "observability-hub-dev",
+        "atlas-dev",
         "RAW",
         "crm_leads",
         overall_density=100.0,
@@ -100,7 +98,7 @@ def test_list_runs_returns_most_recent_first():
     doc_b.to_dict.return_value = {"overall_density": 80.0}
     limited_query.stream.return_value = [doc_a, doc_b]
 
-    result = history_repository.list_runs(client, "observability-hub-dev", "RAW", "crm_leads")
+    result = history_repository.list_runs(client, "atlas-dev", "RAW", "crm_leads")
 
     assert result == [{"overall_density": 90.0}, {"overall_density": 80.0}]
     runs.order_by.assert_called_once_with("executed_at", direction=firestore.Query.DESCENDING)

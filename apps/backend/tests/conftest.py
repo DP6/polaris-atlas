@@ -1,24 +1,24 @@
 import os
 
-# core.config.Settings exige OBSERVABILITY_HUB_ENVIRONMENT e
-# OBSERVABILITY_HUB_RUNTIME_SA_EMAIL (sem default, topologia single-project
+# core.config.Settings exige ATLAS_ENVIRONMENT e
+# ATLAS_RUNTIME_SA_EMAIL (sem default, topologia single-project
 # — ver core/config.py). `settings = Settings()` roda no import do módulo,
 # então isso precisa ser setado antes de qualquer import de
-# observability_hub abaixo, inclusive nos arquivos de teste que importam
+# atlas abaixo, inclusive nos arquivos de teste que importam
 # antes deste conftest terminar de carregar.
-os.environ.setdefault("OBSERVABILITY_HUB_ENVIRONMENT", "dev")
+os.environ.setdefault("ATLAS_ENVIRONMENT", "dev")
 os.environ.setdefault(
-    "OBSERVABILITY_HUB_RUNTIME_SA_EMAIL",
+    "ATLAS_RUNTIME_SA_EMAIL",
     "backend-dev-run@test-project.iam.gserviceaccount.com",
 )
-os.environ.setdefault("OBSERVABILITY_HUB_REGION", "us-central1")
-os.environ.setdefault("OBSERVABILITY_HUB_EVENT_CACHE_BUCKET_NAME", "test-project-hub-cache-dev")
+os.environ.setdefault("ATLAS_REGION", "us-central1")
+os.environ.setdefault("ATLAS_EVENT_CACHE_BUCKET_NAME", "test-project-hub-cache-dev")
 
 import pytest
 
-from observability_hub.core import bigquery as bigquery_module
-from observability_hub.core import logging_client as logging_client_module
-from observability_hub.core import secrets as secrets_module
+from atlas.core import bigquery as bigquery_module
+from atlas.core import logging_client as logging_client_module
+from atlas.core import secrets as secrets_module
 
 
 @pytest.fixture(autouse=True)

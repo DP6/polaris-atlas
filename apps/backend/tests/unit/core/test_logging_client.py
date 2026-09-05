@@ -8,8 +8,8 @@ from google.api_core.exceptions import (
     TooManyRequests,
 )
 
-from observability_hub.core import logging_client
-from observability_hub.core.exceptions import LoggingAccessDeniedError, LoggingQuotaExceededError
+from atlas.core import logging_client
+from atlas.core.exceptions import LoggingAccessDeniedError, LoggingQuotaExceededError
 
 _KWARGS = {
     "resource_names": ["projects/proj"],

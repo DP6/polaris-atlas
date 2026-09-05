@@ -10,7 +10,7 @@
 ## Objetivo
 
 Prover um inventário navegável e completo de todos os datasets e tabelas de
-qualquer projeto BigQuery acessível pela service account do Hub. A descoberta
+qualquer projeto BigQuery acessível pela service account do Atlas. A descoberta
 de regiões é automática — o backend consulta todas as regiões conhecidas do
 BigQuery em paralelo e agrega os resultados. Nenhum parâmetro de região é
 necessário nos endpoints.
@@ -98,7 +98,7 @@ BQ_REGIONS = [
 
 ### GET /api/v1/projects (v1.6, revisado v1.7)
 Lista os projetos **registrados no ADM** (`hub_projects`, aba Admin →
-Projetos) aos quais o **usuário atual** tem acesso liberado no Hub —
+Projetos) aos quais o **usuário atual** tem acesso liberado no Atlas —
 `admin_service.list_projects` ∩ `admin_service.has_project_access` (mesma
 checagem de `require_project_access`: individual, `hub_projects.is_public`
 ou grupo). Alimenta o seletor de projeto no frontend; como já vem
@@ -132,17 +132,17 @@ foi removido; `roles/browser` da SA deixou de ser necessária.
 Valida acesso e descobre automaticamente as regiões com datasets.
 
 `is_native` indica se `project_id` é o projeto GCP onde esta instância do
-Hub está rodando (`client.project`, resolvido via `GOOGLE_CLOUD_PROJECT` ou
+Atlas está rodando (`client.project`, resolvido via `GOOGLE_CLOUD_PROJECT` ou
 `google.auth.default()` — mesma fonte usada no `fix` da Response 403
-abaixo). Usado pelo frontend para diferenciar "Hub observando a si mesmo"
-(dev observando `observability-hub-dev`, prod observando
-`observability-hub-prod`) de "Hub observando um projeto externo" (ex: prod
-observando `observability-hub-dev` como projeto-alvo, ou vice-versa).
+abaixo). Usado pelo frontend para diferenciar "Atlas observando a si mesmo"
+(dev observando `atlas-dev`, prod observando
+`atlas-prod`) de "Atlas observando um projeto externo" (ex: prod
+observando `atlas-dev` como projeto-alvo, ou vice-versa).
 
 **Response 200:**
 ```json
 {
-  "project_id": "observability-hub-dev",
+  "project_id": "atlas-dev",
   "accessible": true,
   "available_regions": ["US"],
   "total_datasets": 3,
@@ -154,8 +154,8 @@ observando `observability-hub-dev` como projeto-alvo, ou vice-versa).
 ```json
 {
   "error": "access_denied",
-  "message": "A service account do Hub não tem acesso a este projeto.",
-  "fix": "gcloud projects add-iam-policy-binding {project_id} --member='serviceAccount:backend-run@observability-hub-prod.iam.gserviceaccount.com' --role='roles/bigquery.metadataViewer'"
+  "message": "A service account do Atlas não tem acesso a este projeto.",
+  "fix": "gcloud projects add-iam-policy-binding {project_id} --member='serviceAccount:backend-run@atlas-prod.iam.gserviceaccount.com' --role='roles/bigquery.metadataViewer'"
 }
 ```
 
@@ -175,7 +175,7 @@ Lista todos os datasets agregando todas as regiões automaticamente.
 **Response 200:**
 ```json
 {
-  "project_id": "observability-hub-dev",
+  "project_id": "atlas-dev",
   "evaluated_at": "2026-08-05T10:00:00Z",
   "total_datasets": 3,
   "regions_found": ["US"],
@@ -206,7 +206,7 @@ Lista tabelas do dataset. Região descoberta automaticamente via metadados.
 **Response 200:**
 ```json
 {
-  "project_id": "observability-hub-dev",
+  "project_id": "atlas-dev",
   "dataset_id": "RAW",
   "location": "US",
   "total_tables": 3,
@@ -267,7 +267,7 @@ ordenada da mais recente para a mais antiga.
 ```json
 {
   "error": "table_not_partitioned",
-  "message": "Tabela 'crm_leads' em 'observability-hub-dev.RAW' não é particionada."
+  "message": "Tabela 'crm_leads' em 'atlas-dev.RAW' não é particionada."
 }
 ```
 
@@ -301,7 +301,7 @@ em outros da mesma série):
 {
   "query": "events_20260813",
   "mode": "exact",
-  "project_id": "observability-hub-dev",
+  "project_id": "atlas-dev",
   "datasets_with_match": [],
   "datasets_without_match": [
     {
@@ -472,7 +472,7 @@ GROUP BY 1
 ## Estrutura de arquivos
 
 ```
-apps/backend/src/observability_hub/
+apps/backend/src/atlas/
 ├── api/v1/
 │   ├── projects.py       # GET /projects (v1.6) + GET /projects/{project_id}/validate
 │   └── catalog.py

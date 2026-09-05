@@ -3,17 +3,17 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from observability_hub.core.exceptions import (
+from atlas.core.exceptions import (
     DatasetNotFoundError,
     ProjectAccessDeniedError,
     ProjectNotFoundError,
     TableNotFoundError,
     TableNotPartitionedError,
 )
-from observability_hub.domains.catalog import service
+from atlas.domains.catalog import service
 
 
-def _fake_client(project: str = "observability-hub-dev") -> MagicMock:
+def _fake_client(project: str = "atlas-dev") -> MagicMock:
     client = MagicMock(name="bigquery.Client")
     client.project = project
     return client
@@ -70,7 +70,7 @@ def test_validate_project_happy_path(monkeypatch):
         lambda client, project_id, regions: [{"dataset_id": "RAW"}, {"dataset_id": "OTHER"}],
     )
 
-    result = service.validate_project(client, "observability-hub-dev")
+    result = service.validate_project(client, "atlas-dev")
 
     assert result.accessible is True
     assert result.available_regions == ["US"]
@@ -92,19 +92,19 @@ def test_validate_project_empty_project_has_zero_datasets(monkeypatch):
 
 
 def test_validate_project_is_native_true_when_project_id_matches_runtime_project(monkeypatch):
-    client = _fake_client(project="observability-hub-dev")
+    client = _fake_client(project="atlas-dev")
     monkeypatch.setattr(service, "discover_regions", lambda project_id, client: ["US"])
     monkeypatch.setattr(
         service.repository, "get_datasets_summary", lambda client, project_id, regions: []
     )
 
-    result = service.validate_project(client, "observability-hub-dev")
+    result = service.validate_project(client, "atlas-dev")
 
     assert result.is_native is True
 
 
 def test_validate_project_is_native_false_for_external_project(monkeypatch):
-    client = _fake_client(project="observability-hub-dev")
+    client = _fake_client(project="atlas-dev")
     monkeypatch.setattr(service, "discover_regions", lambda project_id, client: ["US"])
     monkeypatch.setattr(
         service.repository, "get_datasets_summary", lambda client, project_id, regions: []
@@ -160,7 +160,7 @@ def test_list_datasets_builds_response(monkeypatch):
         service.repository, "get_datasets_summary", lambda client, project_id, regions: raw
     )
 
-    result = service.list_datasets(client, "observability-hub-dev")
+    result = service.list_datasets(client, "atlas-dev")
 
     assert result.total_datasets == 1
     assert result.regions_found == ["US"]
@@ -203,7 +203,7 @@ def test_list_tables_resolves_region_and_builds_response(monkeypatch):
         lambda client, project_id, dataset_id, location, table_type=None: raw,
     )
 
-    result = service.list_tables(client, "observability-hub-dev", "RAW")
+    result = service.list_tables(client, "atlas-dev", "RAW")
 
     assert result.location == "US"
     assert result.total_tables == 1
@@ -263,7 +263,7 @@ def test_list_tables_fills_partition_stats_only_for_partitioned_tables(monkeypat
 
     monkeypatch.setattr(service.repository, "get_partition_stats", fake_get_partition_stats)
 
-    result = service.list_tables(client, "observability-hub-dev", "RAW")
+    result = service.list_tables(client, "atlas-dev", "RAW")
 
     assert calls == [("events", "event_date")]
     events = next(t for t in result.tables if t.table_id == "events")
@@ -284,7 +284,7 @@ def test_list_tables_propagates_dataset_not_found(monkeypatch):
     monkeypatch.setattr(service.repository, "resolve_dataset_region", raise_not_found)
 
     with pytest.raises(DatasetNotFoundError):
-        service.list_tables(client, "observability-hub-dev", "GHOST")
+        service.list_tables(client, "atlas-dev", "GHOST")
 
 
 def test_get_table_detail_builds_response(monkeypatch):
@@ -326,7 +326,7 @@ def test_get_table_detail_builds_response(monkeypatch):
         lambda client, project_id, dataset_id, table_id, location: dict(raw_detail),
     )
 
-    result = service.get_table_detail(client, "observability-hub-dev", "RAW", "ga4_events")
+    result = service.get_table_detail(client, "atlas-dev", "RAW", "ga4_events")
 
     assert result.table_id == "ga4_events"
     assert len(result.columns) == 1
@@ -348,7 +348,7 @@ def test_get_table_detail_propagates_table_not_found(monkeypatch):
     monkeypatch.setattr(service.repository, "get_table_detail", raise_not_found)
 
     with pytest.raises(TableNotFoundError):
-        service.get_table_detail(client, "observability-hub-dev", "RAW", "ghost")
+        service.get_table_detail(client, "atlas-dev", "RAW", "ghost")
 
 
 def _tables_summary_stub(tables):
@@ -389,7 +389,7 @@ def test_get_table_partitions_builds_response(monkeypatch):
         ],
     )
 
-    result = service.get_table_partitions(client, "observability-hub-dev", "RAW", "events")
+    result = service.get_table_partitions(client, "atlas-dev", "RAW", "events")
 
     assert result.partition_column == "event_date"
     assert result.partition_type == "event_date (DAY)"
@@ -408,7 +408,7 @@ def test_get_table_partitions_raises_when_table_missing(monkeypatch):
     monkeypatch.setattr(service.repository, "get_tables_summary", _tables_summary_stub([]))
 
     with pytest.raises(TableNotFoundError):
-        service.get_table_partitions(client, "observability-hub-dev", "RAW", "ghost")
+        service.get_table_partitions(client, "atlas-dev", "RAW", "ghost")
 
 
 def test_get_table_partitions_raises_when_table_not_partitioned(monkeypatch):
@@ -435,7 +435,7 @@ def test_get_table_partitions_raises_when_table_not_partitioned(monkeypatch):
     )
 
     with pytest.raises(TableNotPartitionedError):
-        service.get_table_partitions(client, "observability-hub-dev", "RAW", "dim_users")
+        service.get_table_partitions(client, "atlas-dev", "RAW", "dim_users")
 
 
 def test_search_tables_builds_response_with_match_and_prefix_without_match(monkeypatch):
@@ -452,7 +452,7 @@ def test_search_tables_builds_response_with_match_and_prefix_without_match(monke
         service,
         "get_tables_metadata",
         lambda client, table_refs: {
-            "observability-hub-dev.analytics_123.events_20260812": SimpleNamespace(
+            "atlas-dev.analytics_123.events_20260812": SimpleNamespace(
                 modified="2026-08-12T03:00:00Z", num_rows=22096
             )
         },
@@ -466,7 +466,7 @@ def test_search_tables_builds_response_with_match_and_prefix_without_match(monke
         ],
     )
 
-    result = service.search_tables(client, "observability-hub-dev", "events_20260812", "exact")
+    result = service.search_tables(client, "atlas-dev", "events_20260812", "exact")
 
     assert result.query == "events_20260812"
     assert result.mode == "exact"
@@ -498,7 +498,7 @@ def test_search_tables_skips_prefix_search_when_query_has_no_trailing_digits(mon
         lambda *a, **k: calls.append(1) or [],
     )
 
-    result = service.search_tables(client, "observability-hub-dev", "ga4_events", "exact")
+    result = service.search_tables(client, "atlas-dev", "ga4_events", "exact")
 
     assert result.datasets_with_match == []
     assert result.datasets_without_match == []
@@ -524,7 +524,7 @@ def test_search_tables_not_exact_skips_prefix_search(monkeypatch):
         service.repository, "search_tables_by_prefix", lambda *a, **k: calls.append(1) or []
     )
 
-    result = service.search_tables(client, "observability-hub-dev", "events_20260812", "not_exact")
+    result = service.search_tables(client, "atlas-dev", "events_20260812", "not_exact")
 
     assert result.mode == "not_exact"
     assert [d.table_id for d in result.datasets_with_match] == ["other"]
@@ -547,7 +547,7 @@ def test_search_tables_no_matches_returns_empty_lists(monkeypatch):
         lambda client, project_id, regions, prefix, exclude_dataset_ids: [],
     )
 
-    result = service.search_tables(client, "observability-hub-dev", "events_99999999", "contains")
+    result = service.search_tables(client, "atlas-dev", "events_99999999", "contains")
 
     assert result.datasets_with_match == []
     assert result.datasets_without_match == []
@@ -573,7 +573,7 @@ def test_search_tables_not_contains_lists_datasets_with_zero_matching_tables(mon
         ],
     )
 
-    result = service.search_tables(client, "observability-hub-dev", "crm", "not_contains")
+    result = service.search_tables(client, "atlas-dev", "crm", "not_contains")
 
     assert result.mode == "not_contains"
     assert result.datasets_with_match == []
@@ -599,6 +599,6 @@ def test_search_tables_not_contains_does_not_run_prefix_search(monkeypatch):
         lambda *a, **k: calls.append(1) or [],
     )
 
-    service.search_tables(client, "observability-hub-dev", "events_20260812", "not_contains")
+    service.search_tables(client, "atlas-dev", "events_20260812", "not_contains")
 
     assert calls == []

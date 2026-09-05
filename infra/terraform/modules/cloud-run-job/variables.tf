@@ -24,7 +24,7 @@ variable "image" {
 }
 
 variable "command" {
-  description = "Entrypoint do container, sobrescrevendo o ENTRYPOINT/CMD da imagem (ex: [\"python\", \"-m\", \"observability_hub.jobs.refresh_event_cache\"])."
+  description = "Entrypoint do container, sobrescrevendo o ENTRYPOINT/CMD da imagem (ex: [\"python\", \"-m\", \"atlas.jobs.refresh_event_cache\"])."
   type        = list(string)
 }
 

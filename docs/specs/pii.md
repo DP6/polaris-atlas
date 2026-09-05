@@ -99,7 +99,7 @@ por coluna.
 **Response 200:**
 ```json
 {
-  "project_id": "observability-hub-dev",
+  "project_id": "atlas-dev",
   "dataset_id": "RAW",
   "table_id": "crm_leads",
   "executed_at": "2026-08-14T10:00:00Z",
@@ -239,7 +239,7 @@ sinaliza).
 ## Estrutura de arquivos
 
 ```
-apps/backend/src/observability_hub/
+apps/backend/src/atlas/
 ├── api/v1/
 │   └── pii.py
 ├── domains/pii/

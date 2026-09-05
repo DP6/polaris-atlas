@@ -4,14 +4,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from observability_hub.core.config import settings
-from observability_hub.core.exceptions import (
+from atlas.core.config import settings
+from atlas.core.exceptions import (
     EventCacheNotReadyError,
     LoggingAccessDeniedError,
     LoggingQuotaExceededError,
 )
-from observability_hub.domains.lineage import service
-from observability_hub.domains.lineage.repository import JobEvent
+from atlas.domains.lineage import service
+from atlas.domains.lineage.repository import JobEvent
 
 
 def _event(

@@ -1,4 +1,4 @@
-from observability_hub.domains.freshness.schemas import (
+from atlas.domains.freshness.schemas import (
     DatasetFreshnessSummary,
     FreshnessCounts,
     FreshnessDatasetResponse,
@@ -27,7 +27,7 @@ def test_dataset_freshness_summary_matches_spec_example():
 
 def test_freshness_project_response_matches_spec_example():
     payload = {
-        "project_id": "observability-hub-dev",
+        "project_id": "atlas-dev",
         "evaluated_at": "2026-08-05T10:00:00Z",
         "datasets": [
             {
@@ -97,7 +97,7 @@ def test_table_freshness_allows_null_fields_when_storage_metadata_missing():
 
 def test_freshness_dataset_response_matches_spec_example():
     payload = {
-        "project_id": "observability-hub-dev",
+        "project_id": "atlas-dev",
         "dataset_id": "RAW",
         "location": "US",
         "evaluated_at": "2026-08-05T10:00:00Z",

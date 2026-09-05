@@ -1,4 +1,4 @@
-from observability_hub.domains.finops import sql_builder
+from atlas.domains.finops import sql_builder
 
 
 def test_build_scan_query_returns_none_for_empty_columns():

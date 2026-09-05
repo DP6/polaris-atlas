@@ -1,8 +1,8 @@
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
-from observability_hub.domains.admin import service
-from observability_hub.domains.admin.schemas import UpsertProjectAdminRequest
+from atlas.domains.admin import service
+from atlas.domains.admin.schemas import UpsertProjectAdminRequest
 
 
 def _fake_client() -> MagicMock:

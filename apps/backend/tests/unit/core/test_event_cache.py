@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 from google.api_core.exceptions import NotFound
 
-from observability_hub.core import event_cache
+from atlas.core import event_cache
 
 
 def _storage_client_with(existing_blobs: dict[str, bytes] | None = None) -> MagicMock:

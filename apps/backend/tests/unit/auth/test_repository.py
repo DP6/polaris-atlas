@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from observability_hub.domains.auth import repository
+from atlas.domains.auth import repository
 
 
 def test_build_authorize_url_uses_oauth_session(monkeypatch):

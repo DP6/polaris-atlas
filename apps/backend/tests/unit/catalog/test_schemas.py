@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from observability_hub.domains.catalog.schemas import (
+from atlas.domains.catalog.schemas import (
     ColumnDetail,
     DatasetsListResponse,
     DatasetSummary,
@@ -17,7 +17,7 @@ from observability_hub.domains.catalog.schemas import (
 
 def test_project_validate_response_matches_spec_example():
     payload = {
-        "project_id": "observability-hub-dev",
+        "project_id": "atlas-dev",
         "accessible": True,
         "available_regions": ["US"],
         "total_datasets": 3,
@@ -50,7 +50,7 @@ def test_dataset_summary_matches_spec_example():
 
 def test_datasets_list_response_matches_spec_example():
     payload = {
-        "project_id": "observability-hub-dev",
+        "project_id": "atlas-dev",
         "evaluated_at": "2026-08-05T10:00:00Z",
         "total_datasets": 1,
         "regions_found": ["US"],
@@ -117,7 +117,7 @@ def test_table_summary_allows_null_size_for_view_or_external():
 
 def test_tables_list_response_matches_spec_example():
     payload = {
-        "project_id": "observability-hub-dev",
+        "project_id": "atlas-dev",
         "dataset_id": "RAW",
         "location": "US",
         "total_tables": 1,

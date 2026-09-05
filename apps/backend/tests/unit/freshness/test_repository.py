@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from observability_hub.domains.freshness import repository
+from atlas.domains.freshness import repository
 
 
 def _row(**kwargs):
