@@ -30,6 +30,20 @@ import { useAnalysisContext } from '@/features/quality/analysisContext'
 import { formatUsd } from '@/lib/format'
 import type { CertificationStatus, RelatedLink } from '@/types/metadata'
 
+// Defesa em profundidade pro CodeQL js/xss-through-dom: o backend já
+// valida `url` contra ^https?:// no schema de request (Pydantic), mas o
+// front não deve confiar cegamente num dado que pode ter chegado por
+// outro caminho (edição direta no Firestore, bug de validação futuro) —
+// só renderiza como link de verdade (href) se o esquema for http(s);
+// caso contrário mostra como texto plano, nunca como âncora clicável.
+function isSafeHttpUrl(url: string): boolean {
+  try {
+    return ['http:', 'https:'].includes(new URL(url).protocol)
+  } catch {
+    return false
+  }
+}
+
 const CERTIFICATION_LABEL: Record<CertificationStatus, string> = {
   draft: 'Rascunho',
   in_review: 'Em revisão',
@@ -314,14 +328,23 @@ function TableFieldsPanel({
           <div className="flex flex-col gap-1">
             {links.map((link, i) => (
               <div key={link.url} className="flex items-center gap-2 text-sm">
-                <a
-                  href={link.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  {link.label}
-                </a>
+                {isSafeHttpUrl(link.url) ? (
+                  <a
+                    href={link.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    {link.label}
+                  </a>
+                ) : (
+                  <span
+                    className="text-muted-foreground line-through"
+                    title="URL inválida (só http/https é aceito) — não renderizada como link"
+                  >
+                    {link.label}
+                  </span>
+                )}
                 {canManage && (
                   <button
                     type="button"
