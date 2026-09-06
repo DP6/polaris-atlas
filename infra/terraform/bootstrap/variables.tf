@@ -13,5 +13,10 @@ variable "region" {
 variable "github_repository" {
   description = "Repositório GitHub autorizado a assumir as identidades (org/repo)."
   type        = string
-  default     = "DP6/atlas"
+  # Renomeado no GitHub de DP6/atlas para DP6/polaris-atlas (2026-09-06).
+  # Precisa bater com `assertion.repository` do token OIDC do GitHub
+  # Actions, senão o WIF rejeita com "credential is rejected by the
+  # attribute condition" (ver attribute_condition e wif_binding no módulo
+  # wif-bootstrap). Requer `terraform apply` no stack bootstrap.
+  default = "DP6/polaris-atlas"
 }
