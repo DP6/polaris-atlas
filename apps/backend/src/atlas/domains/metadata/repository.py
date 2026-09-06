@@ -25,6 +25,20 @@ from google.cloud import bigquery, firestore
 
 from atlas.core.bigquery import get_table_cached
 
+# Campos de nível tabela preservados quando o doc inteiro é regravado num
+# patch parcial. `status`/`status_changed_by`/`status_changed_at`/
+# `review_note` só mudam via set_status, mas precisam ser preservados nas
+# regravações de conteúdo (e vice-versa) pra não sumirem.
+_PRESERVED_TABLE_KEYS = (
+    "description",
+    "owner",
+    "classification",
+    "status",
+    "status_changed_by",
+    "status_changed_at",
+    "review_note",
+)
+
 
 def _doc_id(dataset_id: str, table_id: str) -> str:
     return f"{dataset_id}__{table_id}"
@@ -41,6 +55,10 @@ def get_table_metadata(
     return doc.to_dict() if doc.exists else None
 
 
+def _preserved(existing: dict) -> dict:
+    return {key: existing.get(key) for key in _PRESERVED_TABLE_KEYS}
+
+
 def upsert_table_metadata(
     client: firestore.Client,
     project_id: str,
@@ -53,21 +71,51 @@ def upsert_table_metadata(
     (service.py filtra via model_dump(exclude_unset=True)) — patch
     parcial de verdade, não substituição do doc inteiro. `columns` nunca
     é tocado aqui (upsert_column_metadata cuida disso), `created_at` é
-    preservado."""
+    preservado. `status` e derivados só mudam via set_status."""
     now = datetime.now(UTC)
     doc_ref = _metadata_collection(client, project_id).document(_doc_id(dataset_id, table_id))
     existing = get_table_metadata(client, project_id, dataset_id, table_id) or {}
     data = {
-        "description": existing.get("description"),
-        "owner": existing.get("owner"),
-        "classification": existing.get("classification"),
-        "certification_status": existing.get("certification_status"),
+        **_preserved(existing),
         "related_links": existing.get("related_links", []),
         "columns": existing.get("columns", {}),
         "created_at": existing.get("created_at", now),
         **fields,
         "updated_at": now,
         "updated_by": updated_by,
+    }
+    doc_ref.set(data)
+    return data
+
+
+def set_status(
+    client: firestore.Client,
+    project_id: str,
+    dataset_id: str,
+    table_id: str,
+    *,
+    status: str,
+    changed_by: str,
+    review_note: str | None,
+) -> dict:
+    """Regrava só os campos de estado de governança — não mexe em
+    `updated_by` (continua sendo "quem editou o conteúdo pela última
+    vez"). `review_note=None` limpa a devolução anterior (ao aprovar ou
+    reenviar), string preenche."""
+    now = datetime.now(UTC)
+    doc_ref = _metadata_collection(client, project_id).document(_doc_id(dataset_id, table_id))
+    existing = get_table_metadata(client, project_id, dataset_id, table_id) or {}
+    data = {
+        **_preserved(existing),
+        "related_links": existing.get("related_links", []),
+        "columns": existing.get("columns", {}),
+        "created_at": existing.get("created_at", now),
+        "updated_at": existing.get("updated_at", now),
+        "updated_by": existing.get("updated_by"),
+        "status": status,
+        "status_changed_by": changed_by,
+        "status_changed_at": now,
+        "review_note": review_note,
     }
     doc_ref.set(data)
     return data
@@ -94,10 +142,7 @@ def upsert_column_metadata(
     existing_column.update(column_fields)
     columns[column_name] = existing_column
     data = {
-        "description": existing.get("description"),
-        "owner": existing.get("owner"),
-        "classification": existing.get("classification"),
-        "certification_status": existing.get("certification_status"),
+        **_preserved(existing),
         "related_links": existing.get("related_links", []),
         "columns": columns,
         "created_at": existing.get("created_at", now),
@@ -125,11 +170,14 @@ def add_history_entry(
     old_value: str | None,
     new_value: str | None,
     changed_by: str,
+    column_name: str | None = None,
+    note: str | None = None,
 ) -> None:
-    """Só campos de nível tabela (description/owner/classification/
-    certification_status/related_links) — edição de coluna não gera
-    entrada aqui nesta v1, ver docs/specs/metadata.md, "Fora do
-    escopo"."""
+    """Registra uma alteração no histórico. `column_name` presente =
+    edição de coluna (descrição/glossário/PII); ausente = campo de nível
+    tabela (description/owner/classification/status/related_links). `note`
+    hoje só é preenchido pelas devoluções de revisão. Ver
+    docs/specs/metadata.md v2.0, "Histórico"."""
     _history_collection(client, project_id, dataset_id, table_id).add(
         {
             "field": field,
@@ -137,6 +185,8 @@ def add_history_entry(
             "new_value": new_value,
             "changed_by": changed_by,
             "changed_at": datetime.now(UTC),
+            "column_name": column_name,
+            "note": note,
         }
     )
 

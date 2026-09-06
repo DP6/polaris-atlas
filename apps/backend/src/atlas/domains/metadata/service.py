@@ -1,6 +1,7 @@
 """Orquestra domains/metadata: metadados editáveis de tabela/coluna
-(descrição, ownership, classificação, certificação, links, histórico de
-edição; PII confirmado e glossário livre por coluna).
+(descrição, ownership, classificação, estado de governança, links,
+histórico de edição de tabela e coluna; PII confirmado e glossário livre
+por coluna).
 
 Princípio central da spec (docs/specs/metadata.md): linkar o que já
 existe (lineage, qualidade, freshness, budget) em vez de duplicar — este
@@ -15,9 +16,10 @@ from datetime import UTC, datetime
 from google.cloud import bigquery, firestore
 
 from atlas.core.bigquery import discover_regions
-from atlas.core.exceptions import ColumnNotFoundError
+from atlas.core.exceptions import ColumnNotFoundError, InvalidStatusTransitionError
 from atlas.domains.metadata import repository
 from atlas.domains.metadata.schemas import (
+    GovernanceStatus,
     MetadataClassification,
     MetadataColumn,
     MetadataColumnUpsertRequest,
@@ -26,6 +28,7 @@ from atlas.domains.metadata.schemas import (
     MetadataOverviewEntry,
     MetadataOverviewResponse,
     MetadataOwner,
+    MetadataStatusUpdateRequest,
     MetadataTableResponse,
     MetadataTableUpsertRequest,
     RelatedLink,
@@ -33,14 +36,23 @@ from atlas.domains.metadata.schemas import (
     SuggestedPiiResponse,
 )
 
-# Campos de nível tabela que geram entrada de histórico — colunas não
-# geram (ver docs/specs/metadata.md, "Fora do escopo").
+# Campos de nível tabela que geram entrada de histórico via PUT de campos.
+# `status` NÃO está aqui — muda só por update_status (que escreve o
+# próprio histórico). Ver docs/specs/metadata.md v2.0.
 _HISTORY_FIELDS = (
     "description",
     "owner",
     "classification",
-    "certification_status",
     "related_links",
+)
+
+# Campos de coluna que geram entrada de histórico (com column_name
+# preenchido) — novidade da v2.0, antes edição de coluna não deixava
+# rastro.
+_COLUMN_HISTORY_FIELDS = (
+    "description",
+    "glossary_term",
+    "pii_flag",
 )
 
 
@@ -67,7 +79,10 @@ def _build_table_response(
         description=raw.get("description"),
         owner=_owner_from_raw(raw.get("owner")),
         classification=_classification_from_raw(raw.get("classification")),
-        certification_status=raw.get("certification_status"),
+        status=raw.get("status"),
+        status_changed_by=raw.get("status_changed_by"),
+        status_changed_at=raw.get("status_changed_at"),
+        review_note=raw.get("review_note"),
         related_links=[RelatedLink(**link) for link in raw.get("related_links", [])],
         columns={name: MetadataColumn(**col) for name, col in raw.get("columns", {}).items()},
         updated_at=raw.get("updated_at"),
@@ -113,6 +128,93 @@ def upsert_table_metadata(
     return _build_table_response(project_id, dataset_id, table_id, raw)
 
 
+# --- fluxo de revisão do estado de governança -----------------------------------
+
+
+def _resolve_status_transition(current: str | None, target: str, *, is_superadmin: bool) -> str:
+    """Devolve o estado final (pode diferir de `target`: superadmin que
+    envia pra revisão auto-aprova). Levanta InvalidStatusTransitionError
+    se a transição não for permitida pra quem pediu.
+
+    Regras (docs/specs/metadata.md v2.0, "Fluxo de revisão"):
+    - superadmin: qualquer transição; `in_review` vira `approved` na hora.
+    - Admin de projeto: `draft`↔`in_review` livre; `approved` só a partir
+      de `in_review`; `approved → draft`/`in_review` (reabrir) permitido.
+      Pular `draft → approved` direto é bloqueado.
+    """
+    current_norm = current or GovernanceStatus.DRAFT.value
+
+    if is_superadmin:
+        if target == GovernanceStatus.IN_REVIEW.value:
+            return GovernanceStatus.APPROVED.value
+        return target
+
+    if (
+        target == GovernanceStatus.APPROVED.value
+        and current_norm != GovernanceStatus.IN_REVIEW.value
+    ):
+        raise InvalidStatusTransitionError(current, target)
+    return target
+
+
+def update_status(
+    client: firestore.Client,
+    project_id: str,
+    dataset_id: str,
+    table_id: str,
+    request: MetadataStatusUpdateRequest,
+    *,
+    actor: str,
+    is_superadmin: bool,
+) -> MetadataTableResponse:
+    existing = repository.get_table_metadata(client, project_id, dataset_id, table_id) or {}
+    current = existing.get("status")
+    target = request.target.value
+    current_norm = current or GovernanceStatus.DRAFT.value
+
+    if target == current_norm:
+        # No-op — não regrava nem gera histórico (nem valida transição:
+        # "já está onde você pediu" nunca é erro). Mesma premissa do
+        # skip-history de upsert_table_metadata quando o valor não muda.
+        return _build_table_response(project_id, dataset_id, table_id, existing)
+
+    final = _resolve_status_transition(current, target, is_superadmin=is_superadmin)
+
+    if final == current_norm:
+        # Superadmin pediu in_review estando já em approved: auto-aprovar
+        # devolveria ao mesmo estado — nada a fazer.
+        return _build_table_response(project_id, dataset_id, table_id, existing)
+
+    # `note` só sobrevive numa devolução para ajustes (in_review → draft);
+    # aprovar ou reenviar limpa a devolução anterior.
+    is_return_for_changes = (
+        current_norm == GovernanceStatus.IN_REVIEW.value and final == GovernanceStatus.DRAFT.value
+    )
+    note = request.note if is_return_for_changes else None
+
+    repository.add_history_entry(
+        client,
+        project_id,
+        dataset_id,
+        table_id,
+        field="status",
+        old_value=current,
+        new_value=final,
+        changed_by=actor,
+        note=note,
+    )
+    raw = repository.set_status(
+        client,
+        project_id,
+        dataset_id,
+        table_id,
+        status=final,
+        changed_by=actor,
+        review_note=note,
+    )
+    return _build_table_response(project_id, dataset_id, table_id, raw)
+
+
 def _scanner_signal_for_column(
     scan: dict | None, column_name: str
 ) -> tuple[bool | None, str | None]:
@@ -142,6 +244,28 @@ def upsert_column_metadata(
         raise ColumnNotFoundError(project_id, dataset_id, table_id, column_name)
 
     provided = request.model_dump(exclude_unset=True)
+
+    existing_raw = repository.get_table_metadata(firestore_client, project_id, dataset_id, table_id)
+    existing_column = (existing_raw or {}).get("columns", {}).get(column_name) or {}
+    existing_column_values = {
+        "description": existing_column.get("description"),
+        "glossary_term": existing_column.get("glossary_term"),
+        "pii_flag": (existing_column.get("pii") or {}).get("flag"),
+    }
+    for field in _COLUMN_HISTORY_FIELDS:
+        if field in provided and provided[field] != existing_column_values[field]:
+            repository.add_history_entry(
+                firestore_client,
+                project_id,
+                dataset_id,
+                table_id,
+                field=field,
+                old_value=_stringify(existing_column_values[field]),
+                new_value=_stringify(provided[field]),
+                changed_by=updated_by,
+                column_name=column_name,
+            )
+
     fields: dict = {}
     if "description" in provided:
         fields["description"] = provided["description"]
@@ -199,7 +323,7 @@ def get_metadata_overview(
     bq_client: bigquery.Client,
     firestore_client: firestore.Client,
     project_id: str,
-    certification_status: str | None = None,
+    status: str | None = None,
     datasets: list[str] | None = None,
     owner_email: str | None = None,
     q: str | None = None,
@@ -218,7 +342,7 @@ def get_metadata_overview(
             repository.get_table_metadata(firestore_client, project_id, dataset_id, table_id) or {}
         )
 
-        if certification_status and raw.get("certification_status") != certification_status:
+        if status and raw.get("status") != status:
             continue
         owner = _owner_from_raw(raw.get("owner"))
         if owner_email and (owner is None or owner.technical_owner != owner_email):
@@ -231,7 +355,7 @@ def get_metadata_overview(
                 dataset_id=dataset_id,
                 table_id=table_id,
                 has_metadata=bool(raw),
-                certification_status=raw.get("certification_status"),
+                status=raw.get("status"),
                 owner=owner,
                 classification=_classification_from_raw(raw.get("classification")),
                 updated_at=raw.get("updated_at"),

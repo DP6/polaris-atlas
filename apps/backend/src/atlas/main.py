@@ -33,6 +33,7 @@ from atlas.core.exceptions import (
     InvalidDateColumnError,
     InvalidSamplePercentError,
     InvalidSessionError,
+    InvalidStatusTransitionError,
     LastAdminLockoutError,
     LoggingAccessDeniedError,
     LoggingQuotaExceededError,
@@ -242,6 +243,16 @@ def handle_column_not_found(request: Request, exc: ColumnNotFoundError) -> JSONR
     return JSONResponse(
         status_code=404,
         content={"error": "column_not_found", "message": str(exc)},
+    )
+
+
+@app.exception_handler(InvalidStatusTransitionError)
+def handle_invalid_status_transition(
+    request: Request, exc: InvalidStatusTransitionError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=409,
+        content={"error": "invalid_status_transition", "message": str(exc)},
     )
 
 

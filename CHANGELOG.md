@@ -5,6 +5,39 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+### metadata-v2 — refino de Metadados de Governança (backend, frontend, docs)
+
+Refino da feature de metadados (`docs/specs/metadata.md` v1.0 → v2.0), a
+pedido do usuário.
+
+- **`certification_status` → `status`** renomeado na API, no Firestore e
+  na UI (rótulo "Status"). Enum inalterado. Docs v1.0 existentes usam a
+  chave antiga — migração/reprocessamento pendente (ASM-008, volume
+  pré-produção baixo, não bloqueante).
+- **Fluxo de revisão leve** (`GovernanceStatus`): novo endpoint
+  `PUT /api/v1/metadata/{p}/{d}/{t}/status` (`MetadataStatusUpdateRequest`),
+  `status` sai do `PUT` genérico de campos. Admin de projeto envia pra
+  revisão e aprova (sem segregação de função — qualquer um aprova,
+  inclusive a própria submissão, decisão do usuário); superadmin
+  auto-aprova ao enviar pra revisão. Transição inválida → 409
+  (`InvalidStatusTransitionError`), no-op quando já está no estado
+  pedido. Grava `status_changed_by`/`status_changed_at`/`review_note` +
+  entrada de histórico.
+- **`owner.steward` removido** (schema, type, UI). Docs antigos com a
+  chave são ignorados na leitura (Pydantic descarta extra).
+- **Histórico de edição de coluna** passa a ser registrado
+  (`description`/`glossary_term`/`pii_flag`, com `column_name` na
+  entrada); `MetadataHistoryEntry` ganha `column_name` e `note`.
+- **Frontend:** `ProjectAdminsPanel` movido da aba por tabela pra
+  `MetadataOverviewPage` (+ fila "Pendentes de revisão" com
+  Aprovar/Devolver inline). `MetadataAnalysisPage` e `ColumnMetadataTable`
+  trocaram save-on-blur por botão "Salvar" explícito + toast (`sonner`).
+  Painel "Estado de governança" com as ações do fluxo.
+- **Verificação:** 916 testes `pytest` + `ruff check`/`format` passando;
+  `tsc -b` + `biome check` passando. Novos ACs META-009..012.
+
+---
+
 ### rename-atlas — `rename/atlas` (produto, backend, frontend, infra, docs)
 
 Rename do produto de "Observability Hub" pra **Atlas**, a pedido do
