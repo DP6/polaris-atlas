@@ -3,23 +3,17 @@ import { useCurrentUser } from '@/features/auth/hooks'
 import { metadataApi } from '@/lib/api/metadata'
 import type {
   MetadataColumnUpsertRequest,
+  MetadataStatusUpdateRequest,
   MetadataTableUpsertRequest,
   UpsertProjectAdminRequest,
 } from '@/types/metadata'
 
 export function useMetadataOverview(
   projectId: string | undefined,
-  opts: { certificationStatus?: string; datasets?: string[]; ownerEmail?: string; q?: string } = {},
+  opts: { status?: string; datasets?: string[]; ownerEmail?: string; q?: string } = {},
 ) {
   return useQuery({
-    queryKey: [
-      'metadata-overview',
-      projectId,
-      opts.certificationStatus,
-      opts.datasets,
-      opts.ownerEmail,
-      opts.q,
-    ],
+    queryKey: ['metadata-overview', projectId, opts.status, opts.datasets, opts.ownerEmail, opts.q],
     queryFn: () => metadataApi.getOverview(projectId as string, opts),
     enabled: Boolean(projectId),
   })
@@ -55,6 +49,36 @@ export function useUpsertTableMetadata(
   return useMutation({
     mutationFn: (request: MetadataTableUpsertRequest) =>
       metadataApi.upsertTableMetadata(
+        projectId as string,
+        datasetId as string,
+        tableId as string,
+        request,
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: tableMetadataQueryKey(projectId, datasetId, tableId),
+      })
+      queryClient.invalidateQueries({
+        queryKey: ['metadata-history', projectId, datasetId, tableId],
+      })
+      queryClient.invalidateQueries({ queryKey: ['metadata-overview', projectId] })
+    },
+  })
+}
+
+// Fluxo de revisão do estado de governança (docs/specs/metadata.md v2.0)
+// — endpoint separado do upsert de campos. Invalida também o histórico
+// (cada transição gera uma entrada) e a overview (badge + fila de
+// pendentes de revisão).
+export function useUpdateMetadataStatus(
+  projectId: string | undefined,
+  datasetId: string | undefined,
+  tableId: string | undefined,
+) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (request: MetadataStatusUpdateRequest) =>
+      metadataApi.updateStatus(
         projectId as string,
         datasetId as string,
         tableId as string,

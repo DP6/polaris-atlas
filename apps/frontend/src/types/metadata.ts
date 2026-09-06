@@ -1,14 +1,15 @@
-export type CertificationStatus = 'draft' | 'in_review' | 'approved'
+// Estado de governança da tabela — antes `certification_status`
+// (renomeado na v2.0, docs/specs/metadata.md).
+export type GovernanceStatus = 'draft' | 'in_review' | 'approved'
 
 export interface MetadataOwner {
   technical_owner: string | null
-  steward: string | null
   team: string | null
 }
 
 export interface MetadataClassification {
   domain: string | null
-  // Texto livre nesta v1 — ver docs/specs/metadata.md.
+  // Texto livre nesta versão — ver docs/specs/metadata.md.
   sensitivity: string | null
 }
 
@@ -39,7 +40,10 @@ export interface MetadataTableResponse {
   description: string | null
   owner: MetadataOwner | null
   classification: MetadataClassification | null
-  certification_status: CertificationStatus | null
+  status: GovernanceStatus | null
+  status_changed_by: string | null
+  status_changed_at: string | null
+  review_note: string | null
   related_links: RelatedLink[]
   columns: Record<string, MetadataColumn>
   updated_at: string | null
@@ -51,8 +55,15 @@ export interface MetadataTableUpsertRequest {
   description?: string | null
   owner?: MetadataOwner | null
   classification?: MetadataClassification | null
-  certification_status?: CertificationStatus | null
   related_links?: RelatedLink[] | null
+}
+
+// Transição de estado de governança — muda só por este endpoint
+// dedicado, nunca pelo PUT genérico de campos (docs/specs/metadata.md v2.0).
+export interface MetadataStatusUpdateRequest {
+  target: GovernanceStatus
+  // Só usado numa devolução para ajustes (in_review → draft).
+  note?: string | null
 }
 
 export interface MetadataColumnUpsertRequest {
@@ -67,6 +78,10 @@ export interface MetadataHistoryEntry {
   new_value: string | null
   changed_by: string
   changed_at: string
+  // Presente só nas entradas de edição de coluna.
+  column_name: string | null
+  // Comentário livre — hoje só as devoluções de revisão preenchem.
+  note: string | null
 }
 
 export interface MetadataHistoryResponse {
@@ -91,7 +106,7 @@ export interface MetadataOverviewEntry {
   dataset_id: string
   table_id: string
   has_metadata: boolean
-  certification_status: CertificationStatus | null
+  status: GovernanceStatus | null
   owner: MetadataOwner | null
   classification: MetadataClassification | null
   updated_at: string | null
