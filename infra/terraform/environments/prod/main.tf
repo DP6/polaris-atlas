@@ -39,7 +39,7 @@ module "backend_cloud_run" {
   # (canônica + legada por número do projeto, mantidas por segurança durante
   # a transição).
   env = {
-    ATLAS_CORS_ORIGINS = "https://observability-hub.dp6.io,${module.frontend_cloud_run.service_url},${module.frontend_cloud_run.service_url_alt}"
+    ATLAS_CORS_ORIGINS = "https://atlas.dp6.io,${module.frontend_cloud_run.service_url},${module.frontend_cloud_run.service_url_alt}"
     # Único sinal de ambiente do backend (core/config.py::settings.environment)
     # — nunca mais inferido do project_id, que é o mesmo pros dois ambientes
     # nesta topologia.

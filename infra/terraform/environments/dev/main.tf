@@ -33,7 +33,7 @@ module "backend_cloud_run" {
   # número do projeto, ver environments/prod/main.tf, mantidas por segurança
   # durante a transição) + o Vite dev server local.
   env = {
-    ATLAS_CORS_ORIGINS = "https://observability-hub-dev.dp6.io,${module.frontend_cloud_run.service_url},${module.frontend_cloud_run.service_url_alt},http://localhost:5173"
+    ATLAS_CORS_ORIGINS = "https://atlas-dev.dp6.io,${module.frontend_cloud_run.service_url},${module.frontend_cloud_run.service_url_alt},http://localhost:5173"
     # Único sinal de ambiente do backend (core/config.py::settings.environment)
     # — nunca mais inferido do project_id, que é o mesmo pros dois ambientes
     # nesta topologia.
