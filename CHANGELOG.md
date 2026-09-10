@@ -5,6 +5,39 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+### domain-migration-oauth — `fix/wif-repo-rename` (infra + docs)
+
+Migração do domínio customizado `observability-hub*.dp6.io` →
+`atlas*.dp6.io` — pendência registrada na entrada `rename-atlas` /
+ADR-011. Sintoma: pós-login o Google devolvia pra
+`https://observability-hub{,-dev}.dp6.io/auth/callback`, que virou
+NXDOMAIN quando a TI reapontou o DNS, e o fluxo quebrava.
+
+- **Causa:** `domains/auth/service.py::build_redirect_uri` usa a primeira
+  origem `https://` de `ATLAS_CORS_ORIGINS` + `/auth/callback` como
+  `redirect_uri` do OAuth (mesma lista do CORS). Esse env var ainda tinha
+  o domínio antigo como 1ª entrada.
+- **Infra (Terraform):** 1ª entrada de `ATLAS_CORS_ORIGINS` trocada em
+  `environments/dev/main.tf` (`https://atlas-dev.dp6.io`) e
+  `environments/prod/main.tf` (`https://atlas.dp6.io`); as duas URLs
+  `*.run.app` do frontend mantidas. Propagado na hora nos serviços com
+  `gcloud run services update backend-{dev,prod} --update-env-vars
+  ATLAS_CORS_ORIGINS=...` — o `env` é gerenciado pelo Terraform (só a
+  imagem está em `ignore_changes`), então sem este commit o próximo
+  `apply` reverteria.
+- **Fora do repo (feito na sessão):** domain mappings do Cloud Run
+  `atlas-dev.dp6.io` → `frontend-dev` e `atlas.dp6.io` → `frontend-prod`
+  (antigos removidos); `https://atlas{,-dev}.dp6.io/auth/callback`
+  adicionado aos Authorized redirect URIs dos clients OAuth (um por
+  ambiente); registros DNS em `dp6.io`.
+- **Docs:** `docs/gcp-components.md` e `docs/site/componentes/index.html`
+  (tabela de config manual — as duas linhas de domínio customizado
+  renomeadas).
+- **Verificação:** `curl -sD- <backend>/api/v1/auth/login` mostra
+  `redirect_uri=...atlas{,-dev}.dp6.io%2Fauth%2Fcallback`; login
+  end-to-end OK em dev e prod. 903 testes passando — nenhum fixa o
+  domínio (`test_build_redirect_uri_*` usa URLs sintéticas).
+
 ### metadata-v2 — refino de Metadados de Governança (backend, frontend, docs)
 
 Refino da feature de metadados (`docs/specs/metadata.md` v1.0 → v2.0), a

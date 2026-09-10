@@ -520,8 +520,8 @@
             <table class="components">
               <thead><tr><th>Recurso</th><th>Ambiente</th><th>Observações</th></tr></thead>
               <tbody>
-                <tr><td class="resource">observability-hub-dev.dp6.io</td><td><span class="badge badge-dev">dev</span></td><td class="notes">Domínio customizado → frontend-dev</td></tr>
-                <tr><td class="resource">observability-hub.dp6.io</td><td><span class="badge badge-prod">prod</span></td><td class="notes">Domínio customizado → frontend-prod, redirect_uri canônico do OAuth</td></tr>
+                <tr><td class="resource">atlas-dev.dp6.io</td><td><span class="badge badge-dev">dev</span></td><td class="notes">Domínio customizado → frontend-dev (migrado de observability-hub-dev.dp6.io em 2026-09-10)</td></tr>
+                <tr><td class="resource">atlas.dp6.io</td><td><span class="badge badge-prod">prod</span></td><td class="notes">Domínio customizado → frontend-prod, redirect_uri canônico do OAuth (migrado de observability-hub.dp6.io em 2026-09-10)</td></tr>
                 <tr><td class="resource">roles/run.invoker → IAP service agent</td><td><span class="badge badge-shared">projeto</span></td><td class="notes">Binding manual, nível de projeto</td></tr>
                 <tr><td class="resource">Domain-wide delegation (backend-run → Workspace)</td><td><span class="badge badge-dev">dev</span> <span class="badge badge-prod">prod</span></td><td class="notes">Vinculada ao Client ID da SA — não sobrevive a recriação da SA sem reautorizar manualmente</td></tr>
               </tbody>

@@ -135,8 +135,8 @@ todo o resto.
 
 | Recurso | Tipo | App | Ambiente | Gerenciado por | Observações |
 |---|---|---|---|---|---|
-| Domínio customizado `observability-hub-dev.dp6.io` | Mapeamento de domínio (Cloud Run) | atlas | dev | manual | Aponta pro `frontend-dev`; nome do domínio é anterior ao rename pra Atlas e ainda não foi migrado (mecanismo exato de mapeamento não documentado ainda — levantar na próxima sessão que mexer nisso) |
-| Domínio customizado `observability-hub.dp6.io` | Mapeamento de domínio (Cloud Run) | atlas | prod | manual | Aponta pro `frontend-prod`; usado como redirect_uri canônico do OAuth — nome do domínio é anterior ao rename pra Atlas e ainda não foi migrado |
+| Domínio customizado `atlas-dev.dp6.io` | Mapeamento de domínio (Cloud Run) | atlas | dev | manual (TI) | Aponta pro `frontend-dev`; migrado de `observability-hub-dev.dp6.io` em 2026-09-10 junto com o rename pra Atlas. Redirect URI do OAuth (`.../auth/callback`) precisa estar cadastrado no client de dev no Google Cloud Console |
+| Domínio customizado `atlas.dp6.io` | Mapeamento de domínio (Cloud Run) | atlas | prod | manual (TI) | Aponta pro `frontend-prod`; usado como redirect_uri canônico do OAuth (primeira `https://` de `ATLAS_CORS_ORIGINS`, ver `environments/prod/main.tf`). Migrado de `observability-hub.dp6.io` em 2026-09-10 |
 | `roles/run.invoker` ao service agent do IAP | IAM binding, nível de projeto | atlas | - | manual | Ver comentário em `modules/cloud-run/main.tf` — exige permissão maior que a SA de deploy do CI tem |
 | Domain-wide delegation (`backend-{dev,prod}-run` impersonando `admin.victoria@dp6.com.br`) | Autorização no Google Workspace Admin Console | atlas | dev/prod | manual | **Vinculada ao Client ID interno da SA, não ao e-mail** — se a SA de runtime for recriada, esta autorização fica órfã e precisa ser refeita manualmente (ver `docs/onboarding-cliente.md`, 2026-08-25) |
 
