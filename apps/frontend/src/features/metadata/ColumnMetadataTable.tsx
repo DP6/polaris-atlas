@@ -1,5 +1,7 @@
 import { ShieldAlert } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import {
@@ -13,7 +15,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useSuggestedPii, useUpsertColumnMetadata } from '@/features/metadata/hooks'
 import type { ColumnDetail } from '@/types/catalog'
-import type { MetadataTableResponse } from '@/types/metadata'
+import type { MetadataColumnUpsertRequest, MetadataTableResponse } from '@/types/metadata'
 
 interface ColumnMetadataTableProps {
   projectId: string
@@ -40,6 +42,13 @@ export function ColumnMetadataTable({
   const suggestedPiiQuery = useSuggestedPii(projectId, datasetId, tableId)
   const upsertColumn = useUpsertColumnMetadata(projectId, datasetId, tableId)
 
+  function saveColumn(columnName: string, request: MetadataColumnUpsertRequest, okMsg: string) {
+    return upsertColumn
+      .mutateAsync({ columnName, request })
+      .then(() => toast.success(okMsg))
+      .catch(() => toast.error(`Não foi possível salvar "${columnName}"`))
+  }
+
   return (
     <Table>
       <TableHeader>
@@ -49,6 +58,7 @@ export function ColumnMetadataTable({
           <TableHead>Descrição</TableHead>
           <TableHead>Termo de glossário</TableHead>
           <TableHead>PII</TableHead>
+          {canManage && <TableHead className="w-20" />}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -68,20 +78,18 @@ export function ColumnMetadataTable({
               suggestionFlagged={suggestion?.flagged}
               suggestionConfidence={suggestion?.confidence}
               canManage={canManage}
-              onSaveDescription={(value) =>
-                upsertColumn.mutate({
-                  columnName: col.column_name,
-                  request: { description: value || null },
-                })
-              }
-              onSaveGlossaryTerm={(value) =>
-                upsertColumn.mutate({
-                  columnName: col.column_name,
-                  request: { glossary_term: value || null },
-                })
+              pending={upsertColumn.isPending}
+              onSaveText={(request) =>
+                saveColumn(col.column_name, request, `Coluna "${col.column_name}" salva`)
               }
               onTogglePii={(flag) =>
-                upsertColumn.mutate({ columnName: col.column_name, request: { pii_flag: flag } })
+                saveColumn(
+                  col.column_name,
+                  { pii_flag: flag },
+                  flag
+                    ? `"${col.column_name}" marcada como PII`
+                    : `"${col.column_name}" marcada como não PII`,
+                )
               }
             />
           )
@@ -100,8 +108,8 @@ function ColumnRow({
   suggestionFlagged,
   suggestionConfidence,
   canManage,
-  onSaveDescription,
-  onSaveGlossaryTerm,
+  pending,
+  onSaveText,
   onTogglePii,
 }: {
   column: ColumnDetail
@@ -112,12 +120,32 @@ function ColumnRow({
   suggestionFlagged: boolean | undefined
   suggestionConfidence: 'high' | 'medium' | null | undefined
   canManage: boolean
-  onSaveDescription: (value: string) => void
-  onSaveGlossaryTerm: (value: string) => void
+  pending: boolean
+  onSaveText: (request: MetadataColumnUpsertRequest) => void
   onTogglePii: (flag: boolean) => void
 }) {
   const [descriptionDraft, setDescriptionDraft] = useState(description ?? '')
   const [glossaryDraft, setGlossaryDraft] = useState(glossaryTerm ?? '')
+
+  // Re-sincroniza os rascunhos quando o valor salvo muda (após o próprio
+  // save, ou uma edição concorrente que o refetch trouxe).
+  useEffect(() => {
+    setDescriptionDraft(description ?? '')
+  }, [description])
+  useEffect(() => {
+    setGlossaryDraft(glossaryTerm ?? '')
+  }, [glossaryTerm])
+
+  const descriptionDirty = descriptionDraft !== (description ?? '')
+  const glossaryDirty = glossaryDraft !== (glossaryTerm ?? '')
+  const dirty = descriptionDirty || glossaryDirty
+
+  function save() {
+    const request: MetadataColumnUpsertRequest = {}
+    if (descriptionDirty) request.description = descriptionDraft || null
+    if (glossaryDirty) request.glossary_term = glossaryDraft || null
+    onSaveText(request)
+  }
 
   return (
     <TableRow>
@@ -128,9 +156,6 @@ function ColumnRow({
           <Input
             value={descriptionDraft}
             onChange={(e) => setDescriptionDraft(e.target.value)}
-            onBlur={() => {
-              if (descriptionDraft !== (description ?? '')) onSaveDescription(descriptionDraft)
-            }}
             placeholder="descrição…"
             className="h-8 text-xs"
           />
@@ -143,9 +168,6 @@ function ColumnRow({
           <Input
             value={glossaryDraft}
             onChange={(e) => setGlossaryDraft(e.target.value)}
-            onBlur={() => {
-              if (glossaryDraft !== (glossaryTerm ?? '')) onSaveGlossaryTerm(glossaryDraft)
-            }}
             placeholder="termo…"
             className="h-8 text-xs"
           />
@@ -158,7 +180,7 @@ function ColumnRow({
           <Checkbox
             id={`pii-${column.column_name}`}
             checked={piiFlag}
-            disabled={!canManage}
+            disabled={!canManage || pending}
             onCheckedChange={(checked) => onTogglePii(checked === true)}
           />
           <label htmlFor={`pii-${column.column_name}`} className="cursor-pointer text-xs">
@@ -178,6 +200,19 @@ function ColumnRow({
           )}
         </div>
       </TableCell>
+      {canManage && (
+        <TableCell>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8"
+            disabled={!dirty || pending}
+            onClick={save}
+          >
+            Salvar
+          </Button>
+        </TableCell>
+      )}
     </TableRow>
   )
 }

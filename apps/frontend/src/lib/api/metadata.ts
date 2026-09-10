@@ -3,6 +3,7 @@ import type {
   MetadataColumnUpsertRequest,
   MetadataHistoryResponse,
   MetadataOverviewResponse,
+  MetadataStatusUpdateRequest,
   MetadataTableResponse,
   MetadataTableUpsertRequest,
   ProjectAdmin,
@@ -11,14 +12,16 @@ import type {
   UpsertProjectAdminRequest,
 } from '@/types/metadata'
 
-function overviewQueryString(opts: {
-  certificationStatus?: string
+interface OverviewOpts {
+  status?: string
   datasets?: string[]
   ownerEmail?: string
   q?: string
-}): string {
+}
+
+function overviewQueryString(opts: OverviewOpts): string {
   const params = new URLSearchParams()
-  if (opts.certificationStatus) params.set('certification_status', opts.certificationStatus)
+  if (opts.status) params.set('status', opts.status)
   for (const dataset of opts.datasets ?? []) params.append('datasets', dataset)
   if (opts.ownerEmail) params.set('owner_email', opts.ownerEmail)
   if (opts.q) params.set('q', opts.q)
@@ -26,15 +29,7 @@ function overviewQueryString(opts: {
 }
 
 export const metadataApi = {
-  getOverview: (
-    projectId: string,
-    opts: {
-      certificationStatus?: string
-      datasets?: string[]
-      ownerEmail?: string
-      q?: string
-    } = {},
-  ) => {
+  getOverview: (projectId: string, opts: OverviewOpts = {}) => {
     const qs = overviewQueryString(opts)
     return httpClient.get<MetadataOverviewResponse>(
       `/api/v1/metadata/${projectId}${qs ? `?${qs}` : ''}`,
@@ -52,6 +47,17 @@ export const metadataApi = {
   ) =>
     httpClient.put<MetadataTableResponse>(
       `/api/v1/metadata/${projectId}/${datasetId}/${tableId}`,
+      request,
+    ),
+
+  updateStatus: (
+    projectId: string,
+    datasetId: string,
+    tableId: string,
+    request: MetadataStatusUpdateRequest,
+  ) =>
+    httpClient.put<MetadataTableResponse>(
+      `/api/v1/metadata/${projectId}/${datasetId}/${tableId}/status`,
       request,
     ),
 

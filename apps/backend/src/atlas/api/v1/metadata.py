@@ -4,12 +4,14 @@ from google.cloud import bigquery, firestore
 from atlas.core.auth import require_project_access, require_project_admin
 from atlas.core.bigquery import get_client
 from atlas.core.firestore import get_firestore_client
+from atlas.domains.admin import service as admin_service
 from atlas.domains.auth.schemas import UserInfo
 from atlas.domains.metadata import service
 from atlas.domains.metadata.schemas import (
     MetadataColumnUpsertRequest,
     MetadataHistoryResponse,
     MetadataOverviewResponse,
+    MetadataStatusUpdateRequest,
     MetadataTableResponse,
     MetadataTableUpsertRequest,
     SuggestedPiiResponse,
@@ -23,7 +25,7 @@ router = APIRouter(
 @router.get("/{project_id}", response_model=MetadataOverviewResponse)
 def get_metadata_overview(
     project_id: str,
-    certification_status: str | None = Query(default=None),
+    status: str | None = Query(default=None),
     datasets: list[str] | None = Query(default=None),
     owner_email: str | None = Query(default=None),
     q: str | None = Query(default=None),
@@ -34,7 +36,7 @@ def get_metadata_overview(
         bq_client,
         firestore_client,
         project_id,
-        certification_status=certification_status,
+        status=status,
         datasets=datasets,
         owner_email=owner_email,
         q=q,
@@ -62,6 +64,32 @@ def upsert_table_metadata(
 ) -> MetadataTableResponse:
     return service.upsert_table_metadata(
         firestore_client, project_id, dataset_id, table_id, request, updated_by=admin_user.email
+    )
+
+
+@router.put("/{project_id}/{dataset_id}/{table_id}/status", response_model=MetadataTableResponse)
+def update_metadata_status(
+    project_id: str,
+    dataset_id: str,
+    table_id: str,
+    request: MetadataStatusUpdateRequest,
+    admin_user: UserInfo = Depends(require_project_admin),
+    firestore_client: firestore.Client = Depends(get_firestore_client),
+) -> MetadataTableResponse:
+    """Fluxo de revisão do estado de governança — ver docs/specs/metadata.md
+    v2.0. `require_project_admin` já barra quem não é Admin de projeto; a
+    checagem de superadmin aqui é só pra decidir o auto-aprovar (o campo
+    `is_admin` do UserInfo do JWT não é confiável, por isso a leitura
+    fresca via admin_service)."""
+    is_superadmin = admin_service.is_admin(firestore_client, admin_user.email)
+    return service.update_status(
+        firestore_client,
+        project_id,
+        dataset_id,
+        table_id,
+        request,
+        actor=admin_user.email,
+        is_superadmin=is_superadmin,
     )
 
 

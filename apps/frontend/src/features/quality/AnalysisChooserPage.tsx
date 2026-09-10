@@ -82,7 +82,7 @@ export function AnalysisChooserPage() {
           layout="wide"
           icon={<BookOpenCheck />}
           title="Metadados"
-          description="Descrição, ownership, classificação, certificação e PII confirmado por coluna."
+          description="Descrição, ownership, classificação, estado de governança e PII confirmado por coluna."
           to={`${base}/metadata`}
         />
       </OptionCardGrid>

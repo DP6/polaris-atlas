@@ -1,21 +1,41 @@
 # Spec — Domínio: Metadados de Governança
 
-**Versão:** 1.0
-**Status:** Estrutura aprovada pelo usuário (2026-09-05); implementação pendente
+**Versão:** 2.0
+**Status:** v1.0 implementada; refino v2.0 aprovado pelo usuário (2026-09-06)
 **Fase:** Governança — metadados de tabela/coluna
-**Última atualização:** 2026-09-05
+**Última atualização:** 2026-09-06
+
+## Mudanças da v2.0
+
+- **`certification_status` → `status`** — renomeado na API e no Firestore
+  (rótulo "Status" na UI). Enum inalterado (`draft`/`in_review`/`approved`).
+- **Fluxo de revisão** — `status` deixa de ser um campo livre do `PUT`
+  genérico e passa por um endpoint dedicado
+  (`PUT .../{table}/status`) com regras de transição: Admin de projeto
+  envia pra revisão e aprova; superadmin auto-aprova. Ver "Fluxo de
+  revisão".
+- **`owner.steward` removido** — só `technical_owner` e `team`.
+- **Histórico de edição de coluna** — passa a ser registrado (antes fora
+  de escopo): `description`, `glossary_term` e `pii_flag` geram entrada
+  com `column_name` preenchido.
+- **Gestão de Admin de projeto na `MetadataOverviewPage`** — o painel
+  "Gerenciar acesso" sai da aba de análise por tabela e vai pra visão
+  geral do projeto (leitura visível a todos; conceder/revogar só pra
+  Admin de projeto e superadmin).
+- **UX de salvamento** — edição de campos de tabela e de coluna passa a
+  ter botão "Salvar" explícito + toast, em vez de salvar no blur.
 
 ---
 
 ## Objetivo
 
 Metadados editáveis de tabela e coluna — descrição, ownership,
-classificação, certificação, links relacionados e histórico de edição no
-nível tabela; descrição, PII confirmado e termo de glossário no nível
-coluna — gated por escrita pelo papel "Admin de projeto"
-(`docs/specs/admin.md` v1.11, escopo: metadados + budget). Leitura aberta
-a qualquer usuário com acesso ao projeto (mesma regra de sempre,
-`require_project_access`).
+classificação, estado de governança (`status`), links relacionados e
+histórico de edição no nível tabela; descrição, PII confirmado e termo de
+glossário no nível coluna, também com histórico — gated por escrita pelo
+papel "Admin de projeto" (`docs/specs/admin.md` v1.11, escopo: metadados
++ budget). Leitura aberta a qualquer usuário com acesso ao projeto (mesma
+regra de sempre, `require_project_access`).
 
 **Princípio central**: linkar/exibir o que já existe (lineage, análise de
 qualidade, freshness, budget) em vez de duplicar dado — `domains/metadata`
@@ -37,13 +57,15 @@ sidebar nem só uma aba escondida):
 
 1. **Sidebar → Governança → "Metadados"** (3º item, ao lado de Freshness
    e Tabelas sem consumidor, já existentes) → `MetadataOverviewPage`:
-   lista/busca de tabelas do projeto com status de certificação, dono e
-   tags — ponto de entrada geral, "quais tabelas estão documentadas e
-   quais não".
+   lista/busca de tabelas do projeto com `status`, dono e tags — ponto de
+   entrada geral, "quais tabelas estão documentadas e quais não". **v2.0**:
+   também hospeda a fila "Pendentes de revisão" (com Aprovar/Devolver
+   inline pra revisores) e o painel "Gerenciar acesso" (Admin de projeto).
 2. **`/analyze/:datasetId/:tableId` → 8º card "Metadados"** (junto de
    Schema, Qualidade, PII, Tipos de coluna, Histórico, Acesso, Lineage) →
-   `MetadataAnalysisPage`: edição de fato, tabela + colunas, com os links
-   pras outras 6 análises da mesma tabela.
+   `MetadataAnalysisPage`: edição de fato, tabela + colunas (botão
+   "Salvar" explícito), painel "Estado de governança" com as ações do
+   fluxo de revisão, e os links pras outras 6 análises da mesma tabela.
 
 ---
 
@@ -77,14 +99,16 @@ hub_projects/{project_id}/metadata_tables/{dataset_id}__{table_id}
   "description": "Eventos de e-commerce normalizados, granularidade de evento.",
   "owner": {
     "technical_owner": "ana@dp6.com.br",
-    "steward": "bruno@dp6.com.br",
     "team": "Dados — Cliente A"
   },
   "classification": {
     "domain": "e-commerce",
     "sensitivity": "confidencial"
   },
-  "certification_status": "approved",
+  "status": "approved",
+  "status_changed_by": "ana@dp6.com.br",
+  "status_changed_at": "2026-09-05T10:00:00Z",
+  "review_note": null,
   "related_links": [
     {"label": "Runbook de troubleshooting", "url": "https://..."}
   ],
@@ -123,19 +147,26 @@ hub_projects/{project_id}/metadata_tables/{dataset_id}__{table_id}
 ```
 hub_projects/{project_id}/metadata_tables/{dataset_id}__{table_id}/history/{auto_id}
 {
-  "field": "certification_status",
+  "field": "status",
   "old_value": "in_review",
   "new_value": "approved",
   "changed_by": "ana@dp6.com.br",
-  "changed_at": "2026-09-05T10:00:00Z"
+  "changed_at": "2026-09-05T10:00:00Z",
+  "column_name": null,
+  "note": null
 }
 ```
 
-`certification_status` ∈ `draft` | `in_review` | `approved` (enum fixo —
-sem estado customizável nesta v1). `classification.sensitivity` é texto
-livre nesta v1 (sem enum fechado — times diferentes usam vocabulário
-diferente; um enum viria de uma demanda real de padronização, não
-antecipado).
+`status` ∈ `draft` | `in_review` | `approved` (enum fixo — sem estado
+customizável). `classification.sensitivity` é texto livre (sem enum
+fechado — times diferentes usam vocabulário diferente; um enum viria de
+uma demanda real de padronização, não antecipado).
+
+**Entradas de histórico de coluna** têm `column_name` preenchido e
+`field` ∈ `description` | `glossary_term` | `pii_flag`. **`note`** é
+preenchido só nas devoluções de revisão (`in_review → draft` com
+comentário). Transições de `status` também geram entrada
+(`field: "status"`, `column_name: null`).
 
 **Colunas embutidas como mapa no doc da tabela, não subcoleção** — mais
 simples de ler (uma leitura só carrega tabela + todas as colunas), mas
@@ -145,10 +176,11 @@ disso). Pro volume esperado de metadados por coluna (poucos campos curtos
 por coluna), tabelas com centenas de colunas ainda ficam bem abaixo do
 limite — ver ASM-004.
 
-**Histórico registra só o campo de nível tabela** (`description`,
-`owner`, `classification`, `certification_status`) — edição de coluna
-(descrição, PII confirmado, glossário) não gera entrada de histórico
-nesta v1, ver "Fora do escopo".
+**Histórico registra campos de nível tabela** (`description`, `owner`,
+`classification`, `related_links`) via `PUT` genérico, **transições de
+`status`** via `PUT .../status`, e **edição de coluna** (`description`,
+`glossary_term`, `pii_flag`) com `column_name` preenchido. Sem paginação
+(volume esperado baixo).
 
 ---
 
@@ -169,7 +201,10 @@ válido, não um erro. Gated por `require_project_access`.
   "description": null,
   "owner": null,
   "classification": null,
-  "certification_status": null,
+  "status": null,
+  "status_changed_by": null,
+  "status_changed_at": null,
+  "review_note": null,
   "related_links": [],
   "columns": {},
   "updated_at": null,
@@ -185,11 +220,25 @@ documentação".
 
 ### PUT /api/v1/metadata/{project_id}/{dataset_id}/{table_id}
 Upsert dos campos de nível tabela. Body (`MetadataTableUpsertRequest`):
-`{ description?, owner?, classification?, certification_status?,
-related_links? }` — todos opcionais, só os campos enviados são
-atualizados (patch parcial, não substituição do doc inteiro). Cada campo
-alterado gera uma entrada em `history`. Gated por
+`{ description?, owner?, classification?, related_links? }` — todos
+opcionais, só os campos enviados são atualizados (patch parcial, não
+substituição do doc inteiro). Cada campo alterado gera uma entrada em
+`history`. **`status` não entra aqui** — muda só por
+`PUT .../{table}/status`. Gated por
 `require_project_admin(project_id, dataset_id)`.
+
+### PUT /api/v1/metadata/{project_id}/{dataset_id}/{table_id}/status
+Transição do estado de governança. Body (`MetadataStatusUpdateRequest`):
+`{ target: "draft"|"in_review"|"approved", note? }`. `note` só é
+persistido (em `review_note` e na entrada de histórico) numa devolução
+para ajustes (`in_review → draft`); nas demais transições é ignorado e
+`review_note` é limpo. Gated por
+`require_project_admin(project_id, dataset_id)`. Regras de transição em
+"Fluxo de revisão" — transição não permitida devolve **409**
+(`invalid_status_transition`); pedir o estado em que já está é no-op
+(200, sem histórico). Toda transição efetiva grava
+`status_changed_by`/`status_changed_at` e uma entrada de histórico
+(`field: "status"`).
 
 ### PUT /api/v1/metadata/{project_id}/{dataset_id}/{table_id}/columns/{column_name}
 Upsert dos campos de uma coluna. Body (`MetadataColumnUpsertRequest`):
@@ -213,16 +262,17 @@ por coluna, ver "Casos de borda"). **Não dispara um scan novo** — só lê o
 que já existe; disparar fica na tela de PII, não nesta.
 
 ### GET /api/v1/metadata/{project_id}/{dataset_id}/{table_id}/history
-Lista o histórico de edições de nível tabela, mais recente primeiro.
-Sem paginação nesta v1 (volume esperado baixo — poucos campos, edição
-não é uma ação de alta frequência).
+Lista o histórico de edições, mais recente primeiro — inclui campos de
+nível tabela, transições de `status` e edições de coluna (`column_name`
+preenchido). Sem paginação (volume esperado baixo — edição não é uma
+ação de alta frequência).
 
 ### GET /api/v1/metadata/{project_id}
 Listagem/busca pra `MetadataOverviewPage`. Enumera todas as tabelas do
 projeto (reaproveita `catalog.list_all_table_refs`, custo $0,
 `INFORMATION_SCHEMA`) e faz join em memória com os docs de
 `metadata_tables` existentes — tabelas sem doc aparecem com
-`has_metadata: false`. **Parâmetros opcionais**: `certification_status`,
+`has_metadata: false`. **Parâmetros opcionais**: `status`,
 `datasets` (repetível), `owner_email`, `q` (busca substring em
 description/tags). Filtro em Python, não em query Firestore (coleção
 pequena pro volume esperado — poucas centenas de tabelas documentadas por
@@ -235,8 +285,8 @@ projeto, mesmo racional de `list_budgets`).
   "tables": [
     {
       "dataset_id": "RAW", "table_id": "ga4_events",
-      "has_metadata": true, "certification_status": "approved",
-      "owner": {"technical_owner": "ana@dp6.com.br", "steward": null, "team": "Dados"},
+      "has_metadata": true, "status": "approved",
+      "owner": {"technical_owner": "ana@dp6.com.br", "team": "Dados"},
       "classification": {"domain": "e-commerce", "sensitivity": "confidencial"},
       "updated_at": "2026-09-05T10:00:00Z"
     }
@@ -248,6 +298,31 @@ projeto, mesmo racional de `list_budgets`).
 
 Todos os endpoints acima ficam sob `api/v1/metadata.py`, prefixo
 `/api/v1/metadata`.
+
+---
+
+## Fluxo de revisão (v2.0)
+
+`status` representa o estado de governança da tabela e só muda pelo
+endpoint `PUT .../{table}/status`. Não há revisores designados,
+notificação, nem trava de edição enquanto em revisão (o conteúdo
+continua editável via `PUT` genérico) — é um fluxo leve.
+
+**Regras de transição:**
+
+| Quem | De | Para | Efeito |
+|---|---|---|---|
+| Admin de projeto | `draft` (ou nunca setado) | `in_review` | "Enviar para revisão" |
+| Admin de projeto | `in_review` | `approved` | "Aprovar" — qualquer Admin de projeto do dataset, inclusive quem enviou |
+| Admin de projeto | `in_review` | `draft` | "Devolver para ajustes" — `note` vira `review_note` e entra no histórico |
+| Admin de projeto | `approved` | `draft` / `in_review` | Reabrir para edição |
+| Admin de projeto | `draft` | `approved` (direto) | **409** — precisa passar por `in_review` |
+| Superadmin | qualquer | qualquer | Sempre permitido; **`in_review` é resolvido direto pra `approved`** (auto-aprovar) |
+
+**Decisões do usuário (2026-09-06):** qualquer Admin de projeto pode
+aprovar, inclusive a própria submissão (sem segregação); superadmin
+auto-aprova. Pedir a transição pro estado atual é no-op (200, sem
+histórico).
 
 ---
 
@@ -307,9 +382,10 @@ apps/frontend/src/
 │   ├── ColumnMetadataTable.tsx    # tabela editável de colunas (descrição, PII, glossário)
 │   ├── PiiConfirmationBadge.tsx   # sugestão do scanner + confirmação manual (por coluna)
 │   ├── ProjectAdminsPanel.tsx     # "Gerenciar acesso" — grant/revoke de Admin de projeto,
-│   │                              # consome GET/PUT/DELETE /projects/{id}/admins (admin.md v1.11)
+│   │                              # consome GET/PUT/DELETE /projects/{id}/admins (admin.md v1.11).
+│   │                              # v2.0: renderizado na MetadataOverviewPage (era na aba por tabela)
 │   ├── hooks.ts
-│   └── types.ts
+│   └── types.ts (types/metadata.ts)
 ├── features/catalog/
 │   └── DatasetSidebar.tsx        # + NavLink "Metadados" dentro da seção Governança existente
 ├── features/governance/
@@ -332,9 +408,13 @@ apps/frontend/src/
 | `PUT .../columns/{column_name}` pra coluna que não existe mais na tabela real (dropada no BQ) | 404 — checado contra `catalog.get_table_detail`, não contra o doc de metadados |
 | Coluna existe no BQ mas nunca teve metadados gravados | Aparece em `columns` como objeto vazio (`description: null`, `pii: null`, `glossary_term: null`) na resposta do `GET` da tabela — a enumeração de colunas vem de `catalog`, não do doc do Firestore, então uma coluna sem metadado ainda aparece na UI pra ser preenchida |
 | `related_links` com URL malformada | Validação básica de schema (deve começar com `http://`/`https://`) — 422 se falhar, sem checagem de que a URL responde |
-| `certification_status` fora do enum | 422 |
+| `status` (body de `PUT .../status`) fora do enum | 422 |
+| `PUT .../status` com transição não permitida pro papel (ex: Admin de projeto pedindo `draft → approved`) | 409 (`invalid_status_transition`) |
+| `PUT .../status` pedindo o estado em que a tabela já está | 200, no-op — não regrava, não gera histórico |
+| Superadmin faz `PUT .../status` com `target: "in_review"` | Resolvido direto pra `approved` na resposta (auto-aprovar) |
+| Doc gravado na v1.0 com `owner.steward` | Ignorado na leitura (Pydantic descarta campo extra) — não quebra |
 | Admin de projeto escopado a `datasets: ["RAW"]` tentando editar tabela de `TRUSTED` | 403 (`require_project_admin` nega) |
-| Dois editores simultâneos no mesmo campo | Último `PUT` vence (sem lock otimista nesta v1) — mesma premissa de `hub_users`/`hub_projects`/`hub_groups`, nenhum desses tem controle de concorrência hoje |
+| Dois editores simultâneos no mesmo campo | Último `PUT` vence (sem lock otimista) — mesma premissa de `hub_users`/`hub_projects`/`hub_groups`, nenhum desses tem controle de concorrência hoje |
 | `GET /metadata/{project_id}` num projeto com centenas de tabelas, poucas documentadas | Enumeração via `catalog.list_all_table_refs` ($0) continua rápida; o join com `metadata_tables` é uma leitura de coleção pequena (só as documentadas existem como doc) |
 | Lineage/qualidade/freshness/budget indisponíveis (warning nas respectivas respostas) | A aba de metadados propaga o `warning` de cada painel individualmente (mesmo padrão de degradação do resto do produto) — nunca bloqueia a edição de metadados por causa de outro domínio estar fora do ar |
 
@@ -347,11 +427,15 @@ apps/frontend/src/
 | AC-META-001 | `GET .../metadata/{p}/{d}/{t}` nunca retorna 404 — tabela sem doc devolve `has_metadata: false` | `test_get_table_metadata_returns_empty_shape_when_undocumented` |
 | AC-META-002 | `PUT .../metadata/{p}/{d}/{t}` é patch parcial — campo não enviado no body permanece com o valor anterior | `test_upsert_table_metadata_partial_update_preserves_other_fields` |
 | AC-META-003 | Toda alteração de campo de nível tabela via `PUT` gera uma entrada em `history` com `old_value`/`new_value` | `test_upsert_table_metadata_writes_history_entry_per_changed_field` |
-| AC-META-004 | `PUT .../columns/{column}` com `pii_flag` sempre grava `source="manual"` + `confirmed_by`/`confirmed_at`, mesmo quando o valor confirma exatamente o `scanner_flagged` | `test_confirm_pii_flag_always_records_manual_confirmation` |
-| AC-META-005 | `PUT .../columns/{column}` pra uma coluna que não existe na tabela real (via `catalog`) retorna 404 | `test_upsert_column_metadata_404_for_nonexistent_column` |
-| AC-META-006 | Endpoints de escrita (`PUT` tabela, `PUT` coluna) exigem `require_project_admin` escopado ao `dataset_id` da tabela; endpoints de leitura só `require_project_access` | `test_write_endpoints_require_project_admin_scoped_to_dataset`, `test_read_endpoints_require_only_project_access` |
+| AC-META-004 | `PUT .../columns/{column}` com `pii_flag` sempre grava `source="manual"` + `confirmed_by`/`confirmed_at`, mesmo quando o valor confirma exatamente o `scanner_flagged` | `test_upsert_column_metadata_pii_flag_always_records_manual_confirmation` |
+| AC-META-005 | `PUT .../columns/{column}` pra uma coluna que não existe na tabela real (via `catalog`) retorna 404 | `test_upsert_column_metadata_404_when_column_missing_from_real_table` |
+| AC-META-006 | Endpoints de escrita (`PUT` tabela, `PUT` status, `PUT` coluna) exigem `require_project_admin` escopado ao `dataset_id` da tabela; endpoints de leitura só `require_project_access` | `test_write_endpoints_require_project_admin_scoped_to_dataset`, `test_read_endpoints_require_only_project_access` |
 | AC-META-007 | `GET /metadata/{project_id}` lista todas as tabelas do projeto (via `catalog`), marcando `has_metadata=false` pras sem doc, sem excluí-las da lista | `test_get_metadata_overview_includes_undocumented_tables` |
-| AC-META-008 | `GET .../suggested-pii` lê o scan mais recente por coluna de `pii_scan_history`, vazio se a tabela nunca foi escaneada — nunca dispara um scan novo | `test_get_suggested_pii_reads_latest_scan_without_triggering_new_scan` |
+| AC-META-008 | `GET .../suggested-pii` lê o scan mais recente por coluna de `pii_scan_history`, vazio se a tabela nunca foi escaneada — nunca dispara um scan novo | `test_get_suggested_pii_returns_latest_scan_columns` |
+| AC-META-009 | `PUT .../status` por Admin de projeto: `draft → in_review` e `in_review → approved` funcionam; `draft → approved` direto retorna 409 | `test_update_status_project_admin_submits_for_review`, `test_update_status_project_admin_can_approve_from_in_review`, `test_update_status_project_admin_cannot_skip_straight_to_approved` |
+| AC-META-010 | `PUT .../status` por superadmin com `target: in_review` resolve direto pra `approved` | `test_update_status_superadmin_submit_auto_approves` |
+| AC-META-011 | `PUT .../status` `in_review → draft` com `note` grava `review_note` e uma entrada de histórico com `note` | `test_update_status_return_for_changes_keeps_note` |
+| AC-META-012 | Edição de coluna (`description`/`glossary_term`/`pii_flag`) gera entrada de `history` com `column_name` preenchido, e pula quando o valor não muda | `test_upsert_column_metadata_writes_history_for_changed_column_fields`, `test_upsert_column_metadata_skips_history_when_column_field_unchanged` |
 
 ---
 
@@ -364,7 +448,9 @@ apps/frontend/src/
 | ASM-003 | O endpoint de freshness por tabela (`GET /freshness/{p}/{d}/{t}`) é um pré-requisito pequeno desta feature, mas pertence à spec de `freshness.md`, não a esta — implementado em paralelo, sem query BQ nova. | confirmada |
 | ASM-004 | Colunas embutidas como mapa no doc da tabela (não subcoleção) — risco de aproximar o limite de 1MiB do Firestore em tabelas com centenas de colunas é considerado baixo pro volume esperado de campos por coluna, mas é um risco monitorado, não uma garantia. Se um projeto real bater o limite, a correção é mover `columns` pra subcoleção (mudança de storage, não de contrato de API). | confirmada, monitorada |
 | ASM-005 | PII por coluna é sugestão-do-scanner + confirmação manual (não "só scanner, sem edição" nem "totalmente manual") — decisão do usuário. O valor "oficial" fica salvo na metadata (`pii.flag`), não depende de reexecutar o scan pra continuar visível. | confirmada com o usuário |
-| ASM-006 | Glossário v1 é campo de texto livre por coluna (`glossary_term: string \| null`), sem registro/validação — decisão do usuário. Um registro de termos de verdade (CRUD, dropdown, glossário compartilhado entre tabelas) fica pra uma spec futura. | confirmada com o usuário |
+| ASM-006 | Glossário é campo de texto livre por coluna (`glossary_term: string \| null`), sem registro/validação — decisão do usuário. Um registro de termos de verdade (CRUD, dropdown, glossário compartilhado entre tabelas) fica pra uma spec futura. | confirmada com o usuário |
+| ASM-007 | Fluxo de revisão sem segregação de função: qualquer Admin de projeto aprova qualquer submissão, inclusive a própria. Superadmin auto-aprova ao enviar pra revisão. | confirmada com o usuário (2026-09-06) |
+| ASM-008 | `status` foi renomeado de `certification_status` na API e no Firestore; docs v1.0 existentes precisam ser reprocessados ou migrados. Volume pré-produção baixo, migração não é bloqueante. | confirmada com o usuário (2026-09-06) |
 
 ---
 
@@ -373,25 +459,21 @@ apps/frontend/src/
 - **Registro de glossário como CRUD de termos** (dropdown, catálogo
   compartilhado, validação de termo existente) — v1 é campo livre; ver
   ASM-006. Spec futura se houver demanda real.
-- **Histórico de edição de coluna** (descrição, PII confirmado,
-  glossário) — só o histórico de nível tabela é registrado nesta v1. Uma
-  coluna editada não deixa rastro de "quem mudou o quê" além do
-  `pii.confirmed_by`/`confirmed_at` (que não é um log, é só o último
-  estado).
 - **Lock otimista / edição concorrente** — último `PUT` vence, mesma
   premissa do resto do ACL do Atlas.
 - **Delegação de Admin de projeto pra grupo** — coberto (como fora de
   escopo) em `docs/specs/admin.md` v1.11.
-- **Aprovação/fluxo de revisão pra `certification_status`** — mudar o
-  status é uma edição de campo comum (`PUT`), sem workflow de
-  aprovação/rejeição por outra pessoa.
-- **Notificação quando um campo de metadado muda** — sem e-mail/alerta,
-  só o histórico dentro da tela.
-- **Metadados a nível de dataset ou projeto** (só tabela/coluna nesta
-  v1) — "quanto o dataset X representa" não tem um doc próprio; a visão
-  de dataset é agregada a partir das tabelas na `MetadataOverviewPage`
-  (contagem de tabelas documentadas/certificadas), não um registro
-  editável separado.
+- **Fluxo de revisão pesado** (v2.0 traz um leve, ver "Fluxo de
+  revisão") — sem revisores designados, sem trava de edição enquanto em
+  revisão, sem SLA. Segregação de função ("quem envia não aprova") foi
+  explicitamente descartada pelo usuário.
+- **Notificação quando um campo de metadado muda ou entra em revisão** —
+  sem e-mail/alerta, só o histórico e a fila de pendentes dentro da tela.
+- **Metadados a nível de dataset ou projeto** (só tabela/coluna) —
+  "quanto o dataset X representa" não tem um doc próprio; a visão de
+  dataset é agregada a partir das tabelas na `MetadataOverviewPage`
+  (contagem de documentadas/aprovadas), não um registro editável
+  separado.
 - **Exportar/importar metadados em lote** (CSV, API bulk) — cadastro é
   um a um pela UI nesta v1.
 - **Sincronizar a descrição do Atlas de volta pro BigQuery** (escrever em

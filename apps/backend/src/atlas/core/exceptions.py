@@ -266,3 +266,20 @@ class ProjectAdminRequiredError(Exception):
             f"Esta ação requer o papel de Admin de projeto em '{project_id}'. "
             "Peça a um Admin de projeto ou a um administrador do Hub para conceder acesso."
         )
+
+
+class InvalidStatusTransitionError(Exception):
+    """Levantada por domains/metadata/service.py::update_status — a
+    transição de estado de governança pedida não é permitida pra quem
+    pediu (ex: um Admin de projeto tentando pular direto de `draft` pra
+    `approved` sem passar por `in_review`). Superadmin não cai aqui: pode
+    qualquer transição. Ver docs/specs/metadata.md v2.0, "Fluxo de
+    revisão"."""
+
+    def __init__(self, current: str | None, target: str) -> None:
+        self.current = current
+        self.target = target
+        super().__init__(
+            f"Transição de status inválida: '{current or 'draft'}' → '{target}'. "
+            "Envie para revisão antes de aprovar."
+        )

@@ -1020,9 +1020,13 @@ apps/frontend/src/
 
 A UI de conceder/revogar Admin de projeto **não** vive em `features/admin/`
 (gated por `RequireAdmin`, exclusivo de superadmin) — vive dentro de
-`features/metadata/` (seção "Gerenciar acesso" da visão de Governança do
-projeto), porque o próprio propósito do papel é permitir que alguém sem
-ser superadmin administre; ver `docs/specs/metadata.md`, "Frontend".
+`features/metadata/` (`ProjectAdminsPanel`), porque o próprio propósito do
+papel é permitir que alguém sem ser superadmin administre; ver
+`docs/specs/metadata.md`, "Frontend". **Desde metadata.md v2.0 o painel é
+renderizado na `MetadataOverviewPage`** (visão geral de Metadados do
+projeto), não mais na aba de metadados de cada tabela — leitura visível a
+qualquer um com acesso ao projeto, conceder/revogar só pra Admin de
+projeto (`datasets: null`) e superadmin.
 
 ---
 

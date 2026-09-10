@@ -28,7 +28,7 @@ export function GovernanceOverviewPage() {
         <OptionCard
           icon={<BookOpenCheck />}
           title="Metadados"
-          description="Descrição, ownership, classificação e certificação por tabela — quais já estão documentadas."
+          description="Descrição, ownership, classificação e estado de governança por tabela — quais já estão documentadas."
           to="/metadados"
         />
       </OptionCardGrid>

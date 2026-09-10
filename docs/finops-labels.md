@@ -1,13 +1,13 @@
 # Labels de FinOps — taxonomia e consulta de custo
 
 **Objetivo:** este projeto GCP (`dp6-ci-polaris`, ver `CLAUDE.md`) roda
-dev e prod do Atlas hoje, e pode vir a hospedar outras
-iniciativas do Polaris no mesmo projeto amanhã — a topologia
-single-project não separa custo por fronteira de projeto (ver
+dev e prod do Atlas, e desde 2026-09 também hospeda o **site Polaris**
+(repo `DP6/polaris-heap`, deploy em `us-central1`) no mesmo projeto — a
+topologia single-project não separa custo por fronteira de projeto (ver
 `CLAUDE.md`, "Projetos e ambientes GCP"). Sem label, o custo de uma app
 não se distingue do de outra na mesma fatura. Este documento define a
-taxonomia de label obrigatória em todo recurso GCP do Atlas e como usá-la
-depois pra consultar/filtrar custo.
+taxonomia de label obrigatória em todo recurso GCP das apps que rodam
+neste projeto e como usá-la depois pra consultar/filtrar custo.
 
 Não confundir com convenção de **nome** de recurso — isso é outro assunto
 (nomenclatura de recurso, código curto etc.), fora do escopo deste
@@ -32,8 +32,18 @@ frente ao risco de renomear recurso já em produção).
 | Chave | Valores válidos | Obrigatório em |
 |---|---|---|
 | `environment` | `dev` \| `prod` | Todo recurso que suporte label |
-| `app` | `atlas` (nome do produto, ver rename registrado no `CHANGELOG.md`) | Todo recurso do Atlas |
+| `app` | `atlas` \| `polaris` | Todo recurso, com o valor da app dona |
 | `managed-by` | `terraform` \| `manual` | Todo recurso |
+
+`app` = nome curto do produto/iniciativa que roda no projeto:
+- `atlas` — o hub de observabilidade (este repo; rename registrado no
+  `CHANGELOG.md`). Recursos por Terraform → `managed-by=terraform`.
+- `polaris` — o site de conhecimento (`DP6/polaris-heap`). **Não tem
+  Terraform**: deploy por `gcloud run deploy` no GitHub Actions, então
+  seus recursos são `managed-by=manual` e os labels entram via `--labels`
+  nos comandos `gcloud` (ver §3). Só ambiente `prod` (não há split
+  dev/prod). Registro dos recursos: `GCP-COMPONENTS.md` na raiz daquele
+  repo (equivalente a `docs/gcp-components.md` aqui).
 
 Não usar nenhuma outra chave sem atualizar esta tabela primeiro — em
 particular, **não** introduzir `team`/`cost-center`: só o time de CI/dev
@@ -41,7 +51,8 @@ do Polaris consome esses dados hoje (ver decisão registrada nesta
 conversa), `app` já basta pra saber de quem é cada linha de custo. Se
 isso mudar (ex.: financeiro/gestão da DP6 passar a consultar), esta
 tabela precisa ganhar uma linha nova antes de qualquer label novo ser
-aplicado.
+aplicado. Adicionar um **valor** novo de `app` (nova iniciativa no
+projeto) também passa por editar esta tabela primeiro.
 
 Restrições de sintaxe do GCP (label, não nome de recurso): só minúsculas,
 números, `-` e `_`; sem `:`; chave e valor até 63 caracteres cada.
@@ -86,13 +97,19 @@ Duas ressalvas importantes:
   de novo dentro de cada `resource`, exceto se um recurso específico
   precisar de uma label a mais além das 3 padrão.
 
-**Recursos criados fora do Terraform** (hoje: secrets no Secret Manager,
-qualquer binding/config manual documentado em `docs/onboarding-cliente.md`)
-— `default_labels` não alcança. Aplicar manualmente:
+**Recursos criados fora do Terraform** (secrets no Secret Manager,
+qualquer binding/config manual documentado em `docs/onboarding-cliente.md`,
+e **todos os recursos do `app=polaris`** — aquele repo não tem Terraform)
+— `default_labels` não alcança. Aplicar na criação ou depois:
 
 ```bash
+# secret já existente (ou --labels=... no gcloud secrets create)
 gcloud secrets update NOME_DO_SECRET \
   --update-labels=environment=prod,app=atlas,managed-by=manual
+
+# polaris: --labels nos comandos gcloud do .github/workflows/deploy.yml
+gcloud run deploy polaris --labels=app=polaris,environment=prod,managed-by=manual ...
+gcloud artifacts repositories create polaris --labels=app=polaris,environment=prod,managed-by=manual ...
 ```
 
 **Status:** ✅ aplicado via `default_labels` em dev e prod em 2026-08-26
@@ -107,6 +124,11 @@ accounts e Firestore não suportam `default_labels` neste provider**
 (não apareceram no plan) — ficam sem label até existir outro mecanismo;
 ver `docs/gcp-components.md` pra status por recurso. Secrets no Secret
 Manager continuam pendentes (comando manual acima, ainda não executado).
+
+`app=polaris`: aplicado junto da migração do site pra `us-central1` —
+serviço Cloud Run + Artifact Registry via `--labels` no `deploy.yml`,
+secret `polaris-git-deploy-key` via `--update-labels`. Status por recurso
+no `GCP-COMPONENTS.md` do `DP6/polaris-heap`.
 
 ## 4. Billing Export pro BigQuery (passo manual, fora do que a SA do Atlas alcança)
 

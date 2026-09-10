@@ -139,6 +139,32 @@ def test_add_history_entry_and_list_history():
     assert added["changed_by"] == "a@dp6.com.br"
 
 
+def test_add_history_entry_carries_column_name_and_note():
+    client, metadata_tables = _fake_client_with_subcollection()
+    doc_ref = MagicMock()
+    metadata_tables.document.return_value = doc_ref
+    history_collection = MagicMock()
+    doc_ref.collection.return_value = history_collection
+
+    repository.add_history_entry(
+        client,
+        "proj-a",
+        "RAW",
+        "ga4_events",
+        "pii_flag",
+        "False",
+        "True",
+        "a@dp6.com.br",
+        column_name="email",
+        note=None,
+    )
+
+    added = history_collection.add.call_args[0][0]
+    assert added["column_name"] == "email"
+    assert added["field"] == "pii_flag"
+    assert added["note"] is None
+
+
 def test_list_history_orders_by_changed_at_desc():
     client, metadata_tables = _fake_client_with_subcollection()
     doc_ref = MagicMock()
@@ -155,6 +181,61 @@ def test_list_history_orders_by_changed_at_desc():
 
     assert len(result) == 1
     assert result[0]["field"] == "description"
+
+
+# --- set_status --------------------------------------------------------------
+
+
+def test_set_status_writes_status_fields_without_touching_updated_by():
+    client, metadata_tables = _fake_client_with_subcollection()
+    doc_ref = MagicMock()
+    metadata_tables.document.return_value = doc_ref
+    doc_ref.get.return_value = _doc(
+        {
+            "description": "desc",
+            "status": "in_review",
+            "updated_by": "editor@dp6.com.br",
+            "columns": {"col_a": {"description": "x"}},
+        },
+        exists=True,
+    )
+
+    result = repository.set_status(
+        client,
+        "proj-a",
+        "RAW",
+        "ga4_events",
+        status="approved",
+        changed_by="reviewer@dp6.com.br",
+        review_note=None,
+    )
+
+    assert result["status"] == "approved"
+    assert result["status_changed_by"] == "reviewer@dp6.com.br"
+    assert result["review_note"] is None
+    assert result["updated_by"] == "editor@dp6.com.br"  # conteúdo intocado
+    assert result["description"] == "desc"
+    assert result["columns"] == {"col_a": {"description": "x"}}
+
+
+def test_set_status_persists_review_note_on_return():
+    client, metadata_tables = _fake_client_with_subcollection()
+    doc_ref = MagicMock()
+    metadata_tables.document.return_value = doc_ref
+    doc_ref.get.return_value = _doc({"status": "in_review"}, exists=True)
+
+    result = repository.set_status(
+        client,
+        "proj-a",
+        "RAW",
+        "ga4_events",
+        status="draft",
+        changed_by="reviewer@dp6.com.br",
+        review_note="faltou dono técnico",
+    )
+
+    assert result["status"] == "draft"
+    assert result["review_note"] == "faltou dono técnico"
 
 
 # --- PII (read-only) ------------------------------------------------------------

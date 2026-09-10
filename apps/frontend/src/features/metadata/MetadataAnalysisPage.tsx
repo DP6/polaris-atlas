@@ -1,6 +1,7 @@
 import { ExternalLink, Link2, Plus, X } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { toast } from 'sonner'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { LoadingState } from '@/components/LoadingState'
 import { PageHeader } from '@/components/PageHeader'
@@ -8,14 +9,8 @@ import { Panel } from '@/components/Panel'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { useCurrentUser } from '@/features/auth/hooks'
 import { useBudgets } from '@/features/finops/hooks'
 import { useTableFreshness } from '@/features/freshness/hooks'
 import { ColumnMetadataTable } from '@/features/metadata/ColumnMetadataTable'
@@ -23,12 +18,12 @@ import {
   useCanManageProject,
   useMetadataHistory,
   useTableMetadata,
+  useUpdateMetadataStatus,
   useUpsertTableMetadata,
 } from '@/features/metadata/hooks'
-import { ProjectAdminsPanel } from '@/features/metadata/ProjectAdminsPanel'
 import { useAnalysisContext } from '@/features/quality/analysisContext'
 import { formatUsd } from '@/lib/format'
-import type { CertificationStatus, RelatedLink } from '@/types/metadata'
+import type { GovernanceStatus, MetadataTableUpsertRequest, RelatedLink } from '@/types/metadata'
 
 // Defesa em profundidade pro CodeQL js/xss-through-dom: o backend já
 // valida `url` contra ^https?:// no schema de request (Pydantic), mas o
@@ -46,10 +41,16 @@ function toSafeHref(url: string): string | undefined {
   return SAFE_HTTP_URL_PATTERN.test(url) ? url : undefined
 }
 
-const CERTIFICATION_LABEL: Record<CertificationStatus, string> = {
+const STATUS_LABEL: Record<GovernanceStatus, string> = {
   draft: 'Rascunho',
   in_review: 'Em revisão',
   approved: 'Aprovado',
+}
+
+const STATUS_COLOR: Record<GovernanceStatus, string> = {
+  draft: 'var(--color-muted-foreground)',
+  in_review: 'var(--color-status-warn)',
+  approved: 'var(--color-status-ok)',
 }
 
 // 8º card do chooser de análise (`/analyze/:dataset/:table/metadata`) —
@@ -65,9 +66,11 @@ export function MetadataAnalysisPage() {
   const metadataQuery = useTableMetadata(projectId, datasetId, tableId)
   const historyQuery = useMetadataHistory(projectId, datasetId, tableId)
   const { canManage } = useCanManageProject(projectId, datasetId)
+  const isSuperadmin = Boolean(useCurrentUser().data?.is_admin)
   const freshnessQuery = useTableFreshness(projectId, datasetId, tableId)
   const budgetsQuery = useBudgets(projectId)
   const upsertTable = useUpsertTableMetadata(projectId, datasetId, tableId)
+  const updateStatus = useUpdateMetadataStatus(projectId, datasetId, tableId)
 
   const tableBudget = budgetsQuery.data?.budgets.find(
     (b) =>
@@ -88,7 +91,7 @@ export function MetadataAnalysisPage() {
         title={`Metadados — ${datasetId}.${tableId}`}
         description={
           canManage
-            ? 'Descrição, ownership, classificação e certificação desta tabela.'
+            ? 'Descrição, ownership, classificação e estado de governança desta tabela.'
             : 'Somente leitura — você não é Admin de projeto neste dataset.'
         }
       />
@@ -128,7 +131,26 @@ export function MetadataAnalysisPage() {
         </Link>
       </div>
 
-      <TableFieldsPanel metadata={metadata} canManage={canManage} onSave={upsertTable.mutate} />
+      <StatusPanel
+        metadata={metadata}
+        canManage={canManage}
+        isSuperadmin={isSuperadmin}
+        pending={updateStatus.isPending}
+        error={updateStatus.error}
+        onTransition={(target, note) =>
+          updateStatus
+            .mutateAsync({ target, note })
+            .then((res) => toast.success(`Status: ${STATUS_LABEL[res.status ?? 'draft']}`))
+            .catch(() => toast.error('Não foi possível mudar o status'))
+        }
+      />
+
+      <TableFieldsPanel
+        key={metadata.updated_at ?? 'new'}
+        metadata={metadata}
+        canManage={canManage}
+        upsert={upsertTable}
+      />
 
       <Panel title="Colunas">
         <ColumnMetadataTable
@@ -141,9 +163,13 @@ export function MetadataAnalysisPage() {
         />
       </Panel>
 
-      <Panel title="Gerenciar acesso" subtitle="Quem pode editar metadados e budget deste projeto.">
-        <ProjectAdminsPanel projectId={projectId} />
-      </Panel>
+      <p className="text-muted-foreground text-xs">
+        Quem pode editar metadados e budget deste projeto é gerenciado na{' '}
+        <Link to="/metadados" className="text-primary hover:underline">
+          visão geral de Metadados
+        </Link>
+        .
+      </p>
 
       <Panel title="Histórico de edição">
         {historyQuery.data && historyQuery.data.entries.length > 0 ? (
@@ -152,9 +178,14 @@ export function MetadataAnalysisPage() {
               // biome-ignore lint/suspicious/noArrayIndexKey: sem id próprio, lista append-only
               <li key={i} className="text-muted-foreground">
                 <span className="font-medium text-foreground">{entry.changed_by}</span> alterou{' '}
-                <span className="font-medium text-foreground">{entry.field}</span> de "
-                {entry.old_value ?? '—'}" para "{entry.new_value ?? '—'}" em{' '}
+                <span className="font-medium text-foreground">
+                  {entry.column_name
+                    ? `${entry.field} da coluna ${entry.column_name}`
+                    : entry.field}
+                </span>{' '}
+                de "{entry.old_value ?? '—'}" para "{entry.new_value ?? '—'}" em{' '}
                 {new Date(entry.changed_at).toLocaleString('pt-BR')}
+                {entry.note ? ` — "${entry.note}"` : ''}
               </li>
             ))}
           </ul>
@@ -166,18 +197,151 @@ export function MetadataAnalysisPage() {
   )
 }
 
-function TableFieldsPanel({
+function StatusBadge({ status }: { status: GovernanceStatus | null }) {
+  if (!status) {
+    return (
+      <Badge variant="outline" className="text-muted-foreground">
+        Sem status
+      </Badge>
+    )
+  }
+  return (
+    <Badge
+      variant="outline"
+      style={{ borderColor: STATUS_COLOR[status], color: STATUS_COLOR[status] }}
+    >
+      {STATUS_LABEL[status]}
+    </Badge>
+  )
+}
+
+function StatusPanel({
   metadata,
   canManage,
-  onSave,
+  isSuperadmin,
+  pending,
+  error,
+  onTransition,
 }: {
   metadata: NonNullable<ReturnType<typeof useTableMetadata>['data']>
   canManage: boolean
-  onSave: ReturnType<typeof useUpsertTableMetadata>['mutate']
+  isSuperadmin: boolean
+  pending: boolean
+  error: unknown
+  onTransition: (target: GovernanceStatus, note?: string) => void
+}) {
+  const [returnNote, setReturnNote] = useState('')
+  const [returning, setReturning] = useState(false)
+  const status = metadata.status
+  const changedAt = metadata.status_changed_at
+    ? new Date(metadata.status_changed_at).toLocaleString('pt-BR')
+    : null
+
+  return (
+    <Panel title="Estado de governança">
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <StatusBadge status={status} />
+          {metadata.status_changed_by && (
+            <span className="text-muted-foreground text-xs">
+              por {metadata.status_changed_by}
+              {changedAt ? ` em ${changedAt}` : ''}
+            </span>
+          )}
+        </div>
+
+        {status === 'draft' && metadata.review_note && (
+          <p className="rounded-md border border-status-warn/40 bg-status-warn/5 p-2 text-xs">
+            Devolvido para ajustes: "{metadata.review_note}"
+          </p>
+        )}
+
+        {canManage && (
+          <div className="flex flex-col gap-2 border-border border-t pt-3">
+            <div className="flex flex-wrap gap-2">
+              {isSuperadmin
+                ? status !== 'approved' && (
+                    <Button size="sm" disabled={pending} onClick={() => onTransition('approved')}>
+                      Aprovar
+                    </Button>
+                  )
+                : status !== 'in_review' &&
+                  status !== 'approved' && (
+                    <Button size="sm" disabled={pending} onClick={() => onTransition('in_review')}>
+                      Enviar para revisão
+                    </Button>
+                  )}
+
+              {!isSuperadmin && status === 'in_review' && (
+                <>
+                  <Button size="sm" disabled={pending} onClick={() => onTransition('approved')}>
+                    Aprovar
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={pending}
+                    onClick={() => setReturning((v) => !v)}
+                  >
+                    Devolver para ajustes
+                  </Button>
+                </>
+              )}
+
+              {status === 'approved' && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={pending}
+                  onClick={() => onTransition('draft')}
+                >
+                  Reabrir para edição
+                </Button>
+              )}
+            </div>
+
+            {returning && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  value={returnNote}
+                  onChange={(e) => setReturnNote(e.target.value)}
+                  placeholder="O que precisa de ajuste…"
+                  className="h-8 max-w-sm text-xs"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={pending || !returnNote.trim()}
+                  onClick={() => {
+                    onTransition('draft', returnNote.trim())
+                    setReturnNote('')
+                    setReturning(false)
+                  }}
+                >
+                  Confirmar devolução
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {Boolean(error) && <ApiErrorNotice error={error} />}
+      </div>
+    </Panel>
+  )
+}
+
+function TableFieldsPanel({
+  metadata,
+  canManage,
+  upsert,
+}: {
+  metadata: NonNullable<ReturnType<typeof useTableMetadata>['data']>
+  canManage: boolean
+  upsert: ReturnType<typeof useUpsertTableMetadata>
 }) {
   const [description, setDescription] = useState(metadata.description ?? '')
   const [technicalOwner, setTechnicalOwner] = useState(metadata.owner?.technical_owner ?? '')
-  const [steward, setSteward] = useState(metadata.owner?.steward ?? '')
   const [team, setTeam] = useState(metadata.owner?.team ?? '')
   const [domain, setDomain] = useState(metadata.classification?.domain ?? '')
   const [sensitivity, setSensitivity] = useState(metadata.classification?.sensitivity ?? '')
@@ -185,37 +349,66 @@ function TableFieldsPanel({
   const [newLinkLabel, setNewLinkLabel] = useState('')
   const [newLinkUrl, setNewLinkUrl] = useState('')
 
-  function saveOwner() {
-    onSave({
-      owner: {
-        technical_owner: technicalOwner || null,
-        steward: steward || null,
-        team: team || null,
-      },
-    })
-  }
+  const descriptionDirty = description !== (metadata.description ?? '')
+  const ownerDirty =
+    technicalOwner !== (metadata.owner?.technical_owner ?? '') ||
+    team !== (metadata.owner?.team ?? '')
+  const classificationDirty =
+    domain !== (metadata.classification?.domain ?? '') ||
+    sensitivity !== (metadata.classification?.sensitivity ?? '')
+  const dirty = descriptionDirty || ownerDirty || classificationDirty
 
-  function saveClassification() {
-    onSave({ classification: { domain: domain || null, sensitivity: sensitivity || null } })
+  function save() {
+    const payload: MetadataTableUpsertRequest = {}
+    if (descriptionDirty) payload.description = description || null
+    if (ownerDirty) payload.owner = { technical_owner: technicalOwner || null, team: team || null }
+    if (classificationDirty)
+      payload.classification = { domain: domain || null, sensitivity: sensitivity || null }
+    upsert
+      .mutateAsync(payload)
+      .then(() => toast.success('Metadados salvos'))
+      .catch(() => toast.error('Não foi possível salvar'))
   }
 
   function addLink() {
     if (!newLinkLabel.trim() || !newLinkUrl.trim()) return
     const next = [...links, { label: newLinkLabel.trim(), url: newLinkUrl.trim() }]
     setLinks(next)
-    onSave({ related_links: next })
+    upsert
+      .mutateAsync({ related_links: next })
+      .then(() => toast.success('Link adicionado'))
+      .catch(() => {
+        setLinks(links)
+        toast.error('Não foi possível adicionar o link')
+      })
     setNewLinkLabel('')
     setNewLinkUrl('')
   }
 
   function removeLink(index: number) {
     const next = links.filter((_, i) => i !== index)
+    const previous = links
     setLinks(next)
-    onSave({ related_links: next })
+    upsert
+      .mutateAsync({ related_links: next })
+      .then(() => toast.success('Link removido'))
+      .catch(() => {
+        setLinks(previous)
+        toast.error('Não foi possível remover o link')
+      })
   }
 
   return (
-    <Panel title="Metadados da tabela">
+    <Panel
+      title="Metadados da tabela"
+      actions={
+        canManage ? (
+          <Button size="sm" disabled={!dirty || upsert.isPending} onClick={save}>
+            Salvar
+          </Button>
+        ) : undefined
+      }
+    >
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
           <span className="text-label text-muted-foreground">Descrição</span>
@@ -223,9 +416,6 @@ function TableFieldsPanel({
             <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              onBlur={() => {
-                if (description !== (metadata.description ?? '')) onSave({ description })
-              }}
               placeholder="O que essa tabela representa…"
               rows={3}
             />
@@ -234,14 +424,13 @@ function TableFieldsPanel({
           )}
         </div>
 
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2">
           <div className="flex flex-col gap-1.5">
             <span className="text-label text-muted-foreground">Dono técnico</span>
             {canManage ? (
               <Input
                 value={technicalOwner}
                 onChange={(e) => setTechnicalOwner(e.target.value)}
-                onBlur={saveOwner}
                 placeholder="email@dp6.com.br"
               />
             ) : (
@@ -249,35 +438,22 @@ function TableFieldsPanel({
             )}
           </div>
           <div className="flex flex-col gap-1.5">
-            <span className="text-label text-muted-foreground">Steward</span>
-            {canManage ? (
-              <Input
-                value={steward}
-                onChange={(e) => setSteward(e.target.value)}
-                onBlur={saveOwner}
-              />
-            ) : (
-              <p className="text-sm">{metadata.owner?.steward ?? '—'}</p>
-            )}
-          </div>
-          <div className="flex flex-col gap-1.5">
             <span className="text-label text-muted-foreground">Time</span>
             {canManage ? (
-              <Input value={team} onChange={(e) => setTeam(e.target.value)} onBlur={saveOwner} />
+              <Input value={team} onChange={(e) => setTeam(e.target.value)} />
             ) : (
               <p className="text-sm">{metadata.owner?.team ?? '—'}</p>
             )}
           </div>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2">
           <div className="flex flex-col gap-1.5">
             <span className="text-label text-muted-foreground">Domínio</span>
             {canManage ? (
               <Input
                 value={domain}
                 onChange={(e) => setDomain(e.target.value)}
-                onBlur={saveClassification}
                 placeholder="ex: e-commerce"
               />
             ) : (
@@ -290,37 +466,10 @@ function TableFieldsPanel({
               <Input
                 value={sensitivity}
                 onChange={(e) => setSensitivity(e.target.value)}
-                onBlur={saveClassification}
                 placeholder="ex: confidencial"
               />
             ) : (
               <p className="text-sm">{metadata.classification?.sensitivity ?? '—'}</p>
-            )}
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <span className="text-label text-muted-foreground">Certificação</span>
-            {canManage ? (
-              <Select
-                value={metadata.certification_status ?? undefined}
-                onValueChange={(value) =>
-                  onSave({ certification_status: value as CertificationStatus })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecionar…" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="draft">Rascunho</SelectItem>
-                  <SelectItem value="in_review">Em revisão</SelectItem>
-                  <SelectItem value="approved">Aprovado</SelectItem>
-                </SelectContent>
-              </Select>
-            ) : (
-              <p className="text-sm">
-                {metadata.certification_status
-                  ? CERTIFICATION_LABEL[metadata.certification_status]
-                  : '—'}
-              </p>
             )}
           </div>
         </div>
