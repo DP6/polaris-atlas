@@ -542,7 +542,7 @@
         title: "Atlas",
         description: "Plataforma de observabilidade de dados no GCP: um só lugar pra saber o que existe nos datasets, se está saudável, quem usou, quanto custa e o que dá pra economizar — sem escrever uma query. Este é um tour pelas telas do produto.",
         topicsLabel: "O que o Atlas cobre",
-        topics: ["Catálogo de Dados", "Qualidade e schema drift", "Lineage e tabelas órfãs", "Fingerprint de PII", "Mapa de acesso", "Freshness com SLA", "FinOps", "Cloud Storage", "Favoritos e Recentes", "Administração"],
+        topics: ["Catálogo de Dados", "Qualidade e schema drift", "Lineage e tabelas órfãs", "Fingerprint de PII", "Mapa de acesso", "Freshness com SLA", "Metadados de governança", "FinOps", "Cloud Storage", "Favoritos e Recentes", "Administração"],
       },
       {
         title: "Login",
@@ -584,7 +584,7 @@
       {
         title: "Análise de uma tabela",
         domain: "Qualidade",
-        description: "Ao abrir uma tabela pra analisar, sete módulos num só lugar: schema, análise de qualidade, fingerprint de PII, sugestão de tipo de coluna, histórico, mapa de acesso e lineage.",
+        description: "Ao abrir uma tabela pra analisar, oito módulos num só lugar: schema, análise de qualidade, fingerprint de PII, sugestão de tipo de coluna, histórico, mapa de acesso, lineage e metadados de governança.",
         image: "06-analise-chooser.png",
       },
       {
@@ -657,7 +657,7 @@
       {
         title: "Governança — visão geral",
         domain: "Governança",
-        description: "Freshness com SLA e tabelas sem consumidor conhecido — as duas frentes de governança do catálogo, cada uma no seu card.",
+        description: "Freshness com SLA, tabelas sem consumidor conhecido e metadados de governança — as três frentes de governança do catálogo, cada uma no seu card. (Screenshot em atualização — o card de Metadados ainda não aparece.)",
         image: "18-governanca-visao-geral.png",
       },
       {
@@ -679,10 +679,26 @@
         image: "21-orfas-resultado.png",
       },
 
+      // TODO — PENDENTE DE CAPTURA: slides de "Metadados de governança"
+      // (9º domínio, entrou depois da última rodada de screenshots).
+      // Adicionar aqui, todos com domain: "Governança", quando os prints
+      // existirem em images/ (usar 49+ e renumerar, ou intercalar):
+      //   1. /metadados — visão geral do projeto: tabelas com estado de
+      //      documentação, fila "Pendentes de revisão" (aprovar/devolver
+      //      inline), painel "Gerenciar acesso" (Admin de projeto).
+      //   2. Módulo "Metadados" no seletor de análise de tabela: descrição,
+      //      ownership (technical_owner/team), classificação, status
+      //      (draft/in_review/approved), links relacionados; nível coluna:
+      //      descrição, PII confirmado, termo de glossário; botão "Salvar" + toast.
+      //   3. Fluxo de revisão + histórico de edição de tabela/coluna.
+      // Também recapturar o 18 (card de Metadados na overview de Governança)
+      // e o 06 (8º módulo no seletor de análise). Ver docs/site/tecnico/#metadados
+      // e docs/specs/metadata.md (v2.0).
+
       {
         title: "FinOps — visão geral",
         domain: "FinOps",
-        description: "Gasto do período, meta mensal, projeção e nº de tabelas de baixo score no topo; o custo ao longo do período num gráfico de barras + linha acumulada, com troca de granularidade (dia/mês) e de tipo (tudo/query/storage); e os cards de Scanner, Budget e Configurar budget à mão.",
+        description: "'Gasto no mês' (month-to-date, fixo) e 'Gasto no período filtrado' no topo, com meta mensal, projeção e nº de tabelas de baixo score; o custo ao longo do período num gráfico de barras + linha acumulada, com troca de granularidade (dia/mês) e de tipo (tudo/query/storage); e os cards de Scanner de desperdício e Detalhamento de custo à mão.",
         image: "22-finops-visao-geral.png",
       },
       {
@@ -722,21 +738,21 @@
         image: "28-finops-tipos-coluna-resultado.png",
       },
       {
-        title: "Budget de custo — janela",
+        title: "Detalhamento de custo — janela",
         domain: "FinOps",
-        description: "Estima o custo por audit log de jobs (bytes cobrados) + preço público on-demand, sem depender do Cloud Billing Export. A janela é escolhível — 7, 15, 30 dias ou um valor livre (teto de 31 dias, retenção do cache).",
+        description: "Chamado 'Budget de custo' até a v1.12. Estima o custo por audit log de jobs (bytes cobrados) + preço público on-demand, sem depender do Cloud Billing Export. A janela é escolhível — 7, 15, 30 dias ou um valor livre (teto de 31 dias, retenção do cache).",
         image: "29-finops-budget-config.png",
       },
       {
-        title: "Budget de custo — resultado",
+        title: "Detalhamento de custo — resultado",
         domain: "FinOps",
-        description: "Custo até agora, média diária, projeção mensal (run-rate) e a janela analisada; o custo quebrado por tabela / dataset / usuário / dia / mês / ano e as queries mais caras.",
+        description: "Custo até agora, média diária, projeção e janela analisada; o custo quebrado por tabela / dataset / usuário / dia / mês / ano e as queries mais caras. Por tabela/dataset: split query + storage em barras empilhadas e comparação com a meta cadastrada (badge Dentro / Acima da meta).",
         image: "30-finops-budget-resultado.png",
       },
       {
         title: "Configurar metas de budget",
         domain: "FinOps",
-        description: "Metas de custo mensais por projeto, dataset ou tabela — a meta de escopo 'projeto' vira a linha de referência no gráfico de custo. Cada usuário tem as suas.",
+        description: "Metas de custo mensais por projeto, dataset ou tabela — a meta de escopo 'projeto' vira a linha de referência no gráfico de custo. Compartilhada por projeto: qualquer um com acesso vê a meta, só um Admin de projeto edita.",
         image: "31-finops-budget-dialog.png",
       },
 
@@ -802,7 +818,7 @@
       {
         title: "Admin — por projeto",
         domain: "Administração",
-        description: "A visão inversa — escolhe um projeto e vê quem tem acesso, com a opção de liberar pra todo mundo de uma vez e um checklist que testa na hora se a service account do Atlas consegue ler aquele projeto.",
+        description: "A visão inversa — escolhe um projeto e vê quem tem acesso, com a opção de liberar pra todo mundo de uma vez e um checklist que testa na hora se a service account do Atlas consegue ler aquele projeto. (O papel 'Admin de projeto' — direito de escrever metadados e metas de budget de um projeto — é gerido à parte, na visão geral de Metadados.)",
         image: "39-admin-por-projeto.png",
       },
       {
@@ -864,7 +880,7 @@
         title: "Obrigado",
         description: "Esse foi um resumo das principais telas do Atlas. Dúvidas ou sugestões? Fale com o time responsável pelo Atlas na DP6.",
         topicsLabel: "Tudo isso num só lugar",
-        topics: ["Catálogo de Dados", "Qualidade e schema drift", "Lineage e tabelas órfãs", "Fingerprint de PII", "Mapa de acesso", "Freshness com SLA", "FinOps", "Cloud Storage", "Favoritos e Recentes", "Administração"],
+        topics: ["Catálogo de Dados", "Qualidade e schema drift", "Lineage e tabelas órfãs", "Fingerprint de PII", "Mapa de acesso", "Freshness com SLA", "Metadados de governança", "FinOps", "Cloud Storage", "Favoritos e Recentes", "Administração"],
       },
     ];
 
