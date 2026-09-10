@@ -11,10 +11,12 @@
 projeto GCP "alvo" (projeto de cliente, ou qualquer projeto que não seja
 o próprio projeto onde o Atlas roda — `dp6-ci-polaris`, hospedando dev
 e prod juntos nesta topologia, ver `CLAUDE.md`) para que o Atlas consiga
-observá-lo — os oito domínios (catálogo, freshness, profiling/qualidade,
-lineage/tabelas órfãs, fingerprinting de PII, mapa de acesso, FinOps e
-Cloud Storage, ver `CLAUDE.md`) usam exatamente as roles e APIs listadas
-abaixo, sem exceção nem role extra por domínio.
+observá-lo — os nove domínios (catálogo, freshness, profiling/qualidade,
+lineage/tabelas órfãs, fingerprinting de PII, mapa de acesso, FinOps,
+Cloud Storage e metadados de governança, ver `CLAUDE.md`) usam exatamente
+as roles e APIs listadas abaixo, sem exceção nem role extra por domínio.
+Metadados de governança não adiciona nada a este checklist: grava só no
+Firestore do próprio Atlas e lê o mesmo `INFORMATION_SCHEMA` do catálogo.
 
 Modelo de acesso: **Modelo A — service account com acesso cross-project**
 (ver [ADR-006](adr/ADR-006-cross-project.md)). O Atlas nunca instala nada no
@@ -53,9 +55,9 @@ projeto:
 | Produção (uso real com cliente) | `backend-prod-run@dp6-ci-polaris.iam.gserviceaccount.com` |
 | Dev (teste interno) | `backend-dev-run@dp6-ci-polaris.iam.gserviceaccount.com` |
 
-Dev e prod rodam no mesmo projeto GCP (`dp6-ci-polaris`, repo real
-`polaris-hub-gcp`) — o que diferencia as duas service accounts é o nome,
-não o projeto. (Nota: os nomes acima referenciavam o projeto do
+Dev e prod rodam no mesmo projeto GCP (`dp6-ci-polaris`, repo
+`DP6/polaris-atlas`) — o que diferencia as duas service accounts é o
+nome, não o projeto. (Nota: os nomes acima referenciavam o projeto do
 piloto/repo de origem, `observability-hub` — corrigido em 2026-08-21 pra
 refletir o projeto real deste repositório.)
 
@@ -247,8 +249,8 @@ motivo.
     pro tamanho agregado do catálogo e pra checagem 6.1 do waste scanner
     (metadado e leitura de objeto)
 [ ] storage.googleapis.com — Data Access audit log DATA_READ habilitado
-    no projeto (config de auditConfigs, não é IAM role — ver exemplo em
-    observability-hub-dev) — só necessário pra checagem 6.2 do waste
+    no projeto (config de `auditConfigs` do projeto, não é IAM role —
+    mesmo formato da seção 3) — só necessário pra checagem 6.2 do waste
     scanner do domínio storage (objeto sem leitura recente,
     confidence: "usage_confirmed")
     Atenção: gera um evento de log por leitura de objeto — volume pode
@@ -296,7 +298,16 @@ integrações do projeto alvo que dependam deles.
      --filter="bindings.members:${SA_EMAIL}" \
      --format="table(bindings.role)"
    ```
-2. **Teste pela UI do Atlas**: logado como um usuário com acesso liberado
+2. **Rode o checklist automático do Atlas**: em **Admin → Por projeto**
+   (também disparado ao revisar um pedido de inclusão de projeto), o Atlas
+   faz probing real de BigQuery (`INFORMATION_SCHEMA`), Cloud Logging e
+   Cloud Storage e reporta `ok`/`denied`/`not_found` por categoria — ver
+   `domains/admin/checklist_service.py`. É best-effort: não lê a IAM
+   policy do alvo, e `logging.privateLogViewer` faltando aparece como
+   `ok` (a limitação da falha silenciosa vale aqui também); os Data
+   Access audit logs (seção 3) ficam sempre `not_checked` porque são
+   config de projeto, não permissão de leitura.
+3. **Teste pela UI do Atlas**: logado como um usuário com acesso liberado
    a esse `project_id` no ACL interno do Atlas (ver
    [`docs/specs/admin.md`](specs/admin.md)), digite (ou selecione, ver
    spec `catalog.md` v1.6) o `project_id` no seletor. Se faltar alguma
@@ -305,7 +316,7 @@ integrações do projeto alvo que dependam deles.
    certa mas o usuário não estiver autorizado no Atlas, o erro é outro
    (`ProjectNotAuthorizedError`) e orienta pedir a um admin do Atlas — não
    rodar `gcloud` de novo.
-3. **Registre a concessão** na tabela "Registro de acessos concedidos"
+4. **Registre a concessão** na tabela "Registro de acessos concedidos"
    abaixo — obrigatório por convenção do `CLAUDE.md` ("Registro de
    acessos e configurações"), antes de considerar a tarefa concluída.
 

@@ -2,9 +2,10 @@
 
 **Objetivo:** checklist completo de tudo que precisa ser configurado no seu
 projeto GCP para que o Atlas consiga observá-lo. O Atlas cobre
-oito frentes — catálogo, freshness, profiling/qualidade, lineage/tabelas
-órfãs, fingerprinting de PII, mapa de acesso, FinOps e Cloud Storage — e
-usa exatamente as roles e APIs listadas abaixo, sem exceção nem role extra.
+nove frentes — catálogo, freshness, profiling/qualidade, lineage/tabelas
+órfãs, fingerprinting de PII, mapa de acesso, FinOps, Cloud Storage e
+metadados de governança — e usa exatamente as roles e APIs listadas
+abaixo, sem exceção nem role extra.
 
 **Modelo de acesso:** o Atlas roda fora do seu projeto GCP e nunca instala
 nada nele — você (administrador do projeto) concede acesso de **somente
@@ -246,7 +247,7 @@ for SA_EMAIL in "${SA_EMAILS[@]}"; do
   for ROLE in roles/bigquery.metadataViewer roles/bigquery.jobUser \
               roles/bigquery.dataViewer roles/logging.viewer \
               roles/logging.privateLogViewer roles/storage.bucketViewer \
-              roles/storage.objectViewer roles/browser; do
+              roles/storage.objectViewer; do
     gcloud projects remove-iam-policy-binding {PROJECT_ID} \
       --member="serviceAccount:${SA_EMAIL}" --role="${ROLE}"
   done
@@ -277,7 +278,7 @@ outras integrações do seu projeto que dependam deles.
    Espere ver, para cada SA, as 5 roles obrigatórias (`bigquery.metadataViewer`,
    `bigquery.jobUser`, `bigquery.dataViewer`, `logging.viewer`,
    `logging.privateLogViewer`) — mais as 2 de `storage.*` se for usar Cloud
-   Storage, e `browser` se tiver concedido a opcional.
+   Storage.
 2. **Avise seu contato DP6** de que o acesso foi concedido, pra testarmos
    pelo Atlas. Se faltar alguma role de IAM, o erro já vem com os comandos
    de correção prontos.
