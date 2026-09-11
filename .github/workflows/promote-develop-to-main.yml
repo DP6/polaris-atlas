@@ -1,0 +1,111 @@
+name: Promote develop to main
+
+# Etapa 2 do fluxo branch → develop → main (ver CLAUDE.md "CI/CD e deploy"
+# e ADR-012). Dispara em todo push em develop (sem filtro de path — precisa
+# rodar não importa qual app/infra mudou). Espera o(s) deploy(s) de dev que
+# este push de fato disparou (detectado observando os runs reais desse
+# commit, não duplicando path filter) terminarem com sucesso, depois abre
+# a PR pra main — mesmo padrão de polling do job wait-for-terraform já
+# usado em frontend-deploy-dev.yml/backend-deploy-prod.yml/frontend-deploy-prod.yml.
+on:
+  push:
+    branches:
+      - develop
+
+permissions:
+  contents: read
+  pull-requests: write
+  actions: read
+
+jobs:
+  wait-for-dev-deploy:
+    name: Wait for dev deploy(s) to finish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for whichever dev workflow(s) this push triggered
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          # Detecta se cada workflow disparou pra este commit observando os
+          # runs de verdade (gh run list --commit), em vez de duplicar o
+          # path filter de cada um via regex/git diff — a primeira versão
+          # deste job fazia isso e divergiu na prática: um push que só
+          # tocava .github/workflows/backend-deploy-dev.yml (o próprio
+          # path auto-referenciado do workflow, que TAMBÉM dispara ele)
+          # não batia no regex '^apps/backend/', o job concluiu que nada
+          # disparou e abriu a PR pra main antes do deploy real terminar.
+          for workflow in backend-deploy-dev.yml frontend-deploy-dev.yml terraform-apply-dev.yml; do
+            echo "Verificando se $workflow disparou pra este commit..."
+            found=false
+            for i in $(seq 1 6); do
+              run_json=$(gh run list --repo "${{ github.repository }}" \
+                --workflow="$workflow" \
+                --commit "${{ github.sha }}" \
+                --json status,conclusion --jq '.[0]')
+              if [ -n "$run_json" ] && [ "$run_json" != "null" ]; then
+                found=true
+                break
+              fi
+              sleep 5
+            done
+
+            if [ "$found" != "true" ]; then
+              echo "$workflow não disparou pra este commit — pulando."
+              continue
+            fi
+
+            echo "$workflow disparou — aguardando concluir."
+            finished=false
+            for i in $(seq 1 60); do
+              run_json=$(gh run list --repo "${{ github.repository }}" \
+                --workflow="$workflow" \
+                --commit "${{ github.sha }}" \
+                --json status,conclusion --jq '.[0]')
+
+              status=$(echo "$run_json" | jq -r '.status')
+              if [ "$status" = "completed" ]; then
+                conclusion=$(echo "$run_json" | jq -r '.conclusion')
+                echo "$workflow concluído com status: $conclusion"
+                if [ "$conclusion" != "success" ]; then
+                  echo "::error::$workflow não teve sucesso ($conclusion) — não vou abrir a PR pra main."
+                  exit 1
+                fi
+                finished=true
+                break
+              fi
+
+              sleep 10
+            done
+
+            if [ "$finished" != "true" ]; then
+              echo "::error::Timeout esperando $workflow terminar."
+              exit 1
+            fi
+          done
+
+  open-pr:
+    name: Open PR to main
+    needs: wait-for-dev-deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Open PR if none exists yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          existing=$(gh pr list --repo "${{ github.repository }}" \
+            --base main --head develop --state open \
+            --json number --jq 'length')
+
+          if [ "$existing" -gt 0 ]; then
+            echo "Já existe PR aberta de develop para main — nada a fazer."
+            exit 0
+          fi
+
+          gh pr create --repo "${{ github.repository }}" \
+            --base main --head develop \
+            --title "Promote develop -> main" \
+            --body "PR automática — abre depois que o(s) deploy(s) em dev deste push concluíram com sucesso. Ver CLAUDE.md \"CI/CD e deploy\" e ADR-012."
