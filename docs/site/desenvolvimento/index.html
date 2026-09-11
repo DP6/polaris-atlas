@@ -966,31 +966,56 @@
             <strong class="label">Resumo executivo</strong>
             Autenticação no GCP exclusivamente via Workload Identity
             Federation — nenhuma chave de service account em segredo do
-            GitHub. Dev é rápido e automático; produção tem gate de aprovação
-            manual só no deploy de app (que sobe imagem nova sem revisão no
-            meio), não na infraestrutura (que já passa por
-            <code>terraform plan</code> revisado no PR).
+            GitHub. Duas etapas — <code>branch → develop → main</code> —,
+            cada uma com PR obrigatória (aberta automaticamente) e gate de
+            aprovação manual no deploy de app (que sobe imagem nova sem
+            revisão no meio); a infraestrutura nunca é gateada por Environment
+            — já passa por <code>terraform plan</code> revisado no PR.
           </div>
-          <h3 class="sub-title">Gatilhos por ambiente</h3>
+          <h3 class="sub-title">Gatilhos por etapa</h3>
           <ul>
-            <li><strong>Push em qualquer branch, exceto <code>main</code></strong>
-              → build + deploy automático em <strong>dev</strong>, sem
-              aprovação — ambiente de teste rápido.</li>
-            <li><strong>Merge em <code>main</code></strong> → <code>terraform
-              apply</code> em prod roda automático (decisão consciente: a
-              mudança de infra já foi revisada via <code>plan</code> antes do
-              merge); o <strong>deploy de app</strong> (backend/frontend) usa
-              um GitHub Environment "production" com <em>required reviewers</em>
-              — fica em "Waiting" até um humano aprovar.</li>
+            <li><strong>Push em qualquer branch</strong> (exceto
+              <code>main</code>/<code>develop</code>) →
+              <code>auto-pr-develop.yml</code> abre automaticamente uma PR
+              pra <code>develop</code>.</li>
+            <li><strong>Merge dessa PR</strong> (branch protegida, sem push
+              direto) → <code>terraform apply</code> em dev roda automático;
+              o <strong>deploy de app</strong> (backend/frontend) usa um
+              GitHub Environment "dev" com <em>required reviewers</em> — fica
+              em "Waiting" até um humano aprovar.</li>
+            <li><strong>Deploy(s) de dev concluindo com sucesso</strong> →
+              <code>promote-develop-to-main.yml</code> espera e abre
+              automaticamente a PR <code>develop → main</code>.</li>
+            <li><strong>Merge dessa PR em <code>main</code></strong>
+              (também branch protegida) → <code>terraform apply</code> em
+              prod roda automático (infra já revisada via <code>plan</code>
+              antes do merge); o deploy de app usa o Environment
+              "production" — mesmo gate que já existia, agora alimentado
+              pela PR de promoção em vez de push direto de feature branch.</li>
           </ul>
-          <h3 class="sub-title">Workflows separados por app e ambiente</h3>
+          <p>
+            <code>terraform-plan.yml</code> roda em toda PR que toca
+            <code>infra/terraform/**</code>, incluindo as PRs pra
+            <code>develop</code> — mas não dispara no <code>opened</code> das
+            PRs abertas automaticamente (limitação do GitHub pra ações feitas
+            com o <code>GITHUB_TOKEN</code> padrão); só roda se alguém
+            empurrar um commit novo na branch antes do merge. E nunca roda
+            pra prod — a SA de prod só autentica em workflow rodando de fato
+            em <code>main</code>, nunca em <code>pull_request</code> (roda em
+            <code>refs/pull/N/merge</code>); revisar o plano de prod
+            localmente antes de aprovar continua manual.
+          </p>
+          <h3 class="sub-title">Workflows separados por app, ambiente e orquestração</h3>
           <p>
             <code>backend-deploy-dev.yml</code>, <code>backend-deploy-prod.yml</code>,
             <code>frontend-deploy-dev.yml</code>, <code>frontend-deploy-prod.yml</code>,
             <code>terraform-plan.yml</code>, <code>terraform-apply-dev.yml</code>,
-            <code>terraform-apply-prod.yml</code> — cada um com
-            <code>permissions:</code> explícito (menor privilégio possível) e
-            <code>actions/checkout</code> fixado por versão.
+            <code>terraform-apply-prod.yml</code>, mais
+            <code>auto-pr-develop.yml</code> e
+            <code>promote-develop-to-main.yml</code> orquestrando as duas
+            etapas — cada um com <code>permissions:</code> explícito (menor
+            privilégio possível) e <code>actions/checkout</code> fixado por
+            versão.
           </p>
         </section>
 
@@ -998,10 +1023,12 @@
           <h2>Fluxo completo — desenvolvimento até deploy em produção</h2>
           <div class="exec-summary">
             <strong class="label">Resumo executivo</strong>
-            Da spec ao ar em produção, os únicos pontos onde o fluxo
-            <em>para</em> esperando um humano são: confirmar o push, aprovar o
-            merge do PR, e aprovar o gate de deploy de app em produção — tudo
-            o mais roda de ponta a ponta sem intervenção manual.
+            Da spec ao ar em produção, os pontos onde o fluxo <em>para</em>
+            esperando um humano são cinco: confirmar o push, aprovar o merge
+            da PR em <code>develop</code>, aprovar o gate de deploy de app em
+            dev, aprovar o merge da PR <code>develop → main</code>, e aprovar
+            o gate de deploy de app em produção — tudo o mais roda de ponta a
+            ponta sem intervenção manual.
           </div>
           <div class="diagram-wrap">
             <pre class="mermaid">
@@ -1013,16 +1040,21 @@ flowchart TD
     D -- passa --> E["Commit local"]
     E --> F{{"Push?<br/>confirmação humana"}}
     F -- não --> E
-    F -- sim --> G["Push + Pull Request"]
-    G --> H["CI: lint, testes,<br/>CodeQL, terraform plan (dev)"]
-    H -- falha --> C
-    H -- passa --> I{{"Merge?<br/>confirmação humana"}}
-    I -- sim --> J["Merge em main"]
+    F -- sim --> G["Push"]
+    G --> H["PR automática → develop<br/>auto-pr-develop.yml"]
+    H --> I{{"Merge da PR?<br/>confirmação humana"}}
+    I -- sim --> J["Merge em develop"]
     J --> K["Terraform apply — dev<br/>automático"]
-    J --> L["Terraform apply — prod<br/>automático (plan já revisado)"]
-    J --> M{{"Deploy de app em prod?"}}
-    M --> N["GitHub Environment production<br/>required reviewers"]
-    N -- aprovado --> O["Deploy backend/frontend em prod"]
+    J --> L{{"Deploy de app em dev?"}}
+    L --> M["GitHub Environment dev<br/>required reviewers"]
+    M -- aprovado --> N["Deploy backend/frontend em dev"]
+    N --> O["PR automática → main<br/>promote-develop-to-main.yml"]
+    O --> P{{"Merge da PR?<br/>confirmação humana"}}
+    P -- sim --> Q["Merge em main"]
+    Q --> R["Terraform apply — prod<br/>automático (plan já revisado)"]
+    Q --> S{{"Deploy de app em prod?"}}
+    S --> T["GitHub Environment production<br/>required reviewers"]
+    T -- aprovado --> U["Deploy backend/frontend em prod"]
             </pre>
           </div>
         </section>
