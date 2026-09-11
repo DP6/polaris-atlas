@@ -2,8 +2,12 @@ name: Terraform Apply (dev)
 
 on:
   push:
-    branches-ignore:
-      - main
+    # Só develop — não mais qualquer branch (mesma mudança dos workflows de
+    # deploy de app, ver CLAUDE.md "CI/CD e deploy"). Continua SEM gate de
+    # Environment: a revisão de infra já acontece via terraform plan na PR
+    # + aprovação da PR (decisão consciente, ver ADR-008 e ADR-012).
+    branches:
+      - develop
     paths:
       - "infra/terraform/environments/dev/**"
       - "infra/terraform/modules/**"

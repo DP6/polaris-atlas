@@ -1,0 +1,46 @@
+name: Auto PR to develop
+
+# Abre (ou atualiza, automaticamente pelo próprio GitHub) uma PR de
+# qualquer branch pra develop, assim que ela recebe um push. Ver CLAUDE.md
+# "CI/CD e deploy" e ADR-012 — esta é a etapa 1 do fluxo
+# branch → develop → main.
+#
+# Usa o GITHUB_TOKEN padrão: por decisão consciente, PRs abertas assim não
+# disparam workflows de `pull_request` (ex: terraform-plan.yml) no evento
+# `opened` — só disparam se alguém empurrar um commit novo na branch antes
+# do merge. Mesmo princípio já aceito pra prod na ADR-008 (revisão de plan
+# pode ser manual). Ver ADR-012 pra detalhe.
+on:
+  push:
+    branches-ignore:
+      - main
+      - develop
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  open-pr:
+    name: Open PR to develop
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Open PR if none exists yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch="${GITHUB_REF#refs/heads/}"
+
+          existing=$(gh pr list --repo "${{ github.repository }}" \
+            --base develop --head "$branch" --state open \
+            --json number --jq 'length')
+
+          if [ "$existing" -gt 0 ]; then
+            echo "Já existe PR aberta de $branch para develop — nada a fazer."
+            exit 0
+          fi
+
+          gh pr create --repo "${{ github.repository }}" \
+            --base develop --head "$branch" --fill

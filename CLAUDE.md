@@ -34,8 +34,8 @@ Esses nove domínios são a espinha dorsal da estrutura de pastas do backend e d
 
 | Ambiente | Projeto GCP | Serviço Cloud Run | Branch/gatilho |
 |---|---|---|---|
-| dev | `dp6-ci-polaris` (compartilhado) | `backend-dev`, `frontend-dev` | qualquer push em qualquer branch (exceto `main`) |
-| prod | `dp6-ci-polaris` (compartilhado) | `backend-prod`, `frontend-prod` | merge/push em `main` |
+| dev | `dp6-ci-polaris` (compartilhado) | `backend-dev`, `frontend-dev` | push em `develop`, via PR mergeada de qualquer branch (nunca push direto — ver "CI/CD e deploy") |
+| prod | `dp6-ci-polaris` (compartilhado) | `backend-prod`, `frontend-prod` | push em `main`, via PR mergeada de `develop` (nunca push direto de feature branch — ver "CI/CD e deploy") |
 
 Dev e prod **compartilham o mesmo projeto GCP** — não há isolamento por
 fronteira de projeto. O isolamento entre os dois ambientes é garantido
@@ -203,26 +203,45 @@ Regra geral: **domains/ (backend) e features/ (frontend) espelham exatamente os 
 
 ## CI/CD e deploy
 
-Gatilhos (a implementar em `.github/workflows/` na Fase 1, mas já são a política oficial de deploy):
+Fluxo de duas etapas, cada uma com **PR obrigatória + gate manual de Environment
+reviewers** antes do deploy de fato acontecer — ver [ADR-012](docs/adr/ADR-012-fluxo-develop-main-duplo-gate.md)
+pro raciocínio completo:
 
-- **Push em qualquer branch** (exceto `main`) → build + deploy automático no ambiente **dev** (`dp6-ci-polaris`, serviços `backend-dev`/`frontend-dev`).
-- **Merge/push em `main`** → build + deploy **de app** (`backend-deploy-prod.yml`, `frontend-deploy-prod.yml`) só roda depois de aprovação manual — os dois jobs usam `environment: production` (GitHub Environment com "required reviewers" configurado nas Settings do repo), então ficam em "Waiting" até alguém aprovar. `terraform-apply-prod.yml` continua automático (decisão consciente, 2026-08-18 — mudança de infra já passa por `terraform plan` revisado antes do merge; só o deploy de app, que sobe uma imagem nova sem revisão nenhuma no meio, ganhou o gate).
+1. **Push em qualquer branch** (exceto `main`/`develop`) → `auto-pr-develop.yml` abre
+   automaticamente uma PR pra `develop` (se ainda não existir uma aberta pra essa branch).
+2. **Merge da PR em `develop`** (branch protegida — só entra via PR, sem contagem de
+   aprovação obrigatória exigida: repo de contribuidor único, GitHub não aceita
+   self-review; o merge em si é o ato de aprovação) → dispara
+   `backend-deploy-dev.yml`/`frontend-deploy-dev.yml`/`terraform-apply-dev.yml`. Os dois
+   primeiros usam `environment: dev` (GitHub Environment com "required reviewers") e ficam
+   em "Waiting" até alguém aprovar — deploy de app em dev não acontece mais só porque o
+   merge chegou. `terraform-apply-dev.yml` continua automático, sem gate (infra já passou
+   por `terraform plan` revisado no PR).
+3. **Deploy(s) de dev concluindo com sucesso** → `promote-develop-to-main.yml` espera
+   (polling, mesmo padrão do `wait-for-terraform`) e abre automaticamente a PR
+   `develop → main`.
+4. **Merge dessa PR em `main`** (branch protegida, mesmo shape de `develop` — sem push
+   direto de feature branch nunca mais) → dispara
+   `backend-deploy-prod.yml`/`frontend-deploy-prod.yml` (`environment: production`,
+   "Waiting" até aprovar — inalterado) e `terraform-apply-prod.yml` (automático, sem gate —
+   inalterado, ADR-008).
 
-Diretrizes para os workflows quando forem criados:
+Diretrizes dos workflows:
 
 - Autenticação no GCP exclusivamente via Workload Identity Federation — nenhuma service account key em segredo do GitHub.
-- Workflows separados por app e por ambiente (ex: `backend-deploy-dev.yml`, `backend-deploy-prod.yml`, `frontend-deploy-dev.yml`, `frontend-deploy-prod.yml`, `terraform-plan.yml`, `terraform-apply-dev.yml`, `terraform-apply-prod.yml`), todos vivendo em `.github/workflows/`.
-- `terraform plan` roda em todo PR que toca `infra/terraform/**` — mas só para **dev**. A SA `gh-deploy-prod` só pode ser impersonada por um workflow rodando na branch `main` (restrição no IAM binding da SA, não no provider WIF — ele é único e compartilhado com dev, ver `infra/terraform/bootstrap/`), então nunca autentica em `pull_request` (roda em `refs/pull/N/merge`); revisar `terraform plan` de prod localmente antes de merges que tocam infra é responsabilidade manual até essa restrição ser revisitada. `apply` só roda após merge, no ambiente correspondente.
+- Workflows separados por app e por ambiente (`backend-deploy-dev.yml`, `backend-deploy-prod.yml`, `frontend-deploy-dev.yml`, `frontend-deploy-prod.yml`, `terraform-plan.yml`, `terraform-apply-dev.yml`, `terraform-apply-prod.yml`) mais os dois de orquestração do fluxo (`auto-pr-develop.yml`, `promote-develop-to-main.yml`), todos em `.github/workflows/`.
+- `terraform plan` roda em todo PR que toca `infra/terraform/**` (agora inclui as PRs pra `develop`) — mas só para **dev**. A SA `gh-deploy-prod` só pode ser impersonada por um workflow rodando na branch `main` (restrição no `attribute_condition` do provider WIF de prod, ver "Projetos e ambientes GCP"), então nunca autentica em `pull_request` (roda em `refs/pull/N/merge`) — nem na PR `develop → main`. Revisar `terraform plan` de prod localmente antes de aprovar merges que tocam infra continua responsabilidade manual (ADR-008).
+- `auto-pr-develop.yml`/`promote-develop-to-main.yml` usam o `GITHUB_TOKEN` padrão, não um PAT dedicado — decisão consciente: PRs abertas assim **não disparam** `pull_request` no evento `opened` (limitação do GitHub pra ações feitas com `GITHUB_TOKEN`), então `terraform-plan.yml` só roda nessas PRs se alguém empurrar um commit novo antes do merge. Mesmo princípio já aceito pra prod na ADR-008.
 - Deploy em prod não deve exigir Terraform workspace switch nem lógica condicional complexa — o ambiente é determinado pelo diretório (`environments/dev` vs `environments/prod`), não por uma flag em runtime.
-- Imagem Docker é buildada uma vez e promovida (mesma tag/digest) de dev para prod quando possível, evitando rebuild entre ambientes — a validar na Fase 1 conforme a estratégia de branch adotada.
+- Imagem Docker **não** é promovida (mesma tag/digest) de dev pra prod — cada deploy builda a partir do SHA do seu próprio commit, e como o merge é squash, o commit em `main` tem SHA diferente do testado em `develop`. Documentado como lacuna conhecida, não resolvida — ver ADR-012.
 
 ## Git e Claude Code
 
 - Claude Code está autorizado a rodar `git add` e `git commit` automaticamente ao longo do desenvolvimento.
 - **Sempre pedir aprovação explícita do usuário antes de qualquer `git push`** — commits locais não pedem aprovação, pushes sim.
 - Commits seguem [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`, `ci:`).
-- Branches: `feature/<descrição>`, `fix/<descrição>`, `chore/<descrição>`. Lembre-se: qualquer push nessas branches dispara deploy em dev — evitar pushes intermediários "quebrados" quando possível.
-- **Nunca fazer deploy (push, merge de PR pra `main`, ou aprovar o gate de prod) sem confirmação explícita do usuário a cada vez** — uma aprovação anterior não vale como aprovação permanente pras próximas, mesmo dentro da mesma sessão. Ao pedir essa confirmação, incluir um resumo breve dos commits envolvidos (título de cada um + 1 linha do que muda), sem alongar.
+- Branches: `feature/<descrição>`, `fix/<descrição>`, `chore/<descrição>`. Um push nessas branches **não** dispara mais deploy em dev direto — abre/atualiza automaticamente uma PR pra `develop` (`auto-pr-develop.yml`); o deploy em dev só acontece depois do merge dessa PR **e** da aprovação do gate de reviewers no Actions (ver "CI/CD e deploy").
+- **Nunca fazer deploy ou aprovar um gate sem confirmação explícita do usuário a cada vez** — isso cobre os quatro pontos de decisão do fluxo: merge da PR em `develop`, aprovar o gate de `dev`, merge da PR `develop → main`, aprovar o gate de `production`. Uma aprovação anterior não vale como aprovação permanente pras próximas, mesmo dentro da mesma sessão. Ao pedir essa confirmação, incluir um resumo breve dos commits envolvidos (título de cada um + 1 linha do que muda), sem alongar.
 - PRs abertos via `gh pr create` **não** levam o rodapé "🤖 Generated with Claude Code" no corpo — o PR sobe em nome do usuário (`gh` já autentica com a conta dele). Commits continuam normalmente com o trailer `Co-Authored-By: Claude`.
 
 ## Colaboração
