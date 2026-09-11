@@ -5,6 +5,60 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+### fluxo-develop-main — `chore/fluxo-develop-main-gates` (CI/CD)
+
+Redesenho do pipeline de deploy, a pedido do usuário: de trunk-based
+(push em qualquer branch, exceto `main`, deployava em dev direto, sem PR
+nem gate nenhum) pra duas etapas — `branch → develop → main` — cada uma
+com PR obrigatória e gate de Environment reviewers antes do deploy de
+fato acontecer. Decisão completa e alternativas em ADR-012.
+
+- **`develop` nova**, protegida via Rulesets API (`protect-develop`/
+  `protect-main`) — exige PR antes de merge, sem contagem de aprovação
+  obrigatória (repo de contribuidor único, GitHub bloqueia self-review;
+  o merge em si é o ato de aprovação). `main` ganhou a mesma proteção,
+  que não existia antes (branch protection zerada até aqui).
+- **Environment `dev` novo** (required reviewers, mesmo reviewer de
+  `production`) nos jobs de deploy de `backend-deploy-dev.yml`/
+  `frontend-deploy-dev.yml`; trigger dos três workflows de dev trocado
+  de `branches-ignore: [main]` pra `branches: [develop]`.
+  `terraform-apply-dev`/`terraform-apply-prod` continuam sem gate
+  (mesma lógica da ADR-008, agora também em dev).
+- **Duas automações novas**: `auto-pr-develop.yml` (abre PR de qualquer
+  branch pra `develop`) e `promote-develop-to-main.yml` (espera os
+  deploys de dev concluírem com sucesso e abre a PR `develop → main`
+  sozinho).
+- **Repo settings**: branch default `main` → `develop` (PR manual via UI
+  já vem mirando o lugar certo; PRs do Dependabot entram no mesmo
+  fluxo), `delete_branch_on_merge` ligado.
+- **Erro achado e corrigido durante o próprio rollout** (dogfooding — a
+  instalação usou o fluxo que estava instalando): a primeira versão de
+  `wait-for-dev-deploy` detectava "o que este push dispara" duplicando o
+  path filter de cada workflow de dev via `git diff` + regex. Um push
+  que só tocava o próprio arquivo do workflow
+  (`.github/workflows/backend-deploy-dev.yml`, que também dispara ele
+  via path auto-referenciado) não batia em nenhum regex — o job concluiu
+  que nada tinha disparado e abriu a PR pra `main` (#68) antes dos
+  deploys de dev (#67) confirmarem sucesso. Sem dano (os três workflows
+  acabaram tendo sucesso), mas o gate de espera não segurou de verdade.
+  Corrigido (PR #69, commit `3a33c2b`) pra detectar via
+  `gh run list --commit` — observa o run de verdade em vez de prever via
+  regex duplicado, elimina a classe inteira de divergência entre os dois
+  arquivos.
+- **Fora de escopo, registrado como pendência conhecida**: promoção de
+  artefato idêntico dev→prod (mesmo digest, sem rebuild) — cada etapa
+  builda a partir do SHA do seu próprio commit; gate formal de
+  `required_approving_review_count` (travado hoje pelo self-review de
+  repo de contribuidor único — vira 1 linha de config se o time crescer,
+  ver ADR-012); `backend-deploy-dev.yml` sem job `wait-for-terraform`
+  (gap pré-existente, não causado por esta mudança).
+- **Verificação:** rollout inteiro validado em produção via dogfooding —
+  push → PR #67 → merge → gate `dev` aprovado → `backend-dev`/
+  `frontend-dev`/terraform (dev) com sucesso → PR #68 automática → fix
+  (PR #69) → PR #68 mergeada em `main`. Nenhum deploy de app em prod
+  disparou nesta leva (mudança só de CI/CD e docs, nada em `apps/**`) —
+  esperado.
+
 ### domain-migration-oauth — `fix/wif-repo-rename` (infra + docs)
 
 Migração do domínio customizado `observability-hub*.dp6.io` →
