@@ -42,5 +42,17 @@ jobs:
             exit 0
           fi
 
+          # Sem --fill: ele calcula o título/corpo a partir do diff contra
+          # origin/develop via git local, e o checkout padrão (shallow, só
+          # a branch atual) não tem essa ref disponível no runner — falha
+          # com "unknown revision". Usa o log do commit da própria branch
+          # (esse sim disponível) em vez de depender de outra ref.
+          title=$(git log -1 --format=%s)
+          body=$(git log -1 --format=%b)
+          if [ -z "$body" ]; then
+            body="PR automática aberta por auto-pr-develop.yml a partir do push em \`$branch\`."
+          fi
+
           gh pr create --repo "${{ github.repository }}" \
-            --base develop --head "$branch" --fill
+            --base develop --head "$branch" \
+            --title "$title" --body "$body"
