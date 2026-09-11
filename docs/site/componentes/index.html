@@ -412,7 +412,7 @@
           esse recurso" no momento em que mais de uma app do Polaris
           dividir o mesmo projeto. Fonte técnica completa, com a mesma
           taxonomia de labels usada aqui:
-          <a href="https://github.com/DP6/polaris-hub-gcp/blob/main/docs/gcp-components.md">docs/gcp-components.md</a>
+          <a href="https://github.com/DP6/polaris-atlas/blob/main/docs/gcp-components.md">docs/gcp-components.md</a>
           no repositório.
         </p>
 
@@ -457,7 +457,7 @@
             <table class="components">
               <thead><tr><th>Recurso</th><th>Tipo</th><th>Ambiente</th><th>Gerenciado por</th><th>Observações</th></tr></thead>
               <tbody>
-                <tr><td class="resource">hub-dev</td><td>Firestore database</td><td><span class="badge badge-dev">dev</span></td><td><span class="badge badge-tf">terraform</span></td><td class="notes">hub_users, hub_groups, hub_projects, access_requests</td></tr>
+                <tr><td class="resource">hub-dev</td><td>Firestore database</td><td><span class="badge badge-dev">dev</span></td><td><span class="badge badge-tf">terraform</span></td><td class="notes">hub_users, hub_groups, hub_projects, access_requests, project_admins, metadados de tabela/coluna, budgets por projeto</td></tr>
                 <tr><td class="resource">hub-prod</td><td>Firestore database</td><td><span class="badge badge-prod">prod</span></td><td><span class="badge badge-tf">terraform</span></td><td class="notes"></td></tr>
                 <tr><td class="resource">dp6-ci-polaris-hub-cache-dev</td><td>Bucket GCS</td><td><span class="badge badge-dev">dev</span></td><td><span class="badge badge-tf">terraform</span></td><td class="notes">Cache de eventos de audit log</td></tr>
                 <tr><td class="resource">dp6-ci-polaris-hub-cache-prod</td><td>Bucket GCS</td><td><span class="badge badge-prod">prod</span></td><td><span class="badge badge-tf">terraform</span></td><td class="notes"></td></tr>
