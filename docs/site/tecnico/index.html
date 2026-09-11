@@ -449,6 +449,7 @@
           <span class="chip">Mapa de acesso</span>
           <span class="chip">Qualidade e schema drift</span>
           <span class="chip">Freshness com SLA</span>
+          <span class="chip">Metadados de governança</span>
           <span class="chip">FinOps</span>
           <span class="chip">Cloud Storage</span>
           <span class="chip">Favoritos e Recentes</span>
@@ -477,6 +478,7 @@
         <a href="#acesso-mapa">Mapa de acesso</a>
         <a href="#qualidade">Qualidade de dados e schema drift</a>
         <a href="#freshness">Freshness com SLA</a>
+        <a href="#metadados">Metadados de governança</a>
         <a href="#finops">FinOps</a>
         <a href="#favoritos-recentes">Favoritos e Recentes</a>
 
@@ -637,14 +639,15 @@
           <h2>Análise de uma tabela<span class="new-badge">novo</span></h2>
           <p class="section-summary">
             "Analisar" numa tabela abre uma tela dedicada — não mais um modal —
-            com sete módulos, cada um em sua própria rota (com "Voltar" pro
+            com oito módulos, cada um em sua própria rota (com "Voltar" pro
             seletor): schema, análise de qualidade, fingerprint de PII, sugestão
-            de tipo de coluna, histórico de profiling, mapa de acesso e lineage.
-            Os detalhes de cada um estão nas seções abaixo.
+            de tipo de coluna, histórico de profiling, mapa de acesso, lineage e
+            <a href="#metadados">metadados de governança</a>. Os detalhes de cada
+            um estão nas seções abaixo.
           </p>
           <figure>
             <img src="../produto/images/06-analise-chooser.png" alt="Seletor de módulos de análise de uma tabela" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>Os sete módulos de análise de uma tabela, num só lugar.</figcaption>
+            <figcaption>Os oito módulos de análise de uma tabela, num só lugar. (Captura em atualização — o módulo "Metadados" ainda não aparece nesta imagem.)</figcaption>
           </figure>
         </section>
 
@@ -820,13 +823,14 @@
           <p class="section-summary">
             Classifica cada tabela contra janelas de SLA fixas, a partir do
             metadado de última modificação do BigQuery — sem precisar declarar
-            manualmente qual é o SLA esperado de cada tabela. É uma das duas
-            frentes da overview de <strong>Governança</strong> (a outra é
-            <a href="#lineage">tabelas sem consumidor</a>).
+            manualmente qual é o SLA esperado de cada tabela. É uma das três
+            frentes da overview de <strong>Governança</strong> (as outras são
+            <a href="#lineage">tabelas sem consumidor</a> e
+            <a href="#metadados">metadados de governança</a>).
           </p>
           <figure>
             <img src="../produto/images/18-governanca-visao-geral.png" alt="Visão geral de Governança" onclick="openLightbox(this.src, this.alt)" />
-            <figcaption>Overview de Governança — Freshness &amp; SLA e Tabelas sem consumidor.</figcaption>
+            <figcaption>Overview de Governança — Freshness &amp; SLA, Tabelas sem consumidor e Metadados. (Captura em atualização — o card de Metadados ainda não aparece nesta imagem.)</figcaption>
           </figure>
           <ul>
             <li><strong>ok</strong> — atualizada há até 12h</li>
@@ -848,6 +852,71 @@
           </figure>
         </section>
 
+        <section class="doc-section" id="metadados">
+          <span class="domain-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>BigQuery</span>
+          <h2>Metadados de governança<span class="new-badge">novo</span></h2>
+          <p class="section-summary">
+            Metadados editáveis de tabela e coluna — descrição, ownership,
+            classificação, <strong>estado de governança</strong>, links
+            relacionados e histórico de edição — guardados no Firestore do
+            próprio Atlas (dado do Atlas, não do GCP). A enumeração de tabelas e
+            colunas continua vindo do <code>INFORMATION_SCHEMA</code>, custo $0.
+            É a terceira frente da overview de <a href="#freshness">Governança</a>.
+            <strong>Princípio</strong>: linkar o que já existe (lineage,
+            análise, freshness, budget) em vez de duplicar.
+          </p>
+
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>Visão geral do projeto (<code>/metadados</code>)</h3>
+          <p>
+            Lista as tabelas do projeto com o estado de documentação de cada
+            uma (quais já têm descrição, ownership, status), uma fila
+            <strong>"Pendentes de revisão"</strong> com Aprovar / Devolver
+            inline, e o painel <strong>"Gerenciar acesso"</strong> — quem é
+            <strong>Admin de projeto</strong> (ver abaixo). Leitura visível a
+            todos com acesso ao projeto; conceder/revogar só Admin de projeto e
+            superadmin.
+          </p>
+          <div class="pending-shot">Captura desta tela pendente — a feature entrou depois da última rodada de screenshots do site.</div>
+
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>Metadados de uma tabela (módulo de análise)</h3>
+          <p>
+            Um dos oito módulos do <a href="#analise">seletor de análise</a>
+            (rota <code>/analyze/&hellip;/metadata</code>). No nível
+            <strong>tabela</strong>: descrição, ownership
+            (<code>technical_owner</code>, <code>team</code>), classificação,
+            <code>status</code> e links relacionados. No nível
+            <strong>coluna</strong>: descrição, <strong>PII confirmado</strong>
+            e termo de glossário. A edição tem botão <strong>"Salvar"</strong>
+            explícito + toast (não salva mais no <em>blur</em>).
+          </p>
+          <div class="pending-shot">Captura desta tela pendente.</div>
+
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Fluxo de revisão e histórico</h3>
+          <p>
+            <code>status</code> tem três estados
+            (<code>draft</code> / <code>in_review</code> / <code>approved</code>)
+            e passa por um endpoint dedicado, não pelo <code>PUT</code> genérico
+            de campos: <strong>Admin de projeto</strong> envia pra revisão e
+            aprova; <strong>superadmin</strong> auto-aprova ao enviar. Transição
+            inválida responde 409; pedir o estado em que já está é no-op. Toda
+            edição de campo de tabela <em>e de coluna</em>
+            (<code>description</code>, <code>glossary_term</code>,
+            <code>pii_flag</code>) gera entrada de <strong>histórico</strong>,
+            com o nome da coluna quando aplicável.
+          </p>
+
+          <div class="callout">
+            <strong>Papel "Admin de projeto"</strong>
+            Papel novo, por projeto, distinto do admin global do Atlas (que é
+            quem gerencia usuários/grupos/acesso em <a href="#admin">Administração</a>).
+            O Admin de projeto é quem pode <strong>escrever</strong> metadados
+            de governança e <a href="#finops">metas de budget</a> daquele
+            projeto; a leitura continua aberta a qualquer um com acesso ao
+            projeto. É concedido/revogado na visão geral de Metadados, por outro
+            Admin de projeto ou por um superadmin.
+          </div>
+        </section>
+
         <section class="doc-section" id="finops">
           <span class="domain-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>BigQuery</span>
           <h2>FinOps</h2>
@@ -860,16 +929,21 @@
 
           <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>Visão geral<span class="new-badge">novo</span></h3>
           <p>
-            A tela de entrada de FinOps reúne: os <strong>big numbers</strong>
-            (gasto do período, meta mensal, projeção, nº de tabelas de baixo
-            score); o gráfico de <strong>custo ao longo do período</strong> —
-            barras por período + linha acumulada, com troca de granularidade
-            (dia/mês) e de tipo (tudo / query / storage), e a meta de projeto
-            como linha de referência; o painel de <strong>eficiência de
-            custo</strong> (um score por tabela e o do projeto) e o ranking de
-            <strong>Top ofensores</strong>, onde clicar numa linha abre a
-            decomposição do score (particionamento, utilização, eficiência de
-            scan); e os cards de atalho pra Scanner, Budget e Configurar budget.
+            A tela de entrada de FinOps reúne: os <strong>big numbers</strong> —
+            <strong>"Gasto no mês"</strong> (month-to-date real, fixo, nunca
+            muda com o filtro) e <strong>"Gasto no período filtrado"</strong>
+            (segue o filtro), num bloco visual único com o filtro de Período e
+            Tipo de custo pra deixar óbvio o que ele afeta, mais meta mensal,
+            projeção e nº de tabelas de baixo score; o gráfico de <strong>custo
+            ao longo do período</strong> — barras por período + linha acumulada,
+            com troca de granularidade (dia/mês) e de tipo (tudo / query /
+            storage), e a meta de projeto como linha de referência; o painel de
+            <strong>eficiência de custo</strong> (um score por tabela e o do
+            projeto) e o ranking de <strong>Top ofensores</strong>, onde clicar
+            numa linha abre a decomposição do score (particionamento,
+            utilização, eficiência de scan); e os cards de atalho pra
+            <strong>Scanner de desperdício</strong> e
+            <strong>Detalhamento de custo</strong>.
           </p>
           <figure>
             <img src="../produto/images/22-finops-visao-geral.png" alt="Visão geral de FinOps" onclick="openLightbox(this.src, this.alt)" />
@@ -928,16 +1002,24 @@
             <figcaption>Tipo atual → sugerido por coluna, com economia mensal estimada.</figcaption>
           </figure>
 
-          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Budget de custo</h3>
+          <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Detalhamento de custo<span class="new-badge">novo</span></h3>
           <p>
-            Estima o custo de um período via audit log de jobs (bytes cobrados) +
-            preço público on-demand — sem depender do Cloud Billing Export. A
-            <strong>janela é escolhível</strong>: presets de 7, 15 e 30 dias ou um
-            valor livre, com teto de 31 dias (retenção do cache de audit log). A
-            projeção é um <strong>run-rate de 30 dias</strong> (média diária da
-            janela × 30), não "o resto do mês". O resultado traz custo até agora,
-            média diária, projeção e a janela analisada, mais o custo quebrado por
-            tabela / dataset / usuário / dia / mês / ano e as queries mais caras.
+            (Chamado "Budget de custo" até a v1.12 — rota <code>/finops/budget</code>
+            mantida.) Estima o custo de um período via audit log de jobs (bytes
+            cobrados) + preço público on-demand — sem depender do Cloud Billing
+            Export. A <strong>janela é escolhível</strong>: presets de 7, 15 e 30
+            dias ou um valor livre, com teto de 31 dias (retenção do cache de
+            audit log). O resultado traz custo até agora, média diária, projeção
+            e a janela analisada, mais o custo quebrado por tabela / dataset /
+            usuário / dia / mês / ano e as queries mais caras.
+          </p>
+          <p>
+            Quando o agrupamento é <strong>tabela ou dataset</strong>: split
+            <strong>query + storage</strong> em barras empilhadas (top 10) e em
+            colunas, comparação com a <strong>meta cadastrada</strong> daquele
+            escopo com badge "Dentro" / "Acima da meta", e linha expansível com
+            o drill-down da série diária. Tabela com storage mas sem query no
+            período aparece com custo de query zero — sinal de tabela abandonada.
           </p>
           <figure>
             <img src="../produto/images/29-finops-budget-config.png" alt="Configuração do budget" onclick="openLightbox(this.src, this.alt)" />
@@ -948,11 +1030,13 @@
             <figcaption>Custo até agora, média diária, projeção mensal e janela analisada.</figcaption>
           </figure>
           <p>
-            <strong>Metas de budget<span class="new-badge">novo</span></strong> —
-            um diálogo permite cadastrar metas de custo mensais por projeto,
-            dataset ou tabela. Cada usuário tem as suas (não são compartilhadas);
-            a meta de escopo "projeto" vira a linha de referência no gráfico de
-            custo da <a href="#finops">visão geral</a>.
+            <strong>Metas de budget</strong> — um diálogo cadastra metas de
+            custo mensais por projeto, dataset ou tabela. Desde a v1.13 a meta é
+            <strong>compartilhada por projeto</strong>, não mais por usuário:
+            qualquer um com acesso ao projeto <em>vê</em> a meta, mas só um
+            <a href="#metadados">Admin de projeto</a> (ou superadmin) pode
+            <em>editar</em>. A meta de escopo "projeto" vira a linha de
+            referência no gráfico de custo da <a href="#finops">visão geral</a>.
           </p>
           <figure>
             <img src="../produto/images/31-finops-budget-dialog.png" alt="Configurar metas de budget" onclick="openLightbox(this.src, this.alt)" />
@@ -1079,7 +1163,10 @@
             Controla quem é administrador do Atlas e a quais projetos GCP cada
             usuário tem acesso, num só lugar. <code>"*"</code> na lista de
             projetos libera qualquer projeto que a service account do Atlas
-            alcançar.
+            alcançar. Este é o <strong>admin global</strong> — não confundir com
+            o <a href="#metadados">Admin de projeto</a> (papel por projeto,
+            gerido na visão geral de Metadados, que dá direito de escrita em
+            metadados de governança e metas de budget daquele projeto).
           </p>
           <figure>
             <img src="../produto/images/38-admin-usuarios.png" alt="Admin por usuário" onclick="openLightbox(this.src, this.alt)" />
