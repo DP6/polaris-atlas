@@ -3,10 +3,10 @@ name: Promote develop to main
 # Etapa 2 do fluxo branch → develop → main (ver CLAUDE.md "CI/CD e deploy"
 # e ADR-012). Dispara em todo push em develop (sem filtro de path — precisa
 # rodar não importa qual app/infra mudou). Espera o(s) deploy(s) de dev que
-# este push disparou terminarem com sucesso, depois abre a PR pra main —
-# mesmo padrão de polling do job wait-for-terraform já usado em
-# frontend-deploy-dev.yml/backend-deploy-prod.yml/frontend-deploy-prod.yml,
-# generalizado pros três workflows que podem rodar em dev.
+# este push de fato disparou (detectado observando os runs reais desse
+# commit, não duplicando path filter) terminarem com sucesso, depois abre
+# a PR pra main — mesmo padrão de polling do job wait-for-terraform já
+# usado em frontend-deploy-dev.yml/backend-deploy-prod.yml/frontend-deploy-prod.yml.
 on:
   push:
     branches:
@@ -22,45 +22,47 @@ jobs:
     name: Wait for dev deploy(s) to finish
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-
       - name: Wait for whichever dev workflow(s) this push triggered
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
-          # workflow-arquivo -> regex do path filter dele (mesmos paths de
-          # cada .github/workflows/*-dev.yml correspondente).
-          declare -A checks=(
-            ["backend-deploy-dev.yml"]='^apps/backend/'
-            ["frontend-deploy-dev.yml"]='^apps/frontend/'
-            ["terraform-apply-dev.yml"]='^infra/terraform/(environments/dev|modules)/'
-          )
+          # Detecta se cada workflow disparou pra este commit observando os
+          # runs de verdade (gh run list --commit), em vez de duplicar o
+          # path filter de cada um via regex/git diff — a primeira versão
+          # deste job fazia isso e divergiu na prática: um push que só
+          # tocava .github/workflows/backend-deploy-dev.yml (o próprio
+          # path auto-referenciado do workflow, que TAMBÉM dispara ele)
+          # não batia no regex '^apps/backend/', o job concluiu que nada
+          # disparou e abriu a PR pra main antes do deploy real terminar.
+          for workflow in backend-deploy-dev.yml frontend-deploy-dev.yml terraform-apply-dev.yml; do
+            echo "Verificando se $workflow disparou pra este commit..."
+            found=false
+            for i in $(seq 1 6); do
+              run_json=$(gh run list --repo "${{ github.repository }}" \
+                --workflow="$workflow" \
+                --commit "${{ github.sha }}" \
+                --json status,conclusion --jq '.[0]')
+              if [ -n "$run_json" ] && [ "$run_json" != "null" ]; then
+                found=true
+                break
+              fi
+              sleep 5
+            done
 
-          changed=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" 2>/dev/null || true)
-
-          for workflow in "${!checks[@]}"; do
-            regex="${checks[$workflow]}"
-            if ! echo "$changed" | grep -qE "$regex"; then
-              echo "Este push não toca o path de $workflow — pulando."
+            if [ "$found" != "true" ]; then
+              echo "$workflow não disparou pra este commit — pulando."
               continue
             fi
 
-            echo "Este push dispara $workflow — aguardando concluir."
+            echo "$workflow disparou — aguardando concluir."
             finished=false
             for i in $(seq 1 60); do
               run_json=$(gh run list --repo "${{ github.repository }}" \
                 --workflow="$workflow" \
                 --commit "${{ github.sha }}" \
                 --json status,conclusion --jq '.[0]')
-
-              if [ -z "$run_json" ] || [ "$run_json" = "null" ]; then
-                sleep 10
-                continue
-              fi
 
               status=$(echo "$run_json" | jq -r '.status')
               if [ "$status" = "completed" ]; then
