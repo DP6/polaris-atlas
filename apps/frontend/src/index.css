@@ -8,7 +8,9 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Identidade dp6 (docs/frontend/design-system.md) — dark é o tema padrão
+/* Identidade dp6 — fonte canônica em ci-polaris/DP6-Design-System.md, resolvida
+   pra este repo via ci-polaris/MAPA-DE-TOKENS.md; docs/frontend/design-system.md
+   é o espelho local (nomenclatura shadcn). Dark é o tema padrão
    (:root, também aplicado como classe .dark), light é a versão que a
    skill já previa ("Modo claro (opcional, futuro)": inverter só
    --color-bg-* e --color-text-*, manter #FFB302 como acento) — hooks/
@@ -145,7 +147,11 @@
   --radius: 0.3125rem;
   --status-ok: #34d399;
   --status-warn: #ffb302;
-  --status-error: #e53e3e;
+  /* Vermelho alinhado ao DS canônico (ci-polaris/DP6-Design-System.md), que varia
+     por tema: #D64500 no claro / #E53E3E no escuro (igual já era). Já era o valor
+     documentado nas specs originais do polaris-cost-model (que espelha este arquivo)
+     — decisão de produto confirmada pelo usuário na Fase 1 do rollout do DS. */
+  --status-error: #d64500;
   --status-info: #63b3ed;
   /* Texto/ícone de status sobre superfície CLARA (--background #fafaf8 /
      --card #f0efec). Tons escuros da mesma família, calculados pra

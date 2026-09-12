@@ -10,8 +10,11 @@ Filosofia: minimalismo com personalidade — menos decoração, mais clareza.
 > `apps/frontend/src/index.css`. Nenhum token entra, sai ou muda de valor
 > no `index.css` sem que este arquivo seja atualizado **no mesmo PR**.
 
-O `index.css` é a fonte de verdade dos valores; este doc explica o
-propósito de cada grupo e o que **não** fazer com ele.
+O `index.css` é a fonte de verdade dos *valores* deste repo; a fonte canônica da
+iniciativa é `ci-polaris/DP6-Design-System.md`, resolvida pra este repo via
+`ci-polaris/MAPA-DE-TOKENS.md` (o que fazer com token sem equivalente dos dois
+lados, conflitos já identificados). Este doc explica o propósito de cada grupo
+e o que **não** fazer com ele.
 
 ---
 
@@ -72,8 +75,9 @@ seguem o mesmo amarelo.
 | `--status-{ok,warn,error,info}` | **preenchimento / gráfico** — chip `bg-status-warn/12`, borda `/30`, barra de chart | ≥3:1 (fill) | não |
 | `--status-{ok,warn,error,info}-foreground` | **texto / ícone** sobre superfície tintada — classe `text-status-*-foreground` | ≥4.5:1, **nos dois temas** | **sim** |
 
-Valores de fill (ambos os temas): ok `#34D399` · warn `#FFB302` ·
-error `#E53E3E` · info `#63B3ED`.
+Valores de fill: ok `#34D399` · warn `#FFB302` · info `#63B3ED` (ambos os temas).
+error varia por tema, alinhado ao DS canônico — claro `#D64500` · escuro `#E53E3E`
+(igual já era).
 Valores de foreground — claro: ok `#0b7a43` · warn `#8a5700` ·
 error `#c1291f` · info `#1a6ba8`; escuro: ok `#34d399` · warn `#ffb302` ·
 error `#f87171` · info `#63b3ed`. (Contrastes calculados nos comentários
