@@ -41,7 +41,15 @@ _OBJECT_READ_METHOD = "storage.objects.get"
 # Janela do scanner 6.2 (objeto sem leitura recente) — ver
 # docs/specs/storage.md seção 6.2. Único valor de referência: service.py
 # e jobs/refresh_event_cache.py importam daqui em vez de duplicar.
-LOOKBACK_DAYS = 90
+#
+# Era 90 — reduzido pra refletir o teto real (ADR-013): esta checagem
+# depende de Data Access audit logs do GCS, que por padrão só retêm 30
+# dias no bucket `_Default` do Cloud Logging do projeto-cliente (config
+# fora do nosso acesso). Diferente de lineage/access/finops (job do
+# BigQuery), não existe INFORMATION_SCHEMA equivalente pra "quem leu
+# este objeto e quando" — sem fonte alternativa, 90 dias nunca foi
+# alcançável na prática. Anunciar 30 é honesto; anunciar 90 não era.
+LOOKBACK_DAYS = 30
 _CACHE_KIND = "storage_read_keys"
 
 logger = std_logging.getLogger(__name__)
