@@ -5,6 +5,58 @@ Atualizado ao final de cada fase pelo Claude Code.
 
 ---
 
+### design-system-fonte-unica — `feat/design-system-fonte-unica` (app + GH Pages)
+
+Fases 2 e 3 do rollout do [DP6 Design System](https://github.com/DP6/ci-polaris) —
+`ci-polaris/DP6-Design-System.md` vira fonte canônica da iniciativa; este repo era
+até aqui quem definia o padrão (o `polaris-cost-model` o espelhava). Base já madura
+(auditoria de acessibilidade PR #49, refresh visual "rodada 3"), escopo bem mais
+estreito do que o plano original previa — sem legado a migrar, 0 var órfã.
+
+**App (`apps/frontend/`):**
+- `index.css` + `docs/frontend/design-system.md` passam a apontar pra
+  `ci-polaris/DP6-Design-System.md` + `MAPA-DE-TOKENS.md`.
+- `--status-error` passa a variar por tema (`#d64500` claro / `#e53e3e` escuro,
+  igual já era) — mesma decisão de produto já confirmada pelo usuário no PR do
+  `polaris-cost-model`, que espelhava este arquivo. `--destructive` (token
+  separado do shadcn) não muda, fora do escopo da decisão.
+- **Achado ao validar**: diferente do cost-model, aqui `--status-error` é usado
+  como bloco sólido (não translúcido) em `SlaDistributionBar`/`MetricTile` —
+  testado o fill a 3:1 contra `--background`/`--card` de propósito; passou
+  (4,27:1 / 3,88:1 no claro).
+- `CLAUDE.md` corrigido — afirmava falsamente "nenhum código em
+  `apps/frontend/`" (hoje 16+ features e componentes compartilhados).
+- Nenhum bug de tema/JS pra portar do cost-model: Atlas não lê cor via
+  `getComputedStyle` em lugar nenhum — Tailwind + CSS var + cascata já resolve.
+
+**GH Pages (`docs/site/`):**
+- Investigado o CSS real das 4 páginas (~1681 linhas): diverge mais do que o
+  plano original assumia (TOC 288px vs 260px, max-width 880px vs 1280px,
+  margens/badges próprios por página) — não é bloco duplicado idêntico.
+  Extrair um `site.css` compartilhado exigiria unificar valores sem poder
+  validar automaticamente (4 HTMLs sem build). Perguntado ao usuário: decisão
+  de **não extrair agora**, só o essencial.
+- Nota de proveniência perto do `:root` das 4 páginas + correção já registrada
+  na Fase 0: `--color-text-muted` (`#5B626C`) passa WCAG AA com folga aqui
+  (6,16:1 contra branco) — sem tema escuro, nunca esteve em risco.
+- Removida `docs/site/assets/dp6-logo-branco-amarelo.png`, órfã confirmada.
+- Verificado sem precisar de ação: link quebrado `polaris-hub-gcp` (já
+  corrigido no PR #72); `.site-tabs` 32px em `produto` vs 44px nas outras 3
+  (já tinha comentário explicando — página fullscreen de slides).
+
+**Fora de escopo, registrado como dívida:** extração de `site.css` compartilhado;
+48 PNGs de `docs/site/produto/images/` desatualizados (recaptura exige o app com
+o DS já rodando); `dp6-grafismo.png` com cor de marca no bitmap (workaround
+mantido).
+
+Validado: `check_orphan_vars`/`check_contrast` (`ci-polaris/scripts/`, 0 falhas
+nos dois); `npm run dev` sem erro; GH Pages validado visualmente pelo usuário em
+servidor estático local. Não validado com dado real (backend fala com
+BigQuery/GCP direto, sem modo mock). PR
+[#74](https://github.com/DP6/polaris-atlas/pull/74).
+
+---
+
 ### fluxo-develop-main — `chore/fluxo-develop-main-gates` (CI/CD)
 
 Redesenho do pipeline de deploy, a pedido do usuário: de trunk-based
