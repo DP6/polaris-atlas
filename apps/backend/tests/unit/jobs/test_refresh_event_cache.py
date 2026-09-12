@@ -205,6 +205,162 @@ def _stub_job_parsers(monkeypatch, *, lineage=None, access=None, finops=None):
     return seen
 
 
+# --- _information_schema_events_by_kind (ADR-013, Eixo 1) -------------------
+
+
+def test_information_schema_events_by_kind_returns_none_on_discover_regions_failure(monkeypatch):
+    def _raise(*a, **kw):
+        raise ValueError("sem permissão de BigQuery")
+
+    monkeypatch.setattr(refresh_event_cache, "discover_regions", _raise)
+
+    result = refresh_event_cache._information_schema_events_by_kind(MagicMock(), "proj")
+
+    assert result is None
+
+
+def test_information_schema_events_by_kind_feeds_the_three_parsers(monkeypatch):
+    monkeypatch.setattr(refresh_event_cache, "discover_regions", lambda project_id, client: ["US"])
+    rows = [{"job_id": "j1"}]
+    monkeypatch.setattr(
+        refresh_event_cache.information_schema, "list_recent_jobs", lambda *a, **kw: rows
+    )
+    seen = {}
+
+    def _parser(key, out_job_id):
+        def _fn(r):
+            seen[key] = r
+            return [_event(out_job_id)]
+
+        return _fn
+
+    monkeypatch.setattr(
+        refresh_event_cache.lineage_repository,
+        "parse_job_events_information_schema",
+        _parser("lineage", "l1"),
+    )
+    monkeypatch.setattr(
+        refresh_event_cache.access_repository,
+        "parse_access_events_information_schema",
+        _parser("access", "a1"),
+    )
+    monkeypatch.setattr(
+        refresh_event_cache.finops_repository,
+        "parse_scan_events_information_schema",
+        _parser("finops", "f1"),
+    )
+
+    result = refresh_event_cache._information_schema_events_by_kind(MagicMock(), "proj")
+
+    assert seen == {"lineage": rows, "access": rows, "finops": rows}
+    assert [e.job_id for e in result["lineage"]] == ["l1"]
+    assert [e.job_id for e in result["access"]] == ["a1"]
+    assert [e.job_id for e in result["finops_scan_events"]] == ["f1"]
+
+
+def test_refresh_job_caches_full_scan_merges_information_schema_cloud_logging_wins(monkeypatch):
+    """Full scan com INFORMATION_SCHEMA disponível: eventos exclusivos da
+    INFORMATION_SCHEMA (job mais antigo que o Cloud Logging ainda guarda)
+    entram; em colisão de job_id, o Cloud Logging vence (mais completo —
+    tem source_buckets/destination_buckets que a INFORMATION_SCHEMA não
+    expõe, ver ADR-013)."""
+    monkeypatch.setattr(refresh_event_cache, "list_entries_with_retry", lambda *a, **kw: ["raw"])
+    monkeypatch.setattr(
+        refresh_event_cache.event_cache, "get_cache_metadata", lambda *a, **kw: None
+    )
+    monkeypatch.setattr(refresh_event_cache, "discover_regions", lambda project_id, client: ["US"])
+    monkeypatch.setattr(
+        refresh_event_cache.information_schema, "list_recent_jobs", lambda *a, **kw: ["is_row"]
+    )
+
+    cloud_logging_event = _event("shared-job")  # "vence" a colisão
+    info_schema_event_shared = _event("shared-job")
+    info_schema_event_old = _event("older-job")
+
+    def _parse_job_events(entries):
+        return [cloud_logging_event] if entries == ["raw"] else []
+
+    def _parse_job_events_information_schema(rows):
+        return [info_schema_event_shared, info_schema_event_old] if rows == ["is_row"] else []
+
+    monkeypatch.setattr(
+        refresh_event_cache.lineage_repository, "parse_job_events", _parse_job_events
+    )
+    monkeypatch.setattr(
+        refresh_event_cache.lineage_repository,
+        "parse_job_events_information_schema",
+        _parse_job_events_information_schema,
+    )
+    monkeypatch.setattr(refresh_event_cache.access_repository, "parse_access_events", lambda e: [])
+    monkeypatch.setattr(
+        refresh_event_cache.access_repository,
+        "parse_access_events_information_schema",
+        lambda r: [],
+    )
+    monkeypatch.setattr(refresh_event_cache.finops_repository, "parse_scan_events", lambda e: [])
+    monkeypatch.setattr(
+        refresh_event_cache.finops_repository, "parse_scan_events_information_schema", lambda r: []
+    )
+
+    written = {}
+    monkeypatch.setattr(
+        refresh_event_cache.lineage_repository,
+        "write_job_events_cache",
+        lambda sc, fc, pid, events, **kw: written.setdefault("lineage", events),
+    )
+    monkeypatch.setattr(
+        refresh_event_cache.access_repository, "write_access_events_cache", lambda *a, **kw: None
+    )
+    monkeypatch.setattr(
+        refresh_event_cache.finops_repository, "write_scan_events_cache", lambda *a, **kw: None
+    )
+
+    counts = refresh_event_cache._refresh_job_caches(
+        MagicMock(), MagicMock(), MagicMock(), MagicMock(), "proj", force_full=True
+    )
+
+    assert counts["information_schema_used"] is True
+    written_by_id = {e.job_id: e for e in written["lineage"]}
+    assert set(written_by_id) == {"shared-job", "older-job"}
+    # A instância que sobrevive pra "shared-job" é a do Cloud Logging, não
+    # a da INFORMATION_SCHEMA — mesmo job_id, objetos diferentes.
+    assert written_by_id["shared-job"] is cloud_logging_event
+
+
+def test_refresh_job_caches_full_scan_without_information_schema_behaves_as_before(monkeypatch):
+    """Full scan quando a INFORMATION_SCHEMA falha/não acha nada (`None`)
+    — comportamento idêntico a antes da ADR-013, sem merge nenhum."""
+    monkeypatch.setattr(refresh_event_cache, "list_entries_with_retry", lambda *a, **kw: ["raw"])
+    monkeypatch.setattr(
+        refresh_event_cache.event_cache, "get_cache_metadata", lambda *a, **kw: None
+    )
+    monkeypatch.setattr(
+        refresh_event_cache, "_information_schema_events_by_kind", lambda *a, **kw: None
+    )
+    parsed = _stub_job_parsers(monkeypatch, lineage=[_event("only-cloud-logging")])
+
+    written = {}
+    monkeypatch.setattr(
+        refresh_event_cache.lineage_repository,
+        "write_job_events_cache",
+        lambda sc, fc, pid, events, **kw: written.setdefault("lineage", events),
+    )
+    monkeypatch.setattr(
+        refresh_event_cache.access_repository, "write_access_events_cache", lambda *a, **kw: None
+    )
+    monkeypatch.setattr(
+        refresh_event_cache.finops_repository, "write_scan_events_cache", lambda *a, **kw: None
+    )
+
+    counts = refresh_event_cache._refresh_job_caches(
+        MagicMock(), MagicMock(), MagicMock(), MagicMock(), "proj", force_full=True
+    )
+
+    assert counts["information_schema_used"] is False
+    assert [e.job_id for e in written["lineage"]] == ["only-cloud-logging"]
+    assert parsed["lineage"] == ["raw"]
+
+
 def test_refresh_project_full_scan_writes_all_four_caches(monkeypatch):
     """force_full → UM scan de jobservice.jobcompleted alimenta os 3
     parsers de lineage/access/finops; storage tem scan próprio. Mode
@@ -247,7 +403,7 @@ def test_refresh_project_full_scan_writes_all_four_caches(monkeypatch):
     )
 
     status, counts = refresh_event_cache._refresh_project(
-        MagicMock(), MagicMock(), MagicMock(), "proj", force_full=True
+        MagicMock(), MagicMock(), MagicMock(), MagicMock(), "proj", force_full=True
     )
 
     assert status == "ok"
@@ -326,7 +482,7 @@ def test_refresh_project_incremental_uses_delta_filter_and_merges(monkeypatch):
     )
 
     status, counts = refresh_event_cache._refresh_project(
-        MagicMock(), MagicMock(), MagicMock(), "proj", force_full=False
+        MagicMock(), MagicMock(), MagicMock(), MagicMock(), "proj", force_full=False
     )
 
     assert status == "ok"
@@ -374,7 +530,7 @@ def test_refresh_project_full_scan_when_anchor_missing(monkeypatch):
     )
 
     _status, counts = refresh_event_cache._refresh_project(
-        MagicMock(), MagicMock(), MagicMock(), "proj", force_full=False
+        MagicMock(), MagicMock(), MagicMock(), MagicMock(), "proj", force_full=False
     )
 
     assert counts["mode"] == "full"
@@ -394,7 +550,7 @@ def test_refresh_project_skips_project_without_logging_access(monkeypatch):
     )
 
     status, _counts = refresh_event_cache._refresh_project(
-        MagicMock(), MagicMock(), MagicMock(), "proj", force_full=True
+        MagicMock(), MagicMock(), MagicMock(), MagicMock(), "proj", force_full=True
     )
 
     assert status == "access_denied"
@@ -414,7 +570,7 @@ def test_refresh_project_skips_project_on_quota_exceeded(monkeypatch):
     )
 
     status, _counts = refresh_event_cache._refresh_project(
-        MagicMock(), MagicMock(), MagicMock(), "proj", force_full=True
+        MagicMock(), MagicMock(), MagicMock(), MagicMock(), "proj", force_full=True
     )
 
     assert status == "quota_exceeded"
@@ -440,7 +596,7 @@ def test_refresh_project_skips_project_that_does_not_exist(monkeypatch):
     )
 
     status, _counts = refresh_event_cache._refresh_project(
-        MagicMock(), MagicMock(), MagicMock(), "inter-mta", force_full=True
+        MagicMock(), MagicMock(), MagicMock(), MagicMock(), "inter-mta", force_full=True
     )
 
     assert status == "api_error"
@@ -454,7 +610,7 @@ def test_refresh_project_skips_project_on_unexpected_error(monkeypatch):
     monkeypatch.setattr(refresh_event_cache, "list_entries_with_retry", _raise)
 
     status, _counts = refresh_event_cache._refresh_project(
-        MagicMock(), MagicMock(), MagicMock(), "proj", force_full=True
+        MagicMock(), MagicMock(), MagicMock(), MagicMock(), "proj", force_full=True
     )
 
     assert status == "unexpected_error"
@@ -465,13 +621,16 @@ def test_refresh_project_skips_project_on_unexpected_error(monkeypatch):
 
 def test_main_refreshes_every_known_project(monkeypatch):
     monkeypatch.setattr(refresh_event_cache, "get_logging_client", lambda: MagicMock())
+    monkeypatch.setattr(refresh_event_cache, "get_bigquery_client", lambda: MagicMock())
     monkeypatch.setattr(refresh_event_cache, "get_storage_client", lambda: MagicMock())
     monkeypatch.setattr(refresh_event_cache, "get_firestore_client", lambda: MagicMock())
     monkeypatch.setattr(refresh_event_cache, "_known_projects", lambda firestore_client: ["a", "b"])
     monkeypatch.setattr(refresh_event_cache.settings, "cache_force_full", False)
     refreshed = []
 
-    def _fake_refresh(logging_client, storage_client, firestore_client, project_id, *, force_full):
+    def _fake_refresh(
+        logging_client, bq_client, storage_client, firestore_client, project_id, *, force_full
+    ):
         refreshed.append((project_id, force_full))
         return "ok", {"job_events": 0}
 
@@ -501,6 +660,7 @@ def test_main_refreshes_every_known_project(monkeypatch):
 
 def test_main_propagates_force_full_from_settings(monkeypatch):
     monkeypatch.setattr(refresh_event_cache, "get_logging_client", lambda: MagicMock())
+    monkeypatch.setattr(refresh_event_cache, "get_bigquery_client", lambda: MagicMock())
     monkeypatch.setattr(refresh_event_cache, "get_storage_client", lambda: MagicMock())
     monkeypatch.setattr(refresh_event_cache, "get_firestore_client", lambda: MagicMock())
     monkeypatch.setattr(refresh_event_cache, "_known_projects", lambda firestore_client: ["a"])
@@ -510,7 +670,7 @@ def test_main_propagates_force_full_from_settings(monkeypatch):
     monkeypatch.setattr(
         refresh_event_cache,
         "_refresh_project",
-        lambda lc, sc, fc, pid, *, force_full: seen.append(force_full) or ("ok", {}),
+        lambda lc, bq, sc, fc, pid, *, force_full: seen.append(force_full) or ("ok", {}),
     )
     monkeypatch.setattr(
         refresh_event_cache.event_cache, "start_cache_run", lambda fc, projects: "run-1"
@@ -533,6 +693,7 @@ def test_main_restricts_to_cache_only_projects_from_settings(monkeypatch):
     """cache_only_projects (seleção do gatilho de admin) SUBSTITUI a lista
     de `hub_projects` — roda exatamente os projetos pedidos."""
     monkeypatch.setattr(refresh_event_cache, "get_logging_client", lambda: MagicMock())
+    monkeypatch.setattr(refresh_event_cache, "get_bigquery_client", lambda: MagicMock())
     monkeypatch.setattr(refresh_event_cache, "get_storage_client", lambda: MagicMock())
     monkeypatch.setattr(refresh_event_cache, "get_firestore_client", lambda: MagicMock())
     known_calls = []
@@ -547,7 +708,7 @@ def test_main_restricts_to_cache_only_projects_from_settings(monkeypatch):
     monkeypatch.setattr(
         refresh_event_cache,
         "_refresh_project",
-        lambda lc, sc, fc, pid, *, force_full: refreshed.append(pid) or ("ok", {}),
+        lambda lc, bq, sc, fc, pid, *, force_full: refreshed.append(pid) or ("ok", {}),
     )
     monkeypatch.setattr(
         refresh_event_cache.event_cache, "start_cache_run", lambda fc, projects: "run-1"
@@ -571,6 +732,7 @@ def test_main_processes_all_projects_even_when_one_does_not_exist(monkeypatch):
     main() continua processando "b" mesmo com "inter-mta" quebrado no
     meio da lista, em vez de morrer no primeiro NotFound."""
     monkeypatch.setattr(refresh_event_cache, "get_logging_client", lambda: MagicMock())
+    monkeypatch.setattr(refresh_event_cache, "get_bigquery_client", lambda: MagicMock())
     monkeypatch.setattr(refresh_event_cache, "get_storage_client", lambda: MagicMock())
     monkeypatch.setattr(refresh_event_cache, "get_firestore_client", lambda: MagicMock())
     monkeypatch.setattr(

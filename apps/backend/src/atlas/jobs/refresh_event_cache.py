@@ -25,6 +25,19 @@ Logging e alimenta os 3 parsers (`parse_job_events`/`parse_access_events`/
 leitura da cota `read_requests` do projeto. O refresh de storage é
 best-effort e isolado (filtro `storage.objects.get`, Data Access audit
 logs do GCS podem não estar habilitados — docs/specs/storage.md 6.2).
+
+**ADR-013 (2026-09-12)**: o Cloud Logging do projeto-cliente só retém
+~30 dias de audit log por padrão (`_Default` log bucket, fora do nosso
+acesso) — não é retroativo. Dois ajustes: (1) a janela de evicção do
+cache (`_JOB_WINDOW_DAYS`) subiu de 31 pra 730 dias, então o cache
+próprio do atlas acumula bem além disso a partir do dia em que o
+projeto foi integrado (Eixo 2); (2) só no **full scan** (primeira
+execução de um projeto), o Job também consulta
+`INFORMATION_SCHEMA.JOBS_BY_PROJECT` (retenção nativa de 180 dias,
+independente do Cloud Logging — ver core/information_schema.py) e
+mescla com o que o Cloud Logging trouxer, maximizando a fotografia
+inicial (Eixo 1). O delta incremental diário continua só Cloud Logging
+— mais barato e já com o high-water-mark certo.
 """
 
 import json
@@ -33,10 +46,12 @@ from datetime import UTC, datetime, timedelta
 from types import ModuleType
 
 from google.api_core.exceptions import GoogleAPICallError
-from google.cloud import firestore, storage
+from google.cloud import bigquery, firestore, storage
 from google.cloud import logging as cloud_logging
 
-from atlas.core import event_cache
+from atlas.core import event_cache, information_schema
+from atlas.core.bigquery import discover_regions
+from atlas.core.bigquery import get_client as get_bigquery_client
 from atlas.core.config import settings
 from atlas.core.exceptions import LoggingAccessDeniedError, LoggingQuotaExceededError
 from atlas.core.firestore import get_firestore_client
@@ -84,18 +99,20 @@ _STORAGE_WINDOW_DAYS = storage_repository.LOOKBACK_DAYS
 # racional de isolamento de domínio de domains/admin/service.py.
 _STORAGE_CACHE_KIND = "storage_read_keys"
 
-# (cache_kind, chave em `counts`, módulo do domínio, nome do parser, nome
+# (cache_kind, chave em `counts`, módulo do domínio, nome do parser de
+# audit log, nome do parser de INFORMATION_SCHEMA [ADR-013, Eixo 1], nome
 # do leitor de cache, nome do gravador de cache). Os 3 domínios de job
 # compartilham a assinatura de read_*/write_* e os eventos têm `.job_id` e
 # `.timestamp` — dá pra tratar genericamente. Guardamos os NOMES (resolve
 # via getattr no uso) e não as funções, pra o monkeypatch dos testes valer.
-_JobKindSpec = tuple[str, str, ModuleType, str, str, str]
+_JobKindSpec = tuple[str, str, ModuleType, str, str, str, str]
 _JOB_KIND_SPECS: tuple[_JobKindSpec, ...] = (
     (
         "lineage",
         "job_events",
         lineage_repository,
         "parse_job_events",
+        "parse_job_events_information_schema",
         "read_job_events_cache",
         "write_job_events_cache",
     ),
@@ -104,6 +121,7 @@ _JOB_KIND_SPECS: tuple[_JobKindSpec, ...] = (
         "access_events",
         access_repository,
         "parse_access_events",
+        "parse_access_events_information_schema",
         "read_access_events_cache",
         "write_access_events_cache",
     ),
@@ -112,6 +130,7 @@ _JOB_KIND_SPECS: tuple[_JobKindSpec, ...] = (
         "scan_events",
         finops_repository,
         "parse_scan_events",
+        "parse_scan_events_information_schema",
         "read_scan_events_cache",
         "write_scan_events_cache",
     ),
@@ -140,8 +159,47 @@ def _job_scan_anchor(firestore_client: firestore.Client, project_id: str) -> dat
     return min(anchors)
 
 
+def _information_schema_events_by_kind(
+    bq_client: bigquery.Client, project_id: str
+) -> dict[str, list] | None:
+    """Fotografia inicial via `INFORMATION_SCHEMA.JOBS_BY_PROJECT` (até
+    `information_schema.JOBS_BY_PROJECT_MAX_LOOKBACK_DAYS` dias) pros 3
+    domínios de job — só chamada no full scan (ADR-013, Eixo 1), nunca no
+    delta incremental (mais barato e já com o high-water-mark certo só
+    via Cloud Logging). Um scan só, alimenta os 3 parsers — mesmo
+    racional do scan único de Cloud Logging acima.
+
+    Best-effort: qualquer falha (projeto sem região descoberta, sem
+    permissão de BigQuery, erro de query) degrada pra `None` — o full
+    scan do Cloud Logging sozinho (~30d reais) continua funcionando
+    normal, esta é só uma fonte COMPLEMENTAR. `None` (não rodou/falhou)
+    é diferente de `{}` (rodou e não achou job nenhum)."""
+    try:
+        regions = discover_regions(project_id, client=bq_client)
+        rows = information_schema.list_recent_jobs(bq_client, project_id, regions)
+    except Exception as exc:  # noqa: BLE001 — nunca derruba o full scan principal
+        logger.warning(
+            json.dumps(
+                {
+                    "project_id": project_id,
+                    "status": "information_schema_error",
+                    "error": str(exc),
+                }
+            )
+        )
+        return None
+
+    return {
+        kind: getattr(module, info_parse_name)(rows)
+        for kind, _count_key, module, _parse_name, info_parse_name, _read_name, _write_name in (
+            _JOB_KIND_SPECS
+        )
+    }
+
+
 def _refresh_job_caches(
     logging_client: cloud_logging.Client,
+    bq_client: bigquery.Client,
     storage_client: storage.Client,
     firestore_client: firestore.Client,
     project_id: str,
@@ -155,7 +213,15 @@ def _refresh_job_caches(
     if not force_full:
         anchor = _job_scan_anchor(firestore_client, project_id)
         if anchor is not None:
-            for kind, _count_key, module, _parse_name, read_name, _write_name in _JOB_KIND_SPECS:
+            for (
+                kind,
+                _count_key,
+                module,
+                _parse_name,
+                _info_parse_name,
+                read_name,
+                _write_name,
+            ) in _JOB_KIND_SPECS:
                 cached = getattr(module, read_name)(storage_client, firestore_client, project_id)
                 if cached is None:
                     # Blob sumido (lifecycle do bucket) apesar do metadado —
@@ -187,13 +253,29 @@ def _refresh_job_caches(
         page_pause=_SCAN_PAGE_PAUSE_SECONDS,
     )
 
+    # Só no full scan: fotografia inicial complementar (ADR-013, Eixo 1) —
+    # base do merge abaixo, igual `existing_by_kind` no modo incremental,
+    # exceto que quem "vence" a colisão de job_id é sempre o Cloud
+    # Logging (mais completo — inclui source_buckets/destination_buckets
+    # que a INFORMATION_SCHEMA não expõe).
+    info_schema_by_kind = (
+        _information_schema_events_by_kind(bq_client, project_id) if mode == "full" else None
+    )
+
     counts: dict[str, object] = {"mode": mode, "raw_entries": len(raw_entries)}
+    counts["information_schema_used"] = info_schema_by_kind is not None
     evicted_total = 0
-    for kind, count_key, module, parse_name, _read_name, write_name in _JOB_KIND_SPECS:
+    for kind, count_key, module, parse_name, _info_parse_name, _read_name, write_name in (
+        _JOB_KIND_SPECS
+    ):
         parsed = getattr(module, parse_name)(raw_entries)
         if mode == "incremental":
             merged = event_cache.merge_dedup(
                 existing_by_kind.get(kind, []), parsed, key=lambda e: e.job_id
+            )
+        elif info_schema_by_kind is not None:
+            merged = event_cache.merge_dedup(
+                info_schema_by_kind.get(kind, []), parsed, key=lambda e: e.job_id
             )
         else:
             merged = parsed
@@ -281,6 +363,7 @@ def _refresh_storage_read_keys(
 
 def _refresh_project(
     logging_client: cloud_logging.Client,
+    bq_client: bigquery.Client,
     storage_client: storage.Client,
     firestore_client: firestore.Client,
     project_id: str,
@@ -293,7 +376,12 @@ def _refresh_project(
     "api_error" | "unexpected_error"."""
     try:
         counts = _refresh_job_caches(
-            logging_client, storage_client, firestore_client, project_id, force_full=force_full
+            logging_client,
+            bq_client,
+            storage_client,
+            firestore_client,
+            project_id,
+            force_full=force_full,
         )
         counts["storage_read_object_keys"] = _refresh_storage_read_keys(
             logging_client, storage_client, firestore_client, project_id, force_full=force_full
@@ -329,6 +417,7 @@ def _refresh_project(
 
 def main() -> None:
     logging_client = get_logging_client()
+    bq_client = get_bigquery_client()
     storage_client = get_storage_client()
     firestore_client = get_firestore_client()
 
@@ -359,6 +448,7 @@ def main() -> None:
         for project_id in projects:
             status, counts = _refresh_project(
                 logging_client,
+                bq_client,
                 storage_client,
                 firestore_client,
                 project_id,

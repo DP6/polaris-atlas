@@ -23,6 +23,7 @@ from google.cloud import firestore, storage
 from google.cloud import logging as cloud_logging
 
 from atlas.core import event_cache
+from atlas.core import information_schema as information_schema_source
 from atlas.core.config import settings
 from atlas.core.exceptions import EventCacheNotReadyError
 
@@ -109,6 +110,38 @@ def parse_access_events(entries: list[cloud_logging.LogEntry]) -> list[AccessEve
     (lineage/access/finops). Não há mais `list_access_events`: o request
     path lê só do cache (modelo incremental), quem escaneia é o job."""
     return [event for entry in entries if (event := _parse_entry(entry)) is not None]
+
+
+def parse_access_events_information_schema(rows: list[dict]) -> list[AccessEvent]:
+    """Equivalente de `parse_access_events` pra linhas de
+    `core/information_schema.py::list_recent_jobs` (INFORMATION_SCHEMA.
+    JOBS_BY_PROJECT, 180 dias) — usado só no full scan inicial de um
+    projeto (ADR-013). Ver `domains/lineage/repository.py::
+    parse_job_events_information_schema` pro mesmo padrão com mais
+    contexto nos comentários."""
+    events = []
+    for row in rows:
+        raw_referenced = row.get("referenced_tables") or []
+        referenced = [
+            ref
+            for r in raw_referenced
+            if (ref := information_schema_source.parse_table_ref_snake(r)) is not None
+        ]
+        destination = information_schema_source.parse_table_ref_snake(
+            row.get("destination_table")
+        )
+        if destination is not None and destination[1].startswith("_"):
+            destination = None
+        events.append(
+            AccessEvent(
+                job_id=row.get("job_id") or "",
+                principal_email=row.get("user_email") or "",
+                timestamp=information_schema_source.most_recent_timestamp(row),
+                referenced_tables=referenced,
+                destination_table=destination,
+            )
+        )
+    return events
 
 
 # --- Cache de audit log (job periódico + fallback do request path) ---------
