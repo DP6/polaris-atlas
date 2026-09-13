@@ -62,9 +62,19 @@ logger = std_logging.getLogger("atlas.jobs.refresh_event_cache")
 _SCAN_PAGE_PAUSE_SECONDS = 0.4
 
 # Janela rolante do cache dos domínios de job (evicção por timestamp do
-# evento). 31 dias cobre o mês corrente inteiro pro budget de finops
-# (docs/specs/finops-budget.md) com folga de 1 dia.
-_JOB_WINDOW_DAYS = 31
+# evento).
+#
+# Era 31 (cobria só o mês corrente do budget de finops, com folga de 1
+# dia) — alargado pra 730 (ADR-013, Eixo 2): o teto real nunca foi este
+# número, é a retenção do Cloud Logging do projeto-cliente (~30d,
+# `_Default` bucket, fora do nosso acesso). Uma vez que o evento já foi
+# capturado pelo cache incremental, não tem motivo pra descartá-lo antes
+# da hora — a evicção agora é só válvula de escape de tamanho de blob
+# (ver core/event_cache.py), não mais um limite físico disfarçado.
+# Precisa ficar igual a `_FINOPS_CACHE_MAX_DAYS`
+# (domains/finops/service.py) — duplicado por isolamento de domínio, os
+# dois têm que mudar juntos.
+_JOB_WINDOW_DAYS = 730
 # Janela rolante do cache de storage (docs/specs/storage.md 6.2).
 _STORAGE_WINDOW_DAYS = storage_repository.LOOKBACK_DAYS
 

@@ -231,8 +231,13 @@ duplicado aqui. Diferenças específicas deste domínio:
   Glue que pulam o motor de query) — não aparecem em
   `jobservice.jobcompleted`, mesma lacuna já discutida informalmente
   pro caso de um job Glue extraindo dados do BQ pra S3.
-- Persistência histórica além da janela de 30 dias (sem Firestore aqui,
-  diferente de quality) — cada consulta reflete só a janela corrente dos
-  audit logs.
+- ~~Persistência histórica além da janela de 30 dias~~ — **superado pela
+  ADR-013** (2026-09-12): o cutoff de evicção do cache incremental
+  (`jobs/refresh_event_cache.py::_JOB_WINDOW_DAYS`) subiu de 31 pra 730
+  dias — o cache passa a acumular bem além da janela original a partir
+  do dia em que o projeto foi integrado. Ver ADR-013 pro detalhe
+  completo (dois eixos: fotografia inicial via
+  `INFORMATION_SCHEMA.JOBS_BY_PROJECT`, até 180 dias; acúmulo próprio
+  sem teto daí em diante).
 - Alertas de acesso anômalo/fora do padrão (fase futura, FinOps/
   governança).

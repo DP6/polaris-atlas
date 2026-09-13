@@ -7,7 +7,7 @@ from atlas.core.exceptions import (
     LoggingAccessDeniedError,
     LoggingQuotaExceededError,
 )
-from atlas.domains.storage import service
+from atlas.domains.storage import repository, service
 from atlas.domains.storage.schemas import BucketSummary
 
 _CREATED = datetime(2026, 1, 1, tzinfo=UTC)
@@ -291,4 +291,4 @@ def test_get_waste_candidates_degrades_gracefully_on_empty_read_keys(monkeypatch
     assert candidate.confidence == "config_based"
     assert candidate.usage_confirmed_object_count == 0
     assert result.usage_check_warning is not None
-    assert "90" in result.usage_check_warning
+    assert str(repository.LOOKBACK_DAYS) in result.usage_check_warning

@@ -62,7 +62,10 @@ def get_budget(
     project_id: str,
     group_by: BudgetGroupBy = Query(default=BudgetGroupBy.TABLE),
     limit: int = Query(default=10, ge=1, le=50),
-    lookback_days: int = Query(default=30, ge=1, le=31),
+    # Teto = service.FINOPS_CACHE_MAX_DAYS (era 31, hardcoded aqui — bug
+    # real da ADR-013: a rota rejeitava com 422 antes do clamp do service
+    # sequer rodar).
+    lookback_days: int = Query(default=30, ge=1, le=service.FINOPS_CACHE_MAX_DAYS),
     from_date: date | None = Query(default=None, alias="from"),
     to_date: date | None = Query(default=None, alias="to"),
     include_storage: bool = Query(default=False),
@@ -93,7 +96,10 @@ def get_cost_series(
     project_id: str,
     granularity: CostSeriesGranularity = Query(default=CostSeriesGranularity.DAY),
     cost_type: CostType = Query(default=CostType.ALL),
-    lookback_days: int = Query(default=30, ge=1, le=31),
+    # Teto = service.FINOPS_CACHE_MAX_DAYS (era 31, hardcoded aqui — bug
+    # real da ADR-013: a rota rejeitava com 422 antes do clamp do service
+    # sequer rodar).
+    lookback_days: int = Query(default=30, ge=1, le=service.FINOPS_CACHE_MAX_DAYS),
     from_date: date | None = Query(default=None, alias="from"),
     to_date: date | None = Query(default=None, alias="to"),
     datasets: list[str] | None = Query(default=None),
