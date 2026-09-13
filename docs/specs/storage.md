@@ -7,10 +7,12 @@ extensão do lineage) completos, testados e confirmados em
 via PR #25 e deployada em `observability-hub-prod` no mesmo dia,
 infraestrutura (IAM, buckets mock, dados) promovida antes do merge (ver
 `docs/onboarding-cliente.md`)
-**Versão:** v1.4 (cache do scanner 6.2 **incremental** — `dict[(bucket,
-objeto) → ISO da última leitura]`, delta diário por `receiveTimestamp`,
-evicção de janela de 90 dias; request path não escaneia mais ao vivo, ver
-seção 6.2)
+**Versão:** v1.5 (ADR-013, 2026-09-12 — janela do scanner 6.2 corrigida
+de 90 pra 30 dias, refletindo o teto real de retenção do Cloud Logging
+do projeto-cliente; sem fonte alternativa pra este domínio, ver seção
+6.2. v1.4: cache do scanner 6.2 **incremental** — `dict[(bucket,
+objeto) → ISO da última leitura]`, delta diário por `receiveTimestamp`;
+request path não escaneia mais ao vivo, ver seção 6.2)
 **Depende de:** `domains/lineage` (extensão, não substituição)
 
 ---
@@ -183,17 +185,26 @@ Cloud Logging, mesmo client/roles já usados por lineage/access
 cross-granted — nenhuma role nova necessária pra **ler** o log).
 
 Consulta o audit log de leitura de objeto (`storage.objects.get` e
-equivalentes) numa janela de 90 dias (mesma janela já usada por lineage/
-access/finops, por consistência). Objeto elegível por 6.1 (idade +
+equivalentes) numa janela de 30 dias. Objeto elegível por 6.1 (idade +
 Standard) que **não aparece nenhuma vez** como leitura nessa janela
 ganha `confidence: "usage_confirmed"` — sinal mais forte que 6.1 sozinha,
 porque combina idade **e** ausência de acesso real.
 
 **Limitação a manter explícita na resposta** (mesmo padrão do `warning`
 de lineage): a ausência de evento de leitura na janela não distingue
-"nunca lido" de "lido só fora da janela de 90 dias" — sempre comunicar
-como "sem leitura registrada nos últimos 90 dias", nunca como "nunca
+"nunca lido" de "lido só fora da janela de 30 dias" — sempre comunicar
+como "sem leitura registrada nos últimos 30 dias", nunca como "nunca
 lido" categórico.
+
+> **Nota (ADR-013, 2026-09-12)**: a janela era 90 dias "por consistência"
+> com lineage/access/finops — nunca foi alcançável na prática, porque os
+> quatro domínios compartilham a mesma causa raiz (retenção padrão de 30
+> dias do `_Default` log bucket do Cloud Logging do projeto-cliente,
+> fora do nosso acesso). Diferente dos outros três, esta checagem **não
+> tem** um `INFORMATION_SCHEMA` equivalente (não é metadado de job, é
+> "quem leu este objeto e quando") — sem fonte alternativa, o valor
+> documentado passou a refletir o teto real (30d) em vez de prometer 90.
+> Ver ADR-013 pro desenho completo dos outros três domínios.
 
 **Ainda não habilitado em prod** — checagem 6.2 deve degradar
 graciosamente (retornar só o resultado de 6.1, com aviso explicando por
@@ -449,7 +460,7 @@ o mock existir).
 | AC-013 | `scan_read_object_events` mapeia `Forbidden` → `LoggingAccessDeniedError` (só o Job escaneia) | `test_scan_read_object_events_raises_logging_access_denied_on_forbidden` |
 | AC-014 | O Job grava o cache de storage pra cada projeto, sem depender do request path | `test_refresh_project_full_scan_writes_all_four_caches` |
 | AC-015 | Falha no refresh de storage (audit log desabilitado ou erro de API) não interrompe o refresh de lineage/access/finops do mesmo projeto | `test_refresh_storage_read_keys_returns_zero_without_logging_access`, `test_refresh_storage_read_keys_returns_zero_on_api_error` |
-| AC-016 | Cache é `dict[(bucket, objeto) → ISO]`; formato antigo (`set`) força full scan; evicção por data de 90 dias | `test_serialize_deserialize_read_object_keys_round_trips`, `test_deserialize_read_object_keys_returns_none_for_old_set_format`, `test_refresh_storage_read_keys_evicts_keys_outside_window` |
+| AC-016 | Cache é `dict[(bucket, objeto) → ISO]`; formato antigo (`set`) força full scan; evicção por data de 30 dias (ADR-013 — era 90, teto real nunca foi alcançável) | `test_serialize_deserialize_read_object_keys_round_trips`, `test_deserialize_read_object_keys_returns_none_for_old_set_format`, `test_refresh_storage_read_keys_evicts_keys_outside_window` |
 | AC-017 | Job em modo incremental usa filtro `receiveTimestamp>` e faz merge do delta com o blob | `test_scan_read_object_events_incremental_filter_uses_receive_timestamp`, `test_refresh_storage_read_keys_incremental_merges_delta_onto_existing` |
 
 ## 10. Abertos para decisão antes de implementar

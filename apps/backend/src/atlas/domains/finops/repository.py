@@ -27,6 +27,7 @@ from google.cloud import bigquery, firestore, storage
 from google.cloud import logging as cloud_logging
 
 from atlas.core import event_cache
+from atlas.core import information_schema as information_schema_source
 from atlas.core.config import settings
 from atlas.core.exceptions import EventCacheNotReadyError, ProjectAccessDeniedError
 
@@ -148,6 +149,46 @@ def parse_scan_events(entries: list[cloud_logging.LogEntry]) -> list[ScanEvent]:
     (lineage/access/finops). Não há mais `list_scan_events`: o request path
     lê só do cache (modelo incremental), quem escaneia é o job."""
     return [event for entry in entries if (event := _parse_entry(entry)) is not None]
+
+
+def _parse_table_ref_snake_finops(ref: dict | None) -> TableRefTuple | None:
+    """`information_schema_source.parse_table_ref_snake` + o mesmo filtro
+    de `_parse_table_ref` acima (exclui `INFORMATION_SCHEMA.*` — probe de
+    região do próprio Atlas, não tabela real de cliente)."""
+    parsed = information_schema_source.parse_table_ref_snake(ref)
+    if parsed is not None and parsed[2].startswith("INFORMATION_SCHEMA."):
+        return None
+    return parsed
+
+
+def parse_scan_events_information_schema(rows: list[dict]) -> list[ScanEvent]:
+    """Equivalente de `parse_scan_events` pra linhas de
+    `core/information_schema.py::list_recent_jobs` (INFORMATION_SCHEMA.
+    JOBS_BY_PROJECT, 180 dias) — usado só no full scan inicial de um
+    projeto (ADR-013). `total_bytes_billed`/`query` já vêm no tipo nativo
+    (int/str), diferente do payload de audit log (string/nested dict) —
+    sem `_parse_billed_bytes`/`_parse_query_text` aqui, só coerção direta
+    + o mesmo truncamento de `_QUERY_TEXT_MAX_CHARS`."""
+    events = []
+    for row in rows:
+        raw_referenced = row.get("referenced_tables") or []
+        referenced = [
+            ref for r in raw_referenced if (ref := _parse_table_ref_snake_finops(r)) is not None
+        ]
+        query_text = row.get("query")
+        if query_text and len(query_text) > _QUERY_TEXT_MAX_CHARS:
+            query_text = query_text[:_QUERY_TEXT_MAX_CHARS] + "…"
+        events.append(
+            ScanEvent(
+                job_id=row.get("job_id") or "",
+                principal_email=row.get("user_email") or "",
+                timestamp=information_schema_source.most_recent_timestamp(row),
+                referenced_tables=referenced,
+                total_billed_bytes=int(row.get("total_bytes_billed") or 0),
+                query_text=query_text,
+            )
+        )
+    return events
 
 
 # --- Cache de audit log (só o job periódico escaneia; request path só lê) --

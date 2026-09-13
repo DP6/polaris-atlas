@@ -578,12 +578,14 @@ def test_get_budget_lookback_days_narrows_the_window(monkeypatch):
     assert narrow.lookback_days == 7
 
 
-def test_get_budget_clamps_lookback_days_to_31(monkeypatch):
+def test_get_budget_clamps_lookback_days_to_cache_ceiling(monkeypatch):
     _stub_budget_events(monkeypatch, [])
 
-    result = service.get_budget(MagicMock(), MagicMock(), MagicMock(), "proj", lookback_days=999)
+    result = service.get_budget(
+        MagicMock(), MagicMock(), MagicMock(), "proj", lookback_days=10_000
+    )
 
-    assert result.lookback_days == 31
+    assert result.lookback_days == service._FINOPS_CACHE_MAX_DAYS
 
 
 def test_get_budget_ignores_events_from_other_projects(monkeypatch):
@@ -832,9 +834,9 @@ def test_resolve_date_window_legacy_mode_uses_lookback_days():
 def test_resolve_date_window_legacy_mode_clamps_to_cache_ceiling():
     now = _now()
 
-    _start, _end, lookback_days, warning = service._resolve_date_window(now, 999, None, None)
+    _start, _end, lookback_days, warning = service._resolve_date_window(now, 10_000, None, None)
 
-    assert lookback_days == 31
+    assert lookback_days == service._FINOPS_CACHE_MAX_DAYS
     assert warning is None  # clamp do modo legado é comportamento pré-existente, sem aviso
 
 
@@ -864,11 +866,12 @@ def test_resolve_date_window_clamps_future_end_date_and_warns():
 
 def test_resolve_date_window_clamps_start_date_older_than_cache_floor_and_warns():
     now = _now()
-    too_old = (now - timedelta(days=60)).date()
+    too_old = (now - timedelta(days=service._FINOPS_CACHE_MAX_DAYS + 30)).date()
 
     start, _end, _lookback_days, warning = service._resolve_date_window(now, 30, too_old, None)
 
-    assert start == now.date() - timedelta(days=30)  # piso do cache: 31 dias, hoje incluso
+    # piso do cache: _FINOPS_CACHE_MAX_DAYS dias, hoje incluso
+    assert start == now.date() - timedelta(days=service._FINOPS_CACHE_MAX_DAYS - 1)
     assert warning is not None
     assert "cache de audit log" in warning
 
@@ -924,7 +927,11 @@ def test_get_budget_clamps_start_date_older_than_cache_and_surfaces_warning(monk
     _stub_budget_events(monkeypatch, [])
 
     result = service.get_budget(
-        MagicMock(), MagicMock(), MagicMock(), "proj", from_date=_days_ago(90).date()
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        "proj",
+        from_date=_days_ago(service._FINOPS_CACHE_MAX_DAYS + 30).date(),
     )
 
     assert result.warning is not None
@@ -1086,7 +1093,12 @@ def test_get_cost_series_period_end_reflects_explicit_to_date_not_now(monkeypatc
 
 
 def test_get_cost_series_clamps_start_date_older_than_cache_and_warns(monkeypatch):
-    result = _cost_series(monkeypatch, events=[], current_bytes=0, from_date=_days_ago(90).date())
+    result = _cost_series(
+        monkeypatch,
+        events=[],
+        current_bytes=0,
+        from_date=_days_ago(service._FINOPS_CACHE_MAX_DAYS + 30).date(),
+    )
 
     assert result.warning is not None
     assert "cache de audit log" in result.warning

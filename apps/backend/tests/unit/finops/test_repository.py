@@ -212,6 +212,72 @@ def test_parse_scan_events_is_pure_and_skips_invalid_entries():
     assert [e.job_id for e in events] == ["job1"]
 
 
+# --- parse_scan_events_information_schema (ADR-013, Eixo 1) ----------------
+
+
+def test_parse_scan_events_information_schema_maps_snake_case_row():
+    end = datetime(2026, 1, 1, tzinfo=UTC)
+    row = {
+        "job_id": "job1",
+        "user_email": "a@x.com",
+        "referenced_tables": [{"project_id": "p", "dataset_id": "RAW", "table_id": "events"}],
+        "total_bytes_billed": 12345,
+        "query": "SELECT 1",
+        "end_time": end,
+    }
+
+    events = repository.parse_scan_events_information_schema([row])
+
+    assert len(events) == 1
+    event = events[0]
+    assert event.job_id == "job1"
+    assert event.principal_email == "a@x.com"
+    assert event.timestamp == end
+    assert event.referenced_tables == [("p", "RAW", "events")]
+    assert event.total_billed_bytes == 12345
+    assert event.query_text == "SELECT 1"
+
+
+def test_parse_scan_events_information_schema_filters_information_schema_probe_tables():
+    row = {
+        "job_id": "job1",
+        "user_email": "a@x.com",
+        "referenced_tables": [
+            {"project_id": "p", "dataset_id": "region-us", "table_id": "INFORMATION_SCHEMA.TABLES"},
+            {"project_id": "p", "dataset_id": "RAW", "table_id": "events"},
+        ],
+        "total_bytes_billed": 0,
+        "query": None,
+    }
+
+    events = repository.parse_scan_events_information_schema([row])
+
+    assert events[0].referenced_tables == [("p", "RAW", "events")]
+
+
+def test_parse_scan_events_information_schema_truncates_long_query_text():
+    row = {
+        "job_id": "job1",
+        "user_email": "a@x.com",
+        "referenced_tables": [],
+        "total_bytes_billed": 0,
+        "query": "x" * (repository._QUERY_TEXT_MAX_CHARS + 100),
+    }
+
+    events = repository.parse_scan_events_information_schema([row])
+
+    assert len(events[0].query_text) == repository._QUERY_TEXT_MAX_CHARS + 1  # + "…"
+    assert events[0].query_text.endswith("…")
+
+
+def test_parse_scan_events_information_schema_coerces_missing_billed_bytes_to_zero():
+    row = {"job_id": "job1", "user_email": "a@x.com", "referenced_tables": [], "query": None}
+
+    events = repository.parse_scan_events_information_schema([row])
+
+    assert events[0].total_billed_bytes == 0
+
+
 # --- serialize/deserialize_scan_events ----------------------------------------
 
 

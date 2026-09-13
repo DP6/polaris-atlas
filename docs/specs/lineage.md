@@ -311,9 +311,21 @@ Cada execução do Job (diária ou gatilho manual) lê só o **delta** —
 `receiveTimestamp > <maior high-water-mark salvo>` (não uma janela fixa
 de N dias, pra capturar logs ingeridos com atraso) — faz `merge_dedup`
 com o blob existente (por `job_id`, o evento novo vence) e **evicta** os
-eventos fora da janela rolante: **31 dias** pros domínios de job
-(`timestamp < hoje − 31d`), **90 dias** pra storage. Isso derruba a
-leitura diária de ~15 páginas/projeto pra ~1. O metadado
+eventos fora da janela rolante: **730 dias** pros domínios de job
+(`timestamp < hoje − 730d`), **30 dias** pra storage. Isso derruba a
+leitura diária de ~15 páginas/projeto pra ~1.
+
+> **Nota (ADR-013, 2026-09-12)**: a janela dos domínios de job era 31
+> dias — alargada pra 730 porque o teto real nunca foi esse número, é a
+> retenção do Cloud Logging do projeto-cliente (~30d, fora do nosso
+> acesso). A de storage caiu de 90 pra 30 pelo motivo oposto: 90 nunca
+> foi alcançável na prática (mesma causa raiz), então o valor documentado
+> passou a refletir o teto real em vez de prometer mais do que o Cloud
+> Logging entrega. Ver ADR-013 para o desenho completo (incluindo
+> `INFORMATION_SCHEMA.JOBS_BY_PROJECT` como fonte complementar de até
+> 180 dias no full scan inicial).
+
+O metadado
 (`core/event_cache.py::set_cache_metadata`) cresce com `window_start`,
 `last_scan_receive_ts` (o anchor do próximo delta), `last_full_scan_at` e
 `mode` (`"full"`/`"incremental"`).
@@ -418,7 +430,7 @@ apps/backend/src/atlas/
 | Projeto não-raiz sem cache durante a expansão (v2.4) | Soft-fail em `_get_project_events` — não expande a partir dele, resto do grafo intacto (igual a `LoggingAccessDeniedError`/`LoggingQuotaExceededError`) |
 | `429 TooManyRequests` (cota `read_requests`/min do projeto) — só no Job de refresh ou no scan custom de `/orphans` (v2.4: request path comum não escaneia mais) | `list_entries_with_retry` faz retry exponencial (backoff, deadline 30s); o 429 persistente vira `LoggingQuotaExceededError` → mesma degradação pra vazio+`warning` do cache-não-gerado |
 | `lookback_days` custom em `/orphans` | Único caminho do request path que ainda escaneia ao vivo (`list_job_events`) — opt-out explícito |
-| 1ª execução do Job pós-deploy v2.4 / metadado sem anchor / blob sumido (lifecycle) / toggle "forçar completo" | **Full scan** da janela de 31 dias; grava `mode: "full"` + `last_full_scan_at`. Runs seguintes voltam a `mode: "incremental"` (delta por `receiveTimestamp`) |
+| 1ª execução do Job pós-deploy v2.4 / metadado sem anchor / blob sumido (lifecycle) / toggle "forçar completo" | **Full scan** — Cloud Logging (~30d reais, ver ADR-013) + `INFORMATION_SCHEMA.JOBS_BY_PROJECT` (até 180d) mesclados; grava `mode: "full"` + `last_full_scan_at`. Runs seguintes voltam a `mode: "incremental"` (delta por `receiveTimestamp`, só Cloud Logging) |
 | Evento de audit log sem `timestamp` parseável (após o fallback `endTime or startTime or createTime`) | Descartado na evicção de janela do Job — população ~zero na prática |
 | Job falha num projeto (acesso negado, projeto inexistente/descontinuado, ou qualquer outro erro) | Logado e pulado — não derruba o refresh dos demais projetos conhecidos |
 | Admin dispara o gatilho manual enquanto o ciclo diário já está rodando | Duas execuções do Job em paralelo — sem deduplicação na v1, ambas terminam gravando o mesmo resultado (idempotente) |

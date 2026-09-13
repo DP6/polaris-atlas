@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -416,6 +417,61 @@ def test_parse_job_events_is_pure_and_skips_invalid_entries():
     events = repository.parse_job_events([_entry(valid_payload), _entry(None), _entry({})])
 
     assert [e.job_id for e in events] == ["job1"]
+
+
+# --- parse_job_events_information_schema (ADR-013, Eixo 1) ------------------
+
+
+def test_parse_job_events_information_schema_maps_snake_case_row():
+    row = {
+        "job_id": "job1",
+        "user_email": "a@x.com",
+        "referenced_tables": [{"project_id": "p", "dataset_id": "RAW", "table_id": "events"}],
+        "destination_table": {"project_id": "p", "dataset_id": "TRUSTED", "table_id": "sessions"},
+        "end_time": "irrelevante-pro-fake",
+    }
+
+    events = repository.parse_job_events_information_schema([row])
+
+    assert len(events) == 1
+    event = events[0]
+    assert event.job_id == "job1"
+    assert event.principal_email == "a@x.com"
+    assert event.referenced_tables == [("p", "RAW", "events")]
+    assert event.destination_table == ("p", "TRUSTED", "sessions")
+    # INFORMATION_SCHEMA não expõe sourceUris/destinationUris de LOAD/EXTRACT.
+    assert event.source_buckets == []
+    assert event.destination_buckets == []
+
+
+def test_parse_job_events_information_schema_treats_anonymous_dataset_as_no_destination():
+    row = {
+        "job_id": "job1",
+        "user_email": "a@x.com",
+        "referenced_tables": [],
+        "destination_table": {"project_id": "p", "dataset_id": "_abc123", "table_id": "anon"},
+    }
+
+    events = repository.parse_job_events_information_schema([row])
+
+    assert events[0].destination_table is None
+
+
+def test_parse_job_events_information_schema_uses_most_recent_timestamp_fallback():
+    creation = datetime(2026, 1, 1, tzinfo=UTC)
+    row = {
+        "job_id": "job1",
+        "user_email": "a@x.com",
+        "referenced_tables": [],
+        "destination_table": None,
+        "end_time": None,
+        "start_time": None,
+        "creation_time": creation,
+    }
+
+    events = repository.parse_job_events_information_schema([row])
+
+    assert events[0].timestamp == creation
 
 
 def test_list_job_events_uses_custom_lookback_days():

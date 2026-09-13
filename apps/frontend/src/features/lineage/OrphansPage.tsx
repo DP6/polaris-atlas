@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { CacheStalenessBadge } from '@/components/CacheStalenessBadge'
 import { DatasetScopeGate } from '@/components/DatasetScopeGate'
+import { DataWindowNotice } from '@/components/DataWindowNotice'
 import { LoadingState } from '@/components/LoadingState'
 import { LookbackPicker } from '@/components/LookbackPicker'
 import { PageHeader } from '@/components/PageHeader'
@@ -131,6 +132,7 @@ export function OrphansPage() {
       />
 
       {data.warning && <WarningCallout>{data.warning}</WarningCallout>}
+      <DataWindowNotice />
 
       <Panel
         filterRow={

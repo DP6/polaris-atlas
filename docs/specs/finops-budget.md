@@ -58,6 +58,16 @@ granularidade diária, retenção **24 meses**, gravado pelo Job diário pra
 do cache de 31 dias de audit log, pra comparar até 24 meses pra trás. Não
 interfere com a projeção month-to-date da v1.10 abaixo — `projection`
 continua vindo só de `get_budget`.)
+v1.13 (ADR-013, 2026-09-12 — `_FINOPS_CACHE_MAX_DAYS` de 31 pra 730 dias:
+o teto real nunca foi 31, é a retenção do Cloud Logging do
+projeto-cliente [~30d, fora do nosso acesso]; o cache incremental parou
+de evictar tão cedo e passa a acumular sem esse teto a partir do dia da
+integração do projeto. `api/v1/finops.py` tinha `Query(..., le=31)`
+hardcoded nos dois endpoints — bug real encontrado na implementação, a
+rota rejeitava com 422 antes do clamp do service sequer rodar; corrigido
+pra `le=service.FINOPS_CACHE_MAX_DAYS`. Full scan inicial do Job passa a
+mesclar `INFORMATION_SCHEMA.JOBS_BY_PROJECT` [até 180d] com o Cloud
+Logging — ver ADR-013 e `docs/specs/lineage.md`.)
 v1.10 (fix `fix/finops-projection-days-elapsed` — a projeção
 mensal (`projection.projected_month_total_usd`) virou **month-to-date
 real**, decidido pelo usuário entre as opções levantadas em
@@ -98,7 +108,7 @@ v1.5: CRUD de meta de custo por usuário (`domains/budget`). v1.4: cache de
 audit log **incremental**, janela 30 → **31 dias** — ver ASM-001)
 **Status:** Aprovada
 **Fase:** 4 — FinOps (segunda frente: budget por dataset/projeto)
-**Última atualização:** 2026-09-04 (v1.12)
+**Última atualização:** 2026-09-12 (v1.13)
 
 ---
 
@@ -229,19 +239,21 @@ Janela **"últimos N dias"** (rodada 3; antes era fixo no mês corrente).
   `user`, `day`, `month`, `year`. Ver "Agrupamento configurável".
 - `limit` (query, default `10`, mínimo `1`, máximo `50`) — tamanho de
   `top_queries`.
-- `lookback_days` (query, default `30`, `1`–`31`) — janela analisada, só
-  recorta `groups`/`top_queries`/`total_cost_usd`. `period_start = now -
-  lookback_days`. Teto de 31 = retenção do cache de audit log (fora dele
-  o `_BUDGET_RETENTION_CAVEAT` avisa). O service clampa (não é 422). A
-  **projeção mensal** (objeto `projection`) é **independente** deste
-  parâmetro — ver abaixo.
+- `lookback_days` (query, default `30`, `1`–`730` desde a ADR-013 — era
+  `1`–`31`) — janela analisada, só recorta
+  `groups`/`top_queries`/`total_cost_usd`. `period_start = now -
+  lookback_days`. Teto = `FINOPS_CACHE_MAX_DAYS`, retenção do **cache**
+  (fora dele o `_BUDGET_RETENTION_CAVEAT` avisa) — não mais a retenção
+  ao vivo do Cloud Logging, que o cache agora supera (ver ADR-013). O
+  service clampa (não é 422). A **projeção mensal** (objeto `projection`)
+  é **independente** deste parâmetro — ver abaixo.
 - `from`/`to` (query, `YYYY-MM-DD`, rodada 3 — filtro de data real da
   Visão Geral, AC-FIN-RV-02) — intervalo explícito, que **sobrescreve**
   `lookback_days` quando presente (`_resolve_date_window`). `to` clampado
   pra nunca ficar no futuro (vira hoje); `from` clampado pro piso do
-  cache (hoje − 30 dias); se `from` vier depois de `to` após os clamps,
-  o service troca os dois em vez de 422. Qualquer clamp entra no
-  `warning` da resposta — nunca falha/trunca em silêncio.
+  cache (hoje − `FINOPS_CACHE_MAX_DAYS` dias); se `from` vier depois de
+  `to` após os clamps, o service troca os dois em vez de 422. Qualquer
+  clamp entra no `warning` da resposta — nunca falha/trunca em silêncio.
 - `include_storage` (query, default `false`, v1.12) — quando `true` e
   `group_by` é `table`/`dataset`, cada `CostGroup` ganha
   `storage_cost_usd`/`total_cost_usd` (`null` nos dois quando o flag é
@@ -502,8 +514,9 @@ custo de **query** e de **storage** por período, filtrável.
   ou `YYYY-MM`.
 - `cost_type` — `all` (default), `query`, `storage`. `query` pula a
   timeline de storage inteira (`storage_available=false`).
-- `lookback_days` — 1–31, default 30. Teto de 31 porque o cache de audit
-  log só guarda 31 dias (v1.4) e o gráfico combina os dois eixos.
+- `lookback_days` — 1–730, default 30 (teto era 31, ver ADR-013). Teto =
+  `FINOPS_CACHE_MAX_DAYS`, a retenção do cache (não mais a do Cloud
+  Logging ao vivo, que o cache agora supera).
 - `from`/`to` (query, `YYYY-MM-DD`, rodada 3) — mesmo `_resolve_date_window`
   de `get_budget`: sobrescreve `lookback_days` quando presente, mesmo
   clamp no piso do cache e no fim no futuro, mesmo `warning` quando ajusta.
@@ -866,17 +879,17 @@ tinha com o texto da query inline na célula).
 | Evento cujas `referenced_tables`, após o filtro acima, não sobra nenhuma do `project_id` (só probe ou só tabela de outro projeto) | Evento inteiro pulado — não entra em `groups` nem em `top_queries` |
 | Evento com `total_billed_bytes <= 0` | Ignorado em toda agregação — não soma custo nem `job_count` |
 | Evento anterior a `period_start` (`now - lookback_days`) | Ignorado |
-| `lookback_days` fora de 1–31 (budget) | Clampado no service (não é 422) — 31 é o limite do cache |
+| `lookback_days` fora de 1–730 (budget, teto era 31 — ADR-013) | Clampado no service (não é 422) — `FINOPS_CACHE_MAX_DAYS` é o limite do cache |
 | Query com `JOIN` entre tabelas (`group_by=table`) | Custo somado em **cada** tabela tocada, não dividido — mesma aproximação do scanner de desperdício |
 | Query com `JOIN` entre tabelas do mesmo dataset (`group_by=dataset`) | Custo somado **uma vez** pro dataset (dedup via `set`), diferente de `group_by=table` — evita inflar artificialmente o custo de um dataset só porque a query tocou duas tabelas dele |
 | Mesmo usuário com múltiplos jobs no mês (`group_by=user`) | Um único `CostGroup`, `job_count` e `billed_bytes` somados |
 | Texto de query maior que 2000 caracteres | Truncado com "…" no fim (`repository._QUERY_TEXT_MAX_CHARS`) |
-| Mês com mais de 31 dias corridos até agora (dia 31 de mês de 31 dias) | O cache incremental cobre 31 dias, então o mês corrente **inteiro** cabe na janela — o `_BUDGET_RETENTION_CAVEAT` volta a disparar só quando os audit logs realmente expiraram (retenção de 30 dias do Cloud Logging sem sink customizado), não sempre no dia 31 (regressão da v1.3 revertida) |
+| Mês com mais de 31 dias corridos até agora (dia 31 de mês de 31 dias) | O cache incremental cobre `FINOPS_CACHE_MAX_DAYS` dias (730 desde a ADR-013, era 31), então o mês corrente **inteiro** sempre cabe na janela — o `_BUDGET_RETENTION_CAVEAT` só dispararia se os audit logs tivessem realmente expirado (retenção de 30 dias do Cloud Logging sem sink customizado) E o cache próprio ainda não tivesse acumulado aquele período (ex.: projeto recém-integrado, ainda dentro da fotografia inicial de até 180d via `INFORMATION_SCHEMA` — ver ADR-013), não mais um cenário comum no dia 31 (regressão da v1.3 revertida) |
 | Nenhum evento de job no projeto | `warning` populado (mesmo texto/causas de lineage/access/scanner de desperdício), `groups`/`top_queries` vazios |
 | Cache hit / miss (`EventCacheNotReadyError`) / falha de cache / `429` no Job | Idêntico ao documentado em `finops-waste-scanner.md` v1.4, "Casos de borda" e "Critérios de aceite" — `get_scan_events_cached` é compartilhado pelos dois endpoints; o request path não escaneia mais ao vivo |
 | `limit` fora do intervalo 1–50 | HTTP 422 (validação do `Query(ge=1, le=50)`) |
 | `group_by` fora do enum | HTTP 422 (validação do `Query` com `BudgetGroupBy`) |
-| **cost-series:** `lookback_days` fora de 1–31 | Clampado no service (não é 422) — o teto de 31 é o limite do cache, não uma escolha do chamador |
+| **cost-series:** `lookback_days` fora de 1–730 (teto era 31 — ADR-013) | Clampado no service (não é 422) — `FINOPS_CACHE_MAX_DAYS` é o limite do cache, não uma escolha do chamador |
 | **cost-series:** timeline de storage indisponível em todas as regiões | `storage_available=false`, `storage_cost_usd=0` em todos os pontos, `query_cost_usd` intacto, `warning` explica — nunca 500 |
 | **cost-series:** dia sem query e sem storage | Ponto presente com os três valores `0` (série contígua, sem buraco) |
 | **cost-series:** `cost_type=query` | Timeline de storage nem é consultada; `storage_available=false` |

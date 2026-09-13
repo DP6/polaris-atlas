@@ -57,11 +57,26 @@ _MIN_TABLE_SIZE_BYTES_FOR_PARTITION_CANDIDATE = 1_073_741_824  # 1 GB
 _CONSERVATIVE_REDUCTION = 0.30
 _OPTIMISTIC_REDUCTION = 0.70
 _BUDGET_TOP_N_DEFAULT = 10
-# Teto de retenção do cache de audit log — nem "últimos N dias" nem um
-# filtro de data explícito (from/to) conseguem alcançar mais que isso.
-# Era duas constantes (uma por endpoint); unificada porque é o mesmo
-# limite físico dos dois (_resolve_date_window).
-_FINOPS_CACHE_MAX_DAYS = 31
+# Teto de retenção do CACHE (não da fonte ao vivo) — nem "últimos N dias"
+# nem um filtro de data explícito (from/to) conseguem alcançar mais que
+# isso. Era duas constantes (uma por endpoint); unificada porque é o
+# mesmo limite físico dos dois (_resolve_date_window).
+#
+# Era 31 (mesmo valor do antigo _JOB_WINDOW_DAYS, jobs/refresh_event_cache.py)
+# — alargado pra 730 (ADR-013, Eixo 2): o cache incremental parou de
+# evictar tão cedo, então passa a acumular bem além da retenção real do
+# Cloud Logging (~30d) a partir do dia em que o projeto foi integrado.
+# Precisa continuar igual a `_JOB_WINDOW_DAYS` (duplicado por isolamento
+# de domínio, mesmo racional de `_STORAGE_CACHE_KIND` nesse arquivo) —
+# se um mudar, o outro tem que mudar junto.
+#
+# Nome sem `_` (público) porque api/v1/finops.py precisa dele pro teto do
+# `Query(..., le=...)` de `lookback_days` — sem isso a API rejeitava com
+# 422 qualquer pedido acima do antigo 31 antes mesmo de chegar aqui
+# (bug real encontrado na ADR-013: o clamp do service nunca era
+# alcançado porque a validação da rota já barrava antes).
+FINOPS_CACHE_MAX_DAYS = 730
+_FINOPS_CACHE_MAX_DAYS = FINOPS_CACHE_MAX_DAYS  # alias interno, usado no resto deste arquivo
 # Janela default do budget quando nenhum filtro é passado: "últimos N
 # dias", N = 30 (comportamento próximo do mês corrente).
 _BUDGET_DEFAULT_LOOKBACK_DAYS = 30
