@@ -33,6 +33,7 @@ from google.cloud import bigquery, firestore, storage
 from google.cloud import logging as cloud_logging
 
 from atlas.core import event_cache
+from atlas.core import information_schema as information_schema_source
 from atlas.core.config import settings
 from atlas.core.exceptions import EventCacheNotReadyError
 from atlas.core.logging_client import (
@@ -195,6 +196,47 @@ def parse_job_events(entries: list[cloud_logging.LogEntry]) -> list[JobEvent]:
     jobs/refresh_event_cache.py alimentar lineage/access/finops de um scan
     único do Cloud Logging (ver core/logging_client.py::bigquery_job_events_filter)."""
     return [event for entry in entries if (event := _parse_entry(entry)) is not None]
+
+
+def parse_job_events_information_schema(rows: list[dict]) -> list[JobEvent]:
+    """Traduz linhas de `core/information_schema.py::list_recent_jobs`
+    (INFORMATION_SCHEMA.JOBS_BY_PROJECT, 180 dias de retenção nativa) pro
+    mesmo `JobEvent` do parser de audit log acima — usada só no full scan
+    inicial de um projeto (ver jobs/refresh_event_cache.py), pra
+    maximizar a fotografia do dia 0 além dos ~30 dias reais do Cloud
+    Logging (ADR-013).
+
+    `source_buckets`/`destination_buckets` sempre vazios aqui: a view não
+    expõe `sourceUris`/`destinationUris` de LOAD/EXTRACT (só tabelas
+    BigQuery) — lacuna documentada em `core/information_schema.py`, não
+    um bug deste parser. A extensão de lineage pra bucket (seção 7 de
+    docs/specs/storage.md) só existe pra eventos vindos do Cloud
+    Logging."""
+    events = []
+    for row in rows:
+        raw_referenced = row.get("referenced_tables") or []
+        referenced = [
+            ref
+            for r in raw_referenced
+            if (ref := information_schema_source.parse_table_ref_snake(r)) is not None
+        ]
+        destination = information_schema_source.parse_table_ref_snake(
+            row.get("destination_table")
+        )
+        if destination is not None and destination[1].startswith("_"):
+            # Mesma convenção do parser de audit log: dataset anônimo
+            # (cache de query interativa) não é destino real.
+            destination = None
+        events.append(
+            JobEvent(
+                job_id=row.get("job_id") or "",
+                principal_email=row.get("user_email") or "",
+                referenced_tables=referenced,
+                destination_table=destination,
+                timestamp=information_schema_source.most_recent_timestamp(row),
+            )
+        )
+    return events
 
 
 def list_all_table_refs(
