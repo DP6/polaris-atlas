@@ -2,6 +2,7 @@ import { ChevronDown, Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { DataWindowNotice } from '@/components/DataWindowNotice'
 import { LoadingState } from '@/components/LoadingState'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SortableTableHead } from '@/components/SortableTableHead'
@@ -240,6 +241,7 @@ export function PartitionCandidatesTab({ projectId }: { projectId: string | unde
           </div>
 
           {data.warning && <WarningCallout>{data.warning}</WarningCallout>}
+          <DataWindowNotice />
 
           <Table>
             <TableHeader>

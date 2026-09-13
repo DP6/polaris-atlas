@@ -5,6 +5,7 @@ import { CacheStalenessBadge } from '@/components/CacheStalenessBadge'
 import { ChoiceToggle } from '@/components/ChoiceToggle'
 import { ComboChart } from '@/components/ComboChart'
 import { CompositeScoreRing } from '@/components/CompositeScoreRing'
+import { DataWindowNotice } from '@/components/DataWindowNotice'
 import { DateField } from '@/components/DateField'
 import { LoadingState } from '@/components/LoadingState'
 import { OptionCard, OptionCardGrid } from '@/components/OptionCard'
@@ -191,6 +192,7 @@ export function FinOpsOverviewPage() {
       </OptionCardGrid>
 
       {budget?.warning && <WarningCallout>{budget.warning}</WarningCallout>}
+      <DataWindowNotice />
 
       {/* Linha 1: nunca muda com o filtro de período/tipo de custo abaixo —
           "Gasto no mês" é sempre month-to-date real (v1.10), "Meta

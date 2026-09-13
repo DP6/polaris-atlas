@@ -636,7 +636,7 @@
       {
         title: "Mapa de acesso",
         domain: "Qualidade",
-        description: "Quem leu ou escreveu na tabela nos últimos 30 dias, via audit log — confirma se ela ainda tem consumidor antes de arquivar, apagar ou mudar o schema.",
+        description: "Quem leu ou escreveu na tabela nos últimos 30 dias, via audit log — confirma se ela ainda tem consumidor antes de arquivar, apagar ou mudar o schema. Histórico cresce com o tempo de uso do projeto no Atlas (ver \"Limitações de histórico\" na visão técnica).",
         image: "14-mapa-acesso.png",
       },
       {
@@ -744,7 +744,7 @@
       {
         title: "Detalhamento de custo — janela",
         domain: "FinOps",
-        description: "Chamado 'Budget de custo' até a v1.12. Estima o custo por audit log de jobs (bytes cobrados) + preço público on-demand, sem depender do Cloud Billing Export. A janela é escolhível — 7, 15, 30 dias ou um valor livre (teto de 31 dias, retenção do cache).",
+        description: "Chamado 'Budget de custo' até a v1.12. Estima o custo por audit log de jobs (bytes cobrados) + preço público on-demand, sem depender do Cloud Billing Export. A janela é escolhível — 7, 15, 30 dias ou um valor livre, com teto ligado à retenção do cache (que cresce com o tempo de uso do projeto no Atlas, ver \"Limitações de histórico\" na visão técnica).",
         image: "29-finops-budget-config.png",
       },
       {

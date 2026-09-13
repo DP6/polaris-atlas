@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { useParams } from 'react-router-dom'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { CacheStalenessBadge } from '@/components/CacheStalenessBadge'
+import { DataWindowNotice } from '@/components/DataWindowNotice'
 import { LoadingState } from '@/components/LoadingState'
 import { PageHeader } from '@/components/PageHeader'
 import { Panel } from '@/components/Panel'
@@ -65,6 +66,7 @@ export function LineagePage() {
       />
 
       {data.warning && <WarningCallout>{data.warning}</WarningCallout>}
+      <DataWindowNotice />
       {data.truncated && (
         <WarningCallout variant="info">
           Grafo truncado em {data.max_hops} saltos — pode haver mais tabelas além do limite.
