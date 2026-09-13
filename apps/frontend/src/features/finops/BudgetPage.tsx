@@ -23,6 +23,7 @@ import {
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { ChoiceToggle } from '@/components/ChoiceToggle'
 import { ComboChart } from '@/components/ComboChart'
+import { DataWindowNotice } from '@/components/DataWindowNotice'
 import { LoadingState } from '@/components/LoadingState'
 import { LookbackPicker } from '@/components/LookbackPicker'
 import { MetricGrid, MetricTile } from '@/components/MetricTile'
@@ -221,6 +222,7 @@ export function BudgetPage() {
       {data && (
         <>
           {data.warning && <WarningCallout>{data.warning}</WarningCallout>}
+          <DataWindowNotice />
 
           <MetricGrid>
             {[

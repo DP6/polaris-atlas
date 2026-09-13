@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
+import { DataWindowNotice } from '@/components/DataWindowNotice'
 import { LoadingState } from '@/components/LoadingState'
 import { PageHeader } from '@/components/PageHeader'
 import { Panel } from '@/components/Panel'
@@ -197,6 +198,7 @@ export function WastePage() {
       />
 
       {data.usage_check_warning && <WarningCallout>{data.usage_check_warning}</WarningCallout>}
+      <DataWindowNotice variant="storage" />
 
       <Panel
         filterRow={

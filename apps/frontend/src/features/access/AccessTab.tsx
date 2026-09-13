@@ -1,5 +1,6 @@
 import { ApiErrorNotice } from '@/components/ApiErrorNotice'
 import { CacheStalenessBadge } from '@/components/CacheStalenessBadge'
+import { DataWindowNotice } from '@/components/DataWindowNotice'
 import { LoadingState } from '@/components/LoadingState'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -48,6 +49,7 @@ export function AccessTab({ projectId, datasetId, tableId }: AccessTabProps) {
       </p>
 
       {data.warning && <WarningCallout>{data.warning}</WarningCallout>}
+      <DataWindowNotice />
 
       {data.users.length === 0 && !data.warning ? (
         <p className="text-sm text-muted-foreground">

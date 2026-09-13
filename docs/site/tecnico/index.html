@@ -1289,13 +1289,57 @@
               de todos os projetos conhecidos pelo Atlas.</li>
             <li>Cada execução é <strong>incremental</strong>: lê só o que entrou
               no audit log desde a última execução bem-sucedida, junta com o que
-              já estava em cache e descarta o que saiu da janela (31 dias pros
-              domínios de BigQuery, 90 dias pra Storage). Isso derruba a leitura
+              já estava em cache e descarta o que saiu da janela (730 dias pros
+              domínios de BigQuery, 30 dias pra Storage). Isso derruba a leitura
               diária de ~15 páginas por projeto pra ~1 — muito mais leve na cota.</li>
             <li>O scan <strong>completo</strong> da janela inteira só roda na
               primeira execução de um projeto, ou quando um admin pede
               explicitamente ("forçar completo", abaixo).</li>
           </ul>
+
+          <h3 class="feature-title" id="limitacoes-historico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>Limitações de histórico</h3>
+          <p>
+            O Cloud Logging de <strong>cada projeto-cliente</strong> retém Data
+            Access audit log por só ~30 dias por padrão (config do bucket
+            <code>_Default</code>, dentro do projeto observado — fora do nosso
+            acesso, e não é retroativa: aumentar a retenção hoje não recupera o
+            que já expirou). Isso limita, na origem, quanto histórico dá pra
+            reconstruir pra lineage, mapa de acesso, FinOps e o scanner de
+            Storage. A ADR-013 ataca isso em dois eixos independentes:
+          </p>
+          <ul>
+            <li><strong>Fotografia inicial (onboarding)</strong> — no full scan
+              de um projeto novo, o job também consulta
+              <code>INFORMATION_SCHEMA.JOBS_BY_PROJECT</code> do BigQuery, que
+              tem retenção nativa de <strong>180 dias fixada pelo Google</strong>
+              (independente da config de Cloud Logging do cliente) — 6× mais
+              histórico que os ~30 dias reais do Cloud Logging, disponível desde
+              o primeiro dia. Mesclado com o que o Cloud Logging trouxer (dedup
+              por <code>job_id</code>, Cloud Logging vence a colisão — é mais
+              completo, inclui os buckets do GCS que a
+              <code>INFORMATION_SCHEMA</code> não expõe). Só roda no full scan,
+              nunca no delta diário.</li>
+            <li><strong>Acúmulo próprio, sem teto</strong> — o cache incremental
+              do Atlas passou a reter até 730 dias (era 31) a partir do dia em
+              que o projeto foi integrado — ou seja, cresce indefinidamente com
+              o tempo de uso, sem depender de Cloud Logging nem de
+              <code>INFORMATION_SCHEMA</code> pra nada além do delta diário.</li>
+          </ul>
+          <p>
+            Combinando os dois: um projeto integrado hoje começa com até 180
+            dias de fotografia inicial (em vez de ~30); um projeto integrado há
+            8 meses já tem ~8 meses completos, superando o teto de 180 dias do
+            eixo 1. <strong>O que ficou de fora</strong>: histórico anterior ao
+            onboarding além de 180 dias é irrecuperável em qualquer um dos dois
+            eixos — não existe fonte alternativa sem cooperação do cliente. O
+            <strong>scanner de desperdício de Storage (6.2)</strong> não tem
+            equivalente ao eixo 1 — "quem leu este objeto e quando" não é
+            metadado de job, não existe <code>INFORMATION_SCHEMA</code>
+            correspondente — então seu teto real permanece ~30 dias
+            indefinidamente. Ver <code>docs/adr/ADR-013-historico-alem-de-30-dias.md</code>
+            pro desenho completo, alternativas consideradas e o que cada tela
+            comunica sobre isso.
+          </p>
 
           <h3 class="feature-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg>Aba "Caches" em Administração</h3>
           <p>
