@@ -122,11 +122,11 @@ Nunca remova um sufixo de ambiente de um nome de recurso "pra simplificar" — s
 ├── docs/onboarding-cliente.md    # Como liberar acesso de leitura a um projeto GCP que o
 │                                 # Hub vai observar (APIs, IAM, audit logs) + registro vivo
 │                                 # de concessões já feitas
-├── docs/finops-labels.md         # Taxonomia de labels (environment/app/managed-by),
-│                                 # Billing Export pro BigQuery e como consultar/filtrar
-│                                 # custo depois — ver "Registro de componentes e labels FinOps"
-├── docs/gcp-components.md        # Registro vivo "recurso GCP → app/projeto" — formato
-│                                 # reaproveitável em futuros projetos do Hub
+│                                 # (taxonomia de labels FinOps e registro de componentes GCP
+│                                 # migraram pra ~/ci-polaris/docs/finops-labels.md e
+│                                 # ~/ci-polaris/docs/gcp-components.md, 2026-09-24 — são
+│                                 # cross-repo, não só do Atlas — ver "Registro de componentes
+│                                 # e labels FinOps")
 ├── docs/frontend/               # Harness de front-end: design system (espelho de
 │                                 # index.css), regras de UI/UX, acessibilidade,
 │                                 # patterns, behaviors, referências, checklist.
@@ -289,17 +289,19 @@ próprio `docs/onboarding-cliente.md`, não só o log de concessões.
 
 ## Registro de componentes e labels FinOps
 
-Este projeto GCP (`dp6-ci-polaris`) pode vir a hospedar mais de uma
-iniciativa do Polaris no mesmo projeto — a topologia single-project não
-separa custo por fronteira de projeto (ver "Projetos e ambientes GCP").
-`docs/finops-labels.md` define a taxonomia de label obrigatória
-(`environment`/`app`/`managed-by`) e `docs/gcp-components.md` é o
-registro vivo de qual recurso pertence a qual app/projeto.
+Este projeto GCP (`dp6-ci-polaris`) hospeda mais de uma iniciativa do
+Polaris no mesmo projeto — a topologia single-project não separa custo
+por fronteira de projeto (ver "Projetos e ambientes GCP"). Por isso, a
+taxonomia de labels e o registro de componentes são cross-repo e vivem
+no repo guarda-chuva, não aqui: `~/ci-polaris/docs/finops-labels.md`
+define a taxonomia de label obrigatória (`environment`/`app`/`managed-by`)
+e `~/ci-polaris/docs/gcp-components.md` é o registro vivo de qual recurso
+pertence a qual app/projeto (migrados daqui em 2026-09-24).
 
 **Toda vez que uma sessão criar, renomear ou descobrir um recurso GCP
 relacionado ao Hub — via Terraform ou manualmente —, isso entra em
-`docs/gcp-components.md` e na aba "Componentes" de `docs/site/` antes de
-considerar a tarefa concluída.** Essa obrigação **não** se estende às
+`~/ci-polaris/docs/gcp-components.md` e na aba "Componentes" de
+`docs/site/` antes de considerar a tarefa concluída.** Essa obrigação **não** se estende às
 outras 3 abas do site (`produto`, `tecnico`, `desenvolvimento`) — elas
 dependem de print de tela real ou de curadoria manual do processo, e não
 podem ser mantidas sincronizadas sozinhas numa sessão de código.
@@ -322,8 +324,9 @@ Antes de criar ou editar qualquer .tf:
 - Rodar terraform plan e apresentar o output para aprovação antes de apply
 - Confirmar que deletion_protection = true em recursos de prod
 - Labels obrigatórias em todo recurso que suporte label: `environment`,
-  `app`, `managed-by` — taxonomia completa em `docs/finops-labels.md`,
-  nunca inventar valor novo sem checar lá primeiro
+  `app`, `managed-by` — taxonomia completa em
+  `~/ci-polaris/docs/finops-labels.md`, nunca inventar valor novo sem
+  checar lá primeiro
 
 Checklist de entrega:
 - [ ] terraform validate passou
@@ -334,8 +337,9 @@ Checklist de entrega:
       cross-project, API habilitada, audit config) — registrado em
       `docs/onboarding-cliente.md`, ver "Registro de acessos e configurações"
 - [ ] Labels completas aplicadas (`environment`/`app`/`managed-by`, ver
-      `docs/finops-labels.md`) **e** recurso novo/alterado registrado em
-      `docs/gcp-components.md` antes de marcar a tarefa como concluída
+      `~/ci-polaris/docs/finops-labels.md`) **e** recurso novo/alterado
+      registrado em `~/ci-polaris/docs/gcp-components.md` antes de marcar
+      a tarefa como concluída
 
 ---
 
@@ -422,11 +426,11 @@ Ao criar uma spec de domínio (docs/specs/<domínio>.md), incluir obrigatoriamen
 - Casos de borda e comportamento esperado
 - O que está fora do escopo desta spec
 - Se a spec introduz infraestrutura GCP nova (ex.: `storage.md`
-  introduzindo buckets) — citar `docs/finops-labels.md` e
-  `docs/gcp-components.md` como pré-requisito de implementação na seção
-  de "Fonte de dados" ou "O que está fora do escopo", pra garantir que
-  labels/registro de componente não fiquem de fora quando o domínio for
-  implementado
+  introduzindo buckets) — citar `~/ci-polaris/docs/finops-labels.md` e
+  `~/ci-polaris/docs/gcp-components.md` como pré-requisito de implementação
+  na seção de "Fonte de dados" ou "O que está fora do escopo", pra garantir
+  que labels/registro de componente não fiquem de fora quando o domínio
+  for implementado
 
 Ao atualizar o CHANGELOG.md:
 - Registrar o que foi feito, erros cometidos e aprendizados
