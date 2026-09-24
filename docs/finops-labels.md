@@ -32,7 +32,7 @@ frente ao risco de renomear recurso já em produção).
 | Chave | Valores válidos | Obrigatório em |
 |---|---|---|
 | `environment` | `dev` \| `prod` | Todo recurso que suporte label |
-| `app` | `atlas` \| `polaris` | Todo recurso, com o valor da app dona |
+| `app` | `atlas` \| `polaris` \| `dp6-certifications` | Todo recurso, com o valor da app dona |
 | `managed-by` | `terraform` \| `manual` | Todo recurso |
 
 `app` = nome curto do produto/iniciativa que roda no projeto:
@@ -44,6 +44,11 @@ frente ao risco de renomear recurso já em produção).
   nos comandos `gcloud` (ver §3). Só ambiente `prod` (não há split
   dev/prod). Registro dos recursos: `GCP-COMPONENTS.md` na raiz daquele
   repo (equivalente a `docs/gcp-components.md` aqui).
+- `dp6-certifications` — plataforma de gestão de certificações dos
+  colaboradores (`DP6/dp6-certifications`, ADR-007 daquele repo). Todo
+  recurso via Terraform → `managed-by=terraform`. Split `dev`/`prod`
+  completo. Registro dos recursos: `docs/gcp-components.md` daquele repo
+  (a criar, mesmo padrão deste).
 
 Não usar nenhuma outra chave sem atualizar esta tabela primeiro — em
 particular, **não** introduzir `team`/`cost-center`: só o time de CI/dev
